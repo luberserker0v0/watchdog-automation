@@ -11,13 +11,16 @@
     "test:render": "vitest run src/modules/pipeline/components/PipelineCard.render.test.tsx src/modules/capture/stores/captureRendering.render.test.tsx src/modules/core/components/ResizableSplit.render.test.tsx",
     "preview": "vite preview",
     "tauri": "tauri",
+    "build:app": "tauri build --no-bundle && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile release",
+    "build:app:debug": "tauri build --debug --no-bundle && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile debug",
     "dev:tester": "tauri dev --features app-tester --config src-tauri/tauri.conf.tester.json",
     "build:tester": "tauri build --no-bundle --features app-tester --config src-tauri/tauri.conf.tester.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-tester.exe release . && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile release",
     "build:tester:debug": "tauri build --debug --no-bundle --features app-tester --config src-tauri/tauri.conf.tester.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-tester.exe debug . && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile debug",
     "dev:target": "tauri dev --features app-target --config src-tauri/tauri.conf.target.json",
     "build:target": "tauri build --no-bundle --features app-target --config src-tauri/tauri.conf.target.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-target.exe release .",
     "build:target:debug": "tauri build --debug --no-bundle --features app-target --config src-tauri/tauri.conf.target.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-target.exe debug .",
-    "build:all-targets": "npm run build:target:debug"
+    "build:all-targets": "npm run build:tester && npm run build:target && npm run build:app",
+    "build:all-targets:debug": "npm run build:tester:debug && npm run build:target:debug && npm run build:app:debug"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

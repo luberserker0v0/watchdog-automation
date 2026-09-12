@@ -3,6 +3,7 @@ import type { MatchCandidate, Node, PipelineTarget, Region } from "./pipeline";
 
 export interface NodeMetaInfo extends Node {
   file_name: string;
+  source?: "built-in" | "custom";
   actions: NonNullable<Node["actions"]>;
   params: NonNullable<Node["params"]>;
   enabled: boolean;

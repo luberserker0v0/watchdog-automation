@@ -1,12 +1,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { listen } from "@tauri-apps/api/event";
-import { startStream, stopStream, getStreamStatus } from "../../../api/stream";
+import {
+  startStream,
+  stopStream,
+  getStreamStatus,
+  type StreamStoppedPayload,
+} from "../../../api/stream";
 import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
 import { useScreenStore } from "./useScreenStore";
 import { useWindowStore } from "./useWindowStore";
 import { useCaptureFrameStore } from "./useCaptureFrameStore";
-import type { CaptureArea } from "../../core/stores/usePreferencesStore";
+import type { CaptureArea, CaptureMode } from "../../core/stores/usePreferencesStore";
 
 interface StreamState {
   isStreaming: boolean;
@@ -18,9 +23,11 @@ interface StreamState {
   start: (captureAreaOverride?: CaptureArea) => Promise<void>;
   stop: () => Promise<void>;
   refreshStatus: () => Promise<void>;
+  handleBackendStopped: (targetType: CaptureMode) => void;
 }
 
 let unlistenStream: (() => void) | null = null;
+let unlistenStopped: (() => void) | null = null;
 let elapsedTimer: ReturnType<typeof setInterval> | null = null;
 let fpsTimer: ReturnType<typeof setInterval> | null = null;
 let frameCount = 0;
@@ -82,6 +89,12 @@ export const useStreamStore = create<StreamState>()(
       start: async (captureAreaOverride) => {
         const { fps } = get();
         const mode = usePreferencesStore.getState().mode;
+
+        if (!unlistenStopped) {
+          unlistenStopped = await listen<StreamStoppedPayload>("stream-stopped", (event) => {
+            get().handleBackendStopped(event.payload.target_type);
+          });
+        }
 
         let targetType: string;
         let targetIndex: number;
@@ -149,9 +162,31 @@ export const useStreamStore = create<StreamState>()(
             unlistenStream();
             unlistenStream = null;
           }
+          if (unlistenStopped) {
+            unlistenStopped();
+            unlistenStopped = null;
+          }
         } catch (e) {
           console.error("Stream stop failed:", e);
         }
+      },
+
+      handleBackendStopped: (targetType) => {
+        set({ isStreaming: false, startTime: null, elapsedTime: "00:00", actualFps: 0 });
+        stopFpsTimer();
+        if (elapsedTimer) {
+          clearInterval(elapsedTimer);
+          elapsedTimer = null;
+        }
+        if (unlistenStream) {
+          unlistenStream();
+          unlistenStream = null;
+        }
+        if (unlistenStopped) {
+          unlistenStopped();
+          unlistenStopped = null;
+        }
+        useCaptureFrameStore.getState().clearFrame(targetType);
       },
 
       refreshStatus: async () => {

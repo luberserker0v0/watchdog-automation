@@ -85,15 +85,6 @@ fn run_app(context: tauri::Context<tauri::Wry>) {
     utils::logger::init();
     log::info!("Starting watch-dog application");
 
-    let resource_dir = std::env::current_exe()
-        .expect("Cannot get exe path")
-        .parent()
-        .expect("Cannot get exe parent")
-        .join("resources");
-    std::fs::create_dir_all(resource_dir.join("images")).ok();
-    std::fs::create_dir_all(resource_dir.join("models")).ok();
-    std::fs::create_dir_all(resource_dir.join("pipelines")).ok();
-
     let stream_service = Arc::new(StreamService::new());
     let stream_service_for_setup = stream_service.clone();
 

@@ -19,9 +19,9 @@ static ENGINE: Mutex<OcrEngineState> = Mutex::new(OcrEngineState {
     device: AccelerationDevice::Cpu,
 });
 
-const DET_MODEL: &[u8] = include_bytes!("../../../../../resources/model/ocr/det.onnx");
-const REC_MODEL: &[u8] = include_bytes!("../../../../../resources/model/ocr/rec.onnx");
-const KEYS_FILE: &[u8] = include_bytes!("../../../../../resources/model/ocr/keys.txt");
+const DET_MODEL: &[u8] = include_bytes!("../../../../../resources/models/ocr/det.onnx");
+const REC_MODEL: &[u8] = include_bytes!("../../../../../resources/models/ocr/rec.onnx");
+const KEYS_FILE: &[u8] = include_bytes!("../../../../../resources/models/ocr/keys.txt");
 
 struct OcrTextMatcher {
     pattern: Regex,

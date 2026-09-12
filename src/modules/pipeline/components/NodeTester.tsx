@@ -30,6 +30,10 @@ export function nodeTestPage(node: NodeMetaInfo): string {
   return "Other";
 }
 
+function nodeTestKey(node: NodeMetaInfo): string {
+  return `${node.source ?? "built-in"}::${node.file_name}::${node.id}`;
+}
+
 function formatTimingDetails(timings: Record<string, number>): string {
   return Object.entries(timings)
     .map(([phase, duration]) => `${TIMING_LABELS[phase] ?? phase} ${duration}ms`)
@@ -114,7 +118,7 @@ export default function NodeTester() {
       const metas = await listNodeMetas();
       if (request !== listRequest.current) return;
       setNodeMetas(metas);
-      setSelectedNodeKey((current) => current || (metas[0] ? `${metas[0].file_name}::${metas[0].id}` : ""));
+      setSelectedNodeKey((current) => current || (metas[0] ? nodeTestKey(metas[0]) : ""));
     } catch (error) {
       appendLog({ source: "debug", label: "NodeTest", detail: `Failed to load node list: ${error}`, result: "error" });
     } finally {
@@ -128,7 +132,7 @@ export default function NodeTester() {
   }, [loadNodeMetas]);
 
   useEffect(() => {
-    const node = nodeMetas.find((item) => `${item.file_name}::${item.id}` === selectedNodeKey) ?? null;
+    const node = nodeMetas.find((item) => nodeTestKey(item) === selectedNodeKey) ?? null;
     setSelectedNode(node);
     setParamValues(node ? defaultNodeParams(node) : {});
   }, [nodeMetas, selectedNodeKey]);
@@ -228,8 +232,8 @@ export default function NodeTester() {
             {groupedNodes.map(([page, nodes]) => (
               <optgroup key={page} label={page}>
                 {nodes.map((n) => (
-                  <option key={`${n.file_name}::${n.id}`} value={`${n.file_name}::${n.id}`}>
-                    {n.id}
+                  <option key={nodeTestKey(n)} value={nodeTestKey(n)}>
+                    {n.source === "custom" ? `${n.id} (custom)` : n.id}
                   </option>
                 ))}
               </optgroup>
@@ -353,7 +357,7 @@ export default function NodeTester() {
       {!selectedNode && !loading && (
         <div className="testbed-node-empty">
           {nodeMetas.length === 0
-            ? "No node configs found in resources/build-in/pipeline-nodes/"
+            ? "No node configs found in resources/pipeline-nodes/"
             : "Select a node to test"}
         </div>
       )}

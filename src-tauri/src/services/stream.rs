@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{broadcast, Mutex};
@@ -69,6 +69,71 @@ pub enum StreamTarget {
     },
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+struct StreamStoppedPayload {
+    reason: String,
+    target_type: String,
+    target_index: usize,
+}
+
+fn stream_target_identity(target: &StreamTarget) -> (&'static str, usize) {
+    match target {
+        StreamTarget::Screen { index } => ("screen", *index),
+        StreamTarget::Window { hwnd, .. } => ("window", *hwnd),
+    }
+}
+
+fn finish_stream_session(
+    is_streaming: &AtomicBool,
+    session_generation: &AtomicU64,
+    session_id: u64,
+    app: &AppHandle,
+    target: &StreamTarget,
+    reason: &str,
+) {
+    if session_generation.load(Ordering::Acquire) != session_id
+        || !is_streaming.swap(false, Ordering::AcqRel)
+    {
+        return;
+    }
+
+    *STREAM_FRAME.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *FRAME_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let (target_type, target_index) = stream_target_identity(target);
+    let _ = app.emit(
+        "stream-stopped",
+        StreamStoppedPayload {
+            reason: reason.to_string(),
+            target_type: target_type.to_string(),
+            target_index,
+        },
+    );
+    log::info!("Stream ended: reason={}, target={:?}", reason, target);
+}
+
+#[cfg(target_os = "windows")]
+fn stream_target_is_available(target: &StreamTarget) -> bool {
+    match target {
+        StreamTarget::Screen { .. } => true,
+        StreamTarget::Window { hwnd, .. } => unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+            IsWindow(Some(HWND(*hwnd as isize as *mut c_void))).as_bool()
+        },
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn stream_target_is_available(target: &StreamTarget) -> bool {
+    match target {
+        StreamTarget::Screen { index } => services::capture::get_screens()
+            .map(|screens| *index < screens.len())
+            .unwrap_or(false),
+        StreamTarget::Window { hwnd, .. } => services::capture::get_windows(None, None)
+            .map(|windows| windows.iter().any(|window| window.hwnd == Some(*hwnd)))
+            .unwrap_or(false),
+    }
+}
+
 fn resolve_frame_bounds(
     target: &StreamTarget,
     frame_width: u32,
@@ -99,6 +164,9 @@ struct CaptureFlags {
     sender: broadcast::Sender<StreamFrame>,
     app: AppHandle,
     target: StreamTarget,
+    is_streaming: Arc<AtomicBool>,
+    session_generation: Arc<AtomicU64>,
+    session_id: u64,
 }
 
 #[cfg(target_os = "windows")]
@@ -108,6 +176,9 @@ struct CaptureHandler {
     raw_buffer: Vec<u8>,
     crop_buffer: Vec<u8>,
     target: StreamTarget,
+    is_streaming: Arc<AtomicBool>,
+    session_generation: Arc<AtomicU64>,
+    session_id: u64,
 }
 
 #[cfg(target_os = "windows")]
@@ -259,6 +330,9 @@ impl GraphicsCaptureApiHandler for CaptureHandler {
             raw_buffer: Vec::with_capacity(1920 * 1080 * 4),
             crop_buffer: Vec::with_capacity(1920 * 1080 * 4),
             target: ctx.flags.target,
+            is_streaming: ctx.flags.is_streaming,
+            session_generation: ctx.flags.session_generation,
+            session_id: ctx.flags.session_id,
         })
     }
 
@@ -344,7 +418,18 @@ impl GraphicsCaptureApiHandler for CaptureHandler {
     }
 
     fn on_closed(&mut self) -> Result<(), Self::Error> {
-        log::info!("Graphics capture session ended");
+        let reason = match &self.target {
+            StreamTarget::Window { .. } => "target_closed",
+            StreamTarget::Screen { .. } => "capture_closed",
+        };
+        finish_stream_session(
+            &self.is_streaming,
+            &self.session_generation,
+            self.session_id,
+            &self.app,
+            &self.target,
+            reason,
+        );
         Ok(())
     }
 }
@@ -353,6 +438,7 @@ impl GraphicsCaptureApiHandler for CaptureHandler {
 
 pub struct StreamService {
     is_streaming: Arc<AtomicBool>,
+    session_generation: Arc<AtomicU64>,
     handle: Mutex<Option<JoinHandle<()>>>,
     #[cfg(target_os = "windows")]
     capture_control: Mutex<Option<CaptureControl<CaptureHandler, String>>>,
@@ -368,6 +454,7 @@ impl StreamService {
         let (sender, _) = broadcast::channel(4);
         Self {
             is_streaming: Arc::new(AtomicBool::new(false)),
+            session_generation: Arc::new(AtomicU64::new(0)),
             handle: Mutex::new(None),
             #[cfg(target_os = "windows")]
             capture_control: Mutex::new(None),
@@ -400,6 +487,7 @@ impl StreamService {
 
         let log_target = target.clone();
         let log_engine = engine.clone();
+        let session_id = self.session_generation.fetch_add(1, Ordering::AcqRel) + 1;
 
         *self.fps.lock().await = fps;
         *self.target.lock().await = Some(target.clone());
@@ -410,18 +498,18 @@ impl StreamService {
         match engine {
             #[cfg(target_os = "windows")]
             CaptureEngine::Graphics => {
-                self.start_graphics(app, target).await;
+                self.start_graphics(app, target, session_id).await;
             }
             #[cfg(target_os = "windows")]
             CaptureEngine::Dxgi => {
-                self.start_dxgi(app, fps, target).await;
+                self.start_dxgi(app, fps, target, session_id).await;
             }
             CaptureEngine::Gdi => {
-                self.start_gdi(app, fps, target).await;
+                self.start_gdi(app, fps, target, session_id).await;
             }
             #[cfg(not(target_os = "windows"))]
             _ => {
-                self.start_gdi(app, fps, target).await;
+                self.start_gdi(app, fps, target, session_id).await;
             }
         }
 
@@ -436,9 +524,11 @@ impl StreamService {
     // ===== Windows-only: Graphics Capture =====
 
     #[cfg(target_os = "windows")]
-    async fn start_graphics(&self, app: AppHandle, target: StreamTarget) {
+    async fn start_graphics(&self, app: AppHandle, target: StreamTarget, session_id: u64) {
         let sender = self.sender.clone();
         let start_time = self.start_time.clone();
+        let is_streaming = self.is_streaming.clone();
+        let session_generation = self.session_generation.clone();
 
         match target {
             StreamTarget::Screen { index } => {
@@ -457,6 +547,9 @@ impl StreamService {
                             sender: sender.clone(),
                             app,
                             target: StreamTarget::Screen { index },
+                            is_streaming,
+                            session_generation,
+                            session_id,
                         },
                     ))
                 })
@@ -503,6 +596,9 @@ impl StreamService {
                             sender: sender.clone(),
                             app,
                             target: StreamTarget::Window { hwnd, capture_area },
+                            is_streaming,
+                            session_generation,
+                            session_id,
                         },
                     ))
                 })
@@ -539,8 +635,9 @@ impl StreamService {
     // ===== Windows-only: DXGI =====
 
     #[cfg(target_os = "windows")]
-    async fn start_dxgi(&self, app: AppHandle, fps: u32, target: StreamTarget) {
+    async fn start_dxgi(&self, app: AppHandle, fps: u32, target: StreamTarget, session_id: u64) {
         let is_streaming = self.is_streaming.clone();
+        let session_generation = self.session_generation.clone();
         let sender = self.sender.clone();
         let target_clone = target.clone();
         let start_time = self.start_time.clone();
@@ -562,6 +659,17 @@ impl StreamService {
 
             loop {
                 if !is_streaming.load(Ordering::Relaxed) {
+                    break;
+                }
+                if !stream_target_is_available(&target_clone) {
+                    finish_stream_session(
+                        &is_streaming,
+                        &session_generation,
+                        session_id,
+                        &app,
+                        &target_clone,
+                        "target_closed",
+                    );
                     break;
                 }
 
@@ -599,8 +707,9 @@ impl StreamService {
 
     // ===== Cross-platform: GDI / xcap polling =====
 
-    async fn start_gdi(&self, app: AppHandle, fps: u32, target: StreamTarget) {
+    async fn start_gdi(&self, app: AppHandle, fps: u32, target: StreamTarget, session_id: u64) {
         let is_streaming = self.is_streaming.clone();
+        let session_generation = self.session_generation.clone();
         let sender = self.sender.clone();
         let target_clone = target.clone();
         let start_time = self.start_time.clone();
@@ -633,6 +742,17 @@ impl StreamService {
 
             loop {
                 if !is_streaming.load(Ordering::Relaxed) {
+                    break;
+                }
+                if !stream_target_is_available(&target_clone) {
+                    finish_stream_session(
+                        &is_streaming,
+                        &session_generation,
+                        session_id,
+                        &app,
+                        &target_clone,
+                        "target_closed",
+                    );
                     break;
                 }
 
@@ -687,6 +807,7 @@ impl StreamService {
     // ===== Shared: stop/status =====
 
     pub async fn stop(&self) {
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
         self.is_streaming.store(false, Ordering::Relaxed);
 
         #[cfg(target_os = "windows")]
@@ -705,6 +826,7 @@ impl StreamService {
     }
 
     pub fn stop_sync(&self) {
+        self.session_generation.fetch_add(1, Ordering::AcqRel);
         self.is_streaming.store(false, Ordering::Relaxed);
 
         #[cfg(target_os = "windows")]
@@ -733,6 +855,7 @@ impl StreamService {
     }
 
     pub async fn status(&self) -> StreamStatus {
+        let is_streaming = self.is_streaming.load(Ordering::Relaxed);
         let target = self.target.lock().await.clone();
         let fps = *self.fps.lock().await;
         let start_time = *self.start_time.lock().await;
@@ -754,7 +877,9 @@ impl StreamService {
             None => ("none".to_string(), 0, "frame".to_string()),
         };
 
-        let start_time_ms = start_time.map(|t| t.elapsed().as_millis() as u64);
+        let start_time_ms = is_streaming
+            .then(|| start_time.map(|started_at| started_at.elapsed().as_millis() as u64))
+            .flatten();
         let engine_str = match engine {
             CaptureEngine::Gdi => "gdi".to_string(),
             #[cfg(target_os = "windows")]
@@ -763,7 +888,7 @@ impl StreamService {
         };
 
         StreamStatus {
-            is_streaming: self.is_streaming.load(Ordering::Relaxed),
+            is_streaming,
             fps,
             target_type,
             target_index,

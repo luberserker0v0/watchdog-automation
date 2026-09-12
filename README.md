@@ -154,8 +154,7 @@ src-tauri\target\debug\watch-dog-target.exe
 ### Production application
 
 ```powershell
-npm run tauri -- build --debug --no-bundle
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-onnxruntime.ps1 -Profile debug
+npm run build:app:debug
 ```
 
 Output:
@@ -166,14 +165,13 @@ src-tauri\target\debug\watch-dog.exe
 
 ### Build all three debug executables
 
-Build in this order. Target and tester builds temporarily overwrite Cargo's intermediate `watch-dog.exe`; building production last ensures that `watch-dog.exe` is the production application.
+Close every running `watch-dog.exe`, `watch-dog-tester.exe`, and `watch-dog-target.exe`, then run:
 
 ```powershell
-npm run build:target:debug
-npm run build:tester:debug
-npm run tauri -- build --debug --no-bundle
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-onnxruntime.ps1 -Profile debug
+npm run build:all-targets:debug
 ```
+
+The script builds tester first, Target second, and production last. Feature builds temporarily overwrite Cargo's intermediate `watch-dog.exe`; production-last ordering guarantees the final `watch-dog.exe` contains the production application. A locked destination makes the build fail instead of silently retaining a stale executable.
 
 Final files:
 
@@ -183,8 +181,6 @@ src-tauri\target\debug\watch-dog-tester.exe
 src-tauri\target\debug\watch-dog-target.exe
 src-tauri\target\debug\onnxruntime.dll
 ```
-
-> `npm run build:all-targets` currently aliases `npm run build:target:debug`. Despite its name, it only rebuilds `watch-dog-target.exe`.
 
 ## Release executable builds
 
@@ -218,8 +214,7 @@ src-tauri\target\release\watch-dog-target.exe
 ### Production application
 
 ```powershell
-npm run tauri -- build --no-bundle
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-onnxruntime.ps1 -Profile release
+npm run build:app
 ```
 
 Output:
@@ -230,12 +225,13 @@ src-tauri\target\release\watch-dog.exe
 
 ### Build all three release executables
 
+Close every running WatchDog executable first, then run:
+
 ```powershell
-npm run build:target
-npm run build:tester
-npm run tauri -- build --no-bundle
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-onnxruntime.ps1 -Profile release
+npm run build:all-targets
 ```
+
+This produces standalone release executables without creating MSI or NSIS installers. It uses the same tester → Target → production order as the debug command.
 
 Final files:
 
@@ -308,13 +304,28 @@ src/api/                     Tauri command wrappers and frontend API types
 src/modules/capture/         Capture, streaming, preview, and debug UI
 src/modules/pipeline/        Pipeline UI, tester, and sample Target UI
 src-tauri/src/               Rust backend and Tauri commands
-src-tauri/resources/         Pipelines, node metadata, OCR models, and images
+src-tauri/resources/         Bundled pipelines, node metadata, OCR models, and images
 scripts/                     Windows build-artifact and runtime helpers
 dist/                        Generated Vite frontend
 src-tauri/target/            Generated Rust executables and bundles
 ```
 
 Generated directories such as `dist\`, `node_modules\`, and `src-tauri\target\` should not be edited manually.
+
+Runtime content is separated from bundled project resources:
+
+```text
+%USERPROFILE%\.watch_dog\
+├── resources\
+│   ├── pipelines\       User pipeline Mermaid and metadata files
+│   ├── pipeline-nodes\  User node-test metadata
+│   ├── images\          User template-matching images
+│   └── models\          User/custom model files
+├── logs\                Runtime logs
+└── visions\             Captures and debug images
+```
+
+Template image resolution checks the user `resources\images` directory first and then falls back to the project's bundled `resources\images` directory. On startup, pipelines from the legacy `%USERPROFILE%\.watch_dog\pipelines` location are moved into `%USERPROFILE%\.watch_dog\resources\pipelines` without overwriting an existing pipeline.
 
 ## Common problems
 

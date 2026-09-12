@@ -11,7 +11,7 @@ A pipeline consists of two files:
 | `<name>.md` | Mermaid flowchart — defines **topology** (nodes + edges) |
 | `<name>.meta.json` | JSON — defines **properties** (recognition, actions, timing, etc.) |
 
-Both files must reside in the same directory under `resources/build-in/pipelines/` (built-in) or `%USERPROFILE%/.watch_dog/pipelines/` (user-created).
+Both files must reside in the same directory under `src-tauri/resources/pipelines/` (project-bundled) or `%USERPROFILE%/.watch_dog/resources/pipelines/` (user-created).
 
 The engine merges the two files at runtime: mermaid provides the graph structure, meta.json provides the node/edge configuration. Nodes declared in mermaid but absent from meta.json receive sensible defaults.
 

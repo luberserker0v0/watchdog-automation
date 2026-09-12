@@ -2,7 +2,7 @@ use crate::modules::pipeline::commands::runner::create_registry;
 use crate::modules::pipeline::engine::debug_image;
 use crate::modules::pipeline::models::graph::PipelineTarget;
 use crate::modules::pipeline::models::node::NodeConfig;
-use crate::services::stream::StreamStatus;
+use crate::services::stream::{CaptureEngine, StreamStatus, StreamTarget};
 use crate::utils::paths;
 use tauri::Emitter;
 
@@ -10,6 +10,7 @@ use tauri::Emitter;
 pub struct NodeMetaInfo {
     pub id: String,
     pub file_name: String,
+    pub source: String,
     #[serde(flatten)]
     pub config: NodeConfig,
 }
@@ -67,17 +68,30 @@ fn read_node_metadata(
 
 #[tauri::command]
 pub fn list_node_metas() -> Result<Vec<NodeMetaInfo>, String> {
-    let dir = paths::built_in_pipeline_nodes_dir();
-    log::info!("[node_test] listing node metas from {}", dir.display());
+    let built_in_dir = paths::built_in_pipeline_nodes_dir();
+    let custom_dir = paths::user_pipeline_nodes_dir();
+    log::info!(
+        "[node_test] listing node metas from {} and {}",
+        built_in_dir.display(),
+        custom_dir.display()
+    );
+    let mut nodes = Vec::new();
+    append_node_metas(&built_in_dir, "built-in", &mut nodes)?;
+    append_node_metas(&custom_dir, "custom", &mut nodes)?;
+    nodes.sort_by(|a, b| (&a.source, &a.id).cmp(&(&b.source, &b.id)));
+    log::info!("[node_test] found {} node metas", nodes.len());
+    Ok(nodes)
+}
+
+fn append_node_metas(
+    dir: &std::path::Path,
+    source: &str,
+    nodes: &mut Vec<NodeMetaInfo>,
+) -> Result<(), String> {
     if !dir.exists() {
-        log::warn!(
-            "[node_test] node metas directory does not exist: {}",
-            dir.display()
-        );
-        return Ok(Vec::new());
+        return Ok(());
     }
 
-    let mut nodes = Vec::new();
     let entries = std::fs::read_dir(&dir).map_err(|e| {
         let msg = format!("Failed to read node metas dir: {}", e);
         log::warn!("[node_test] {}", msg);
@@ -94,13 +108,11 @@ pub fn list_node_metas() -> Result<Vec<NodeMetaInfo>, String> {
         nodes.extend(metadata.nodes.into_iter().map(|(id, config)| NodeMetaInfo {
             id,
             file_name: file_name.clone(),
+            source: source.to_string(),
             config,
         }));
     }
-
-    nodes.sort_by(|a, b| a.id.cmp(&b.id));
-    log::info!("[node_test] found {} node metas", nodes.len());
-    Ok(nodes)
+    Ok(())
 }
 
 fn bring_to_front(hwnd: usize) {
@@ -324,6 +336,25 @@ fn stream_target_matches(target: &PipelineTarget, status: &StreamStatus, hwnd: u
     }
 }
 
+fn stream_target_for_node(target: &PipelineTarget, hwnd: usize) -> StreamTarget {
+    match target {
+        PipelineTarget::Screen { index } => StreamTarget::Screen { index: *index },
+        PipelineTarget::Window { capture_area, .. } => StreamTarget::Window {
+            hwnd,
+            capture_area: *capture_area,
+        },
+    }
+}
+
+fn stream_engine_from_status(status: &StreamStatus) -> CaptureEngine {
+    match status.engine.as_str() {
+        "gdi" => CaptureEngine::Gdi,
+        #[cfg(target_os = "windows")]
+        "dxgi" => CaptureEngine::Dxgi,
+        _ => CaptureEngine::Graphics,
+    }
+}
+
 #[tauri::command]
 pub async fn open_window(target: PipelineTarget, app: tauri::AppHandle) -> Result<String, String> {
     log::info!("[node_test] open_window: {:?}", target);
@@ -413,14 +444,30 @@ pub async fn test_node(
 
     let stream_service = stream_state.0.clone();
 
-    // Check if stream is already running with correct target
+    // Reuse an exact stream match. If the frontend has a stream for a different
+    // capture area (for example, the manual client preference while this node
+    // requests frame), restart it here rather than waiting for a frontend event
+    // that may not be mounted in the tester entrypoint.
     let status = stream_service.status().await;
-    let needs_stream_event = !status.is_streaming || !stream_target_matches(&target, &status, hwnd);
+    let needs_stream_restart =
+        !status.is_streaming || !stream_target_matches(&target, &status, hwnd);
 
-    if needs_stream_event {
+    if needs_stream_restart {
         log::info!(
-            "[node_test] stream not active or wrong target, waiting for frontend to start stream"
+            "[node_test] restarting stream for node target: current=({}, {}, {}), expected={:?}",
+            status.target_type,
+            status.target_index,
+            status.capture_area,
+            stream_target_for_node(&target, hwnd),
         );
+        stream_service
+            .start(
+                app.clone(),
+                status.fps.max(1),
+                stream_target_for_node(&target, hwnd),
+                stream_engine_from_status(&status),
+            )
+            .await;
     } else {
         log::info!(
             "[node_test] stream already active with correct target hwnd={}",
@@ -428,7 +475,7 @@ pub async fn test_node(
         );
     }
 
-    // Wait for stream to be active (frontend starts it via update_capture event)
+    // Stream startup may create a native capture session asynchronously.
     let mut waited = false;
     let phase_start = std::time::Instant::now();
     for _ in 0..50 {
@@ -473,17 +520,7 @@ pub async fn test_node(
     // emit only when the target changes, so a late subscriber cannot rely on a
     // future frame for a static test page.
     let mut rx = stream_service.subscribe();
-    let expected_stream_target = match &target {
-        PipelineTarget::Screen { index } => {
-            crate::services::stream::StreamTarget::Screen { index: *index }
-        }
-        PipelineTarget::Window { capture_area, .. } => {
-            crate::services::stream::StreamTarget::Window {
-                hwnd,
-                capture_area: *capture_area,
-            }
-        }
-    };
+    let expected_stream_target = stream_target_for_node(&target, hwnd);
     let cached_frame = crate::FRAME_CACHE
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -775,6 +812,68 @@ mod fixture_tests {
     use crate::modules::pipeline::models::recognizer::{CandidateOrder, Recognition};
     use std::collections::BTreeSet;
 
+    fn window_stream_status(capture_area: &str) -> StreamStatus {
+        StreamStatus {
+            is_streaming: true,
+            fps: 5,
+            target_type: "window".to_string(),
+            target_index: 123,
+            start_time: Some(0),
+            engine: "graphics".to_string(),
+            capture_area: capture_area.to_string(),
+        }
+    }
+
+    #[test]
+    fn node_stream_match_requires_the_requested_window_capture_area() {
+        let frame_target = PipelineTarget::Window {
+            process: None,
+            class: None,
+            title: Some("Target UI".to_string()),
+            capture_area: CaptureArea::Frame,
+        };
+        let client_target = PipelineTarget::Window {
+            process: None,
+            class: None,
+            title: Some("Target UI".to_string()),
+            capture_area: CaptureArea::Client,
+        };
+
+        assert!(stream_target_matches(
+            &frame_target,
+            &window_stream_status("frame"),
+            123,
+        ));
+        assert!(!stream_target_matches(
+            &frame_target,
+            &window_stream_status("client"),
+            123,
+        ));
+        assert!(stream_target_matches(
+            &client_target,
+            &window_stream_status("client"),
+            123,
+        ));
+    }
+
+    #[test]
+    fn node_stream_target_keeps_the_metadata_capture_area() {
+        let target = PipelineTarget::Window {
+            process: None,
+            class: None,
+            title: Some("Target UI".to_string()),
+            capture_area: CaptureArea::Frame,
+        };
+
+        assert_eq!(
+            stream_target_for_node(&target, 123),
+            StreamTarget::Window {
+                hwnd: 123,
+                capture_area: CaptureArea::Frame,
+            },
+        );
+    }
+
     #[test]
     fn node_test_discovers_nodes_from_the_canonical_metadata_shape() {
         let nodes = list_node_metas().unwrap();
@@ -813,13 +912,14 @@ mod fixture_tests {
             let node = NodeMetaInfo {
                 id,
                 file_name,
+                source: "built-in".to_string(),
                 config,
             };
 
             recognitions.insert(match &node.recognition.kind {
                 Recognition::DirectHit => "DirectHit",
                 Recognition::TemplateMatch { template, .. } => {
-                    image::open(paths::resource_images_dir().join(template)).unwrap();
+                    image::open(paths::built_in_images_dir().join(template)).unwrap();
                     "TemplateMatch"
                 }
                 Recognition::Ocr { .. } => "OCR",

@@ -10,6 +10,12 @@ export interface StreamStatus {
   capture_area: "frame" | "client";
 }
 
+export interface StreamStoppedPayload {
+  reason: "target_closed" | "capture_closed" | string;
+  target_type: "screen" | "window";
+  target_index: number;
+}
+
 export async function startStream(
   fps: number,
   targetType: string,

@@ -6,6 +6,7 @@ import { useWindowStore } from "../stores/useWindowStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { getWindowDetails, type WindowDetailInfo } from "../../../api/window";
 import type { PipelineTarget } from "../../../api/pipeline";
+import type { StreamStoppedPayload } from "../../../api/stream";
 import ModeSelector from "../components/ModeSelector";
 import DesktopFilter from "../components/DesktopFilter";
 import WindowStateFilter from "../components/WindowStateFilter";
@@ -106,6 +107,16 @@ export default function CaptureView() {
         const captureArea = target.type === "window" ? target.capture_area : undefined;
         useStreamStore.getState().start(captureArea);
       }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<StreamStoppedPayload>("stream-stopped", (event) => {
+      useStreamStore.getState().handleBackendStopped(event.payload.target_type);
     });
 
     return () => {
