@@ -1,0 +1,31 @@
+{
+  "nodes": {
+    "RecognizeTemplate": {
+      "target": {
+        "type": "window",
+        "title": "^Target UI - Dashboard$",
+        "capture_area": "frame"
+      },
+      "recognition": {
+        "type": "TemplateMatch",
+        "template": "test/indigo-8x8.ppm",
+        "threshold": 0.99,
+        "candidate_selection": {
+          "order": "native",
+          "index": 0
+        }
+      },
+      "actions": [
+        {
+          "type": "DoNothing"
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 0,
+      "post_delay": 0,
+      "enabled": true,
+      "max_hit": 1
+    }
+  }
+}

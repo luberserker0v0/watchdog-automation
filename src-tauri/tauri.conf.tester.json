@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "watch-dog-tester",
+  "version": "0.1.0",
+  "identifier": "com.berserker.watch-dog-tester",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:12420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "watch-dog Tester",
+        "width": 1200,
+        "height": 700,
+        "minWidth": 900,
+        "minHeight": 500,
+        "url": "/index-tester.html"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/tester/32x32.png",
+      "icons/tester/128x128.png",
+      "icons/tester/128x128@2x.png",
+      "icons/tester/icon.icns",
+      "icons/tester/icon.ico"
+    ],
+    "resources": [
+      "resources/**/*"
+    ]
+  }
+}

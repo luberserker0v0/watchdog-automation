@@ -1,0 +1,54 @@
+# Node / frontend build output
+/node_modules/
+/dist/
+/dist-ssr/
+/coverage/
+/.nyc_output/
+*.tsbuildinfo
+
+# Rust / Tauri build output
+/src-tauri/target/
+/src-tauri/gen/schemas/
+/src-tauri/paddleocr_rs_onnx_patch/target/
+/src-tauri/paddleocr_rs_onnx_patch/Cargo.lock
+/src-tauri/paddleocr_rs_onnx_patch/.cargo-ok
+/src-tauri/paddleocr_rs_onnx_patch/.cargo_vcs_info.json
+
+# Runtime-generated WatchDog data
+/.watch_dog/
+/visions/
+/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editors and operating systems
+/.idea/
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.suo
+*.user
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+*~

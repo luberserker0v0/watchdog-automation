@@ -1,0 +1,44 @@
+{
+  "name": "watch-dog",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:render": "vitest run src/modules/pipeline/components/PipelineCard.render.test.tsx src/modules/capture/stores/captureRendering.render.test.tsx src/modules/core/components/ResizableSplit.render.test.tsx",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "dev:tester": "tauri dev --features app-tester --config src-tauri/tauri.conf.tester.json",
+    "build:tester": "tauri build --no-bundle --features app-tester --config src-tauri/tauri.conf.tester.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-tester.exe release . && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile release",
+    "build:tester:debug": "tauri build --debug --no-bundle --features app-tester --config src-tauri/tauri.conf.tester.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-tester.exe debug . && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile debug",
+    "dev:target": "tauri dev --features app-target --config src-tauri/tauri.conf.target.json",
+    "build:target": "tauri build --no-bundle --features app-target --config src-tauri/tauri.conf.target.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-target.exe release .",
+    "build:target:debug": "tauri build --debug --no-bundle --features app-target --config src-tauri/tauri.conf.target.json && node scripts/copy-build-artifact.mjs watch-dog.exe watch-dog-target.exe debug .",
+    "build:all-targets": "npm run build:target:debug"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "html2canvas": "^1.4.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/html2canvas": "^0.5.35",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "jsdom": "^29.1.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^5.0.0"
+  }
+}

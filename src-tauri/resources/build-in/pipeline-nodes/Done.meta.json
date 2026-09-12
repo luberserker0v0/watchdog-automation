@@ -1,0 +1,21 @@
+{
+  "nodes": {
+    "Done": {
+      "target": {
+        "type": "window",
+        "title": "^Target UI - Dashboard$",
+        "capture_area": "client"
+      },
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "StopTask"
+        }
+      ],
+      "enabled": true,
+      "max_hit": 1
+    }
+  }
+}

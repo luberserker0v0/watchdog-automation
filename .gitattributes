@@ -1,0 +1,26 @@
+* text=auto eol=lf
+
+*.rs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=lf
+
+*.onnx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
+
+# Preserve the vendored crate as published; its mobile examples contain
+# upstream trailing whitespace that should not weaken checks for our code.
+src-tauri/paddleocr_rs_onnx_patch/** whitespace=-blank-at-eol

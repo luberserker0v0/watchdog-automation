@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "watch-dog-target",
+  "version": "0.1.0",
+  "identifier": "com.berserker.watch-dog-target",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:12420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/target/32x32.png",
+      "icons/target/128x128.png",
+      "icons/target/128x128@2x.png",
+      "icons/target/icon.icns",
+      "icons/target/icon.ico"
+    ],
+    "resources": []
+  }
+}

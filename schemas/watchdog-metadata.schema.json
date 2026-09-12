@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "watchdog-metadata.schema.json",
+  "title": "WatchDog Mermaid Metadata",
+  "description": "Node and edge configuration shared by Mermaid pipelines and the node tester.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "nodes": {
+      "type": "object",
+      "description": "Node settings keyed by node ID.",
+      "additionalProperties": { "$ref": "#/$defs/nodeMetadata" },
+      "default": {}
+    },
+    "edges": {
+      "type": "object",
+      "markdownDescription": "Edge settings keyed as `FromNode->ToNode`, matching an edge in the Mermaid file. Omit `edge_type` for `next`; use `error` for the failure path. Omitting `edges` is equivalent to `{}`.",
+      "additionalProperties": { "$ref": "#/$defs/edgeMetadata" },
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_-]*->[A-Za-z_][A-Za-z0-9_-]*$"
+      },
+      "default": {},
+      "examples": [
+        {
+          "RecognizeLogin->ClickLogin": { "edge_type": "next" },
+          "ClickLogin->LoginError": { "edge_type": "error" }
+        }
+      ],
+      "defaultSnippets": [
+        {
+          "label": "Configure Mermaid edge",
+          "description": "Configure an edge whose endpoints exist in the adjacent Mermaid file.",
+          "body": {
+            "${1:FromNode}->${2:ToNode}": {
+              "edge_type": "${3:next}"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "required": ["nodes"],
+  "$defs": {
+    "signedInteger": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+    "unsignedInteger": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "milliseconds": { "type": "integer", "minimum": 0, "description": "Duration in milliseconds." },
+    "point": {
+      "type": "array",
+      "description": "A capture-local point in [x, y] form.",
+      "prefixItems": [
+        { "$ref": "#/$defs/signedInteger", "title": "x" },
+        { "$ref": "#/$defs/signedInteger", "title": "y" }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "region": {
+      "type": "array",
+      "description": "A capture-local rectangle in [x, y, width, height] form.",
+      "prefixItems": [
+        { "$ref": "#/$defs/signedInteger", "title": "x" },
+        { "$ref": "#/$defs/signedInteger", "title": "y" },
+        { "type": "integer", "minimum": 0, "maximum": 2147483647, "title": "width" },
+        { "type": "integer", "minimum": 0, "maximum": 2147483647, "title": "height" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "roi": {
+      "type": "array",
+      "description": "Recognition region [x, y, width, height]. [0, 0, 0, 0] means the complete captured image.",
+      "default": [0, 0, 0, 0],
+      "prefixItems": [
+        { "$ref": "#/$defs/signedInteger", "title": "x" },
+        { "$ref": "#/$defs/signedInteger", "title": "y" },
+        { "$ref": "#/$defs/signedInteger", "title": "width" },
+        { "$ref": "#/$defs/signedInteger", "title": "height" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "regionOffset": {
+      "type": "array",
+      "description": "Offset [x, y, width, height] added to the source region.",
+      "default": [0, 0, 0, 0],
+      "prefixItems": [
+        { "$ref": "#/$defs/signedInteger", "title": "x offset" },
+        { "$ref": "#/$defs/signedInteger", "title": "y offset" },
+        { "$ref": "#/$defs/signedInteger", "title": "width offset" },
+        { "$ref": "#/$defs/signedInteger", "title": "height offset" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "rgb": {
+      "type": "array",
+      "description": "RGB color as [red, green, blue], with each channel from 0 to 255.",
+      "prefixItems": [
+        { "type": "integer", "minimum": 0, "maximum": 255, "title": "red" },
+        { "type": "integer", "minimum": 0, "maximum": 255, "title": "green" },
+        { "type": "integer", "minimum": 0, "maximum": 255, "title": "blue" }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "captureTarget": {
+      "title": "Capture target",
+      "oneOf": [
+        {
+          "title": "Screen",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "screen" },
+            "index": { "type": "integer", "minimum": 0, "default": 0, "description": "Screen index returned by the capture API." }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Window",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "window" },
+            "process": { "type": "string", "description": "Process-name regular expression." },
+            "class": { "type": "string", "description": "Window-class regular expression." },
+            "title": { "type": "string", "description": "Window-title regular expression." },
+            "capture_area": {
+              "type": "string",
+              "enum": ["frame", "client"],
+              "default": "frame",
+              "description": "Capture the complete window frame or only its client content."
+            }
+          },
+          "required": ["type"],
+          "anyOf": [
+            { "required": ["process"] },
+            { "required": ["class"] },
+            { "required": ["title"] }
+          ]
+        }
+      ]
+    },
+    "candidateSelection": {
+      "title": "Recognition candidate selection",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "type": "string",
+          "enum": ["native", "top_to_bottom", "bottom_to_top", "left_to_right", "right_to_left", "confidence_desc"],
+          "default": "native",
+          "description": "How eligible recognition candidates are sorted before selecting index."
+        },
+        "index": { "type": "integer", "minimum": 0, "default": 0, "description": "Zero-based candidate index after sorting." }
+      }
+    },
+    "recognition": {
+      "title": "Recognition",
+      "oneOf": [
+        {
+          "title": "Direct hit",
+          "description": "Always matches; useful when an action uses a fixed target.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "DirectHit" },
+            "roi": { "$ref": "#/$defs/roi" },
+            "roi_offset": { "$ref": "#/$defs/regionOffset", "description": "Offset applied to roi before recognition." },
+            "candidate_selection": { "$ref": "#/$defs/candidateSelection" }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Template match",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "TemplateMatch" },
+            "template": { "type": "string", "minLength": 1, "description": "Template image path." },
+            "threshold": { "type": "number", "minimum": 0, "maximum": 1, "description": "Minimum match confidence from 0 to 1." },
+            "roi": { "$ref": "#/$defs/roi" },
+            "roi_offset": { "$ref": "#/$defs/regionOffset", "description": "Offset applied to roi before recognition." },
+            "candidate_selection": { "$ref": "#/$defs/candidateSelection" }
+          },
+          "required": ["type", "template"]
+        },
+        {
+          "title": "OCR",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "OCR" },
+            "expected": { "type": "string", "description": "Regex matched against each OCR block. Unanchored patterns search by substring; use ^...$ for an exact block match. Literal spaces tolerate spaces omitted by OCR." },
+            "threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.3, "description": "Minimum OCR confidence from 0 to 1." },
+            "roi": { "$ref": "#/$defs/roi" },
+            "roi_offset": { "$ref": "#/$defs/regionOffset", "description": "Offset applied to roi before recognition." },
+            "candidate_selection": { "$ref": "#/$defs/candidateSelection" }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Color match",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "ColorMatch" },
+            "lower": { "$ref": "#/$defs/rgb", "description": "Inclusive lower RGB bound." },
+            "upper": { "$ref": "#/$defs/rgb", "description": "Inclusive upper RGB bound." },
+            "roi": { "$ref": "#/$defs/roi" },
+            "roi_offset": { "$ref": "#/$defs/regionOffset", "description": "Offset applied to roi before recognition." },
+            "candidate_selection": { "$ref": "#/$defs/candidateSelection" }
+          },
+          "required": ["type", "lower", "upper"]
+        },
+        {
+          "title": "Custom recognizer",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "Custom" },
+            "recognition": { "type": "string", "minLength": 1, "description": "Registered recognizer name." },
+            "param": { "description": "Recognizer-specific JSON parameters." },
+            "roi": { "$ref": "#/$defs/roi" },
+            "roi_offset": { "$ref": "#/$defs/regionOffset", "description": "Offset applied to roi before recognition." },
+            "candidate_selection": { "$ref": "#/$defs/candidateSelection" }
+          },
+          "required": ["type", "recognition"]
+        }
+      ]
+    },
+    "actionTarget": {
+      "title": "Action target",
+      "description": "true uses the recognized box; a string references a previous node; [x,y] is a fixed point; [x,y,width,height] is a fixed area.",
+      "oneOf": [
+        { "const": true, "title": "Recognized box" },
+        { "type": "string", "minLength": 1, "title": "Previous node ID" },
+        { "$ref": "#/$defs/point" },
+        { "$ref": "#/$defs/region" }
+      ],
+      "default": true
+    },
+    "action": {
+      "title": "Action",
+      "oneOf": [
+        {
+          "title": "Do nothing",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "type": { "const": "DoNothing" } },
+          "required": ["type"]
+        },
+        {
+          "title": "Click",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "Click" },
+            "target": { "$ref": "#/$defs/actionTarget" },
+            "target_offset": { "$ref": "#/$defs/regionOffset" }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Long press",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "LongPress" },
+            "target": { "$ref": "#/$defs/actionTarget" },
+            "target_offset": { "$ref": "#/$defs/regionOffset" },
+            "duration": { "$ref": "#/$defs/milliseconds", "default": 1000 }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Swipe",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "Swipe" },
+            "begin": { "$ref": "#/$defs/actionTarget", "description": "Swipe start target." },
+            "begin_offset": { "$ref": "#/$defs/regionOffset" },
+            "end": { "$ref": "#/$defs/actionTarget", "description": "Swipe end target." },
+            "end_offset": { "$ref": "#/$defs/regionOffset" },
+            "duration": { "$ref": "#/$defs/milliseconds", "default": 200 }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Scroll",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "Scroll" },
+            "target": { "$ref": "#/$defs/actionTarget" },
+            "target_offset": { "$ref": "#/$defs/regionOffset" },
+            "dx": { "$ref": "#/$defs/signedInteger", "default": 0, "description": "Horizontal scroll amount." },
+            "dy": { "$ref": "#/$defs/signedInteger", "default": 0, "description": "Vertical scroll amount. Positive scrolls down; negative scrolls up." }
+          },
+          "required": ["type"]
+        },
+        {
+          "title": "Press keyboard key",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "ClickKey" },
+            "key": { "type": "array", "items": { "$ref": "#/$defs/unsignedInteger" }, "minItems": 1, "description": "One or more platform key codes." }
+          },
+          "required": ["type", "key"]
+        },
+        {
+          "title": "Input text",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "InputText" },
+            "input_text": { "type": "string", "description": "Text to type. {{parameter}} placeholders are substituted before execution." }
+          },
+          "required": ["type", "input_text"]
+        },
+        {
+          "title": "Stop pipeline",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "type": { "const": "StopTask" } },
+          "required": ["type"]
+        },
+        {
+          "title": "Custom action",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "Custom" },
+            "action": { "type": "string", "minLength": 1, "description": "Registered action name." },
+            "param": { "description": "Action-specific JSON parameters." }
+          },
+          "required": ["type", "action"]
+        }
+      ]
+    },
+    "parameter": {
+      "title": "Developer input parameter",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["text", "password", "number", "dropdown", "switch", "color"], "description": "Control displayed by the pipeline tester." },
+        "key": { "type": "string", "minLength": 1, "description": "Placeholder key used as {{key}}." },
+        "label": { "type": "string", "minLength": 1, "description": "Human-readable field label." },
+        "placeholder": { "type": "string", "default": "" },
+        "default": { "description": "Initial value; use string, number, or boolean according to the parameter type." },
+        "options": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Choices for a dropdown parameter." }
+      },
+      "required": ["type", "key", "label"]
+    },
+    "nodeFields": {
+      "type": "object",
+      "properties": {
+        "recognition": { "$ref": "#/$defs/recognition", "default": { "type": "DirectHit" } },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" }, "default": [] },
+        "params": { "type": "array", "items": { "$ref": "#/$defs/parameter" }, "default": [] },
+        "target": { "$ref": "#/$defs/captureTarget", "description": "Transient capture-target override for this node." },
+        "timeout": { "$ref": "#/$defs/milliseconds", "default": 20000, "description": "Maximum time to keep trying this node." },
+        "rate_limit": { "$ref": "#/$defs/milliseconds", "default": 1000, "description": "Delay between recognition attempts." },
+        "pre_delay": { "$ref": "#/$defs/milliseconds", "default": 200, "description": "Delay before recognition starts." },
+        "post_delay": { "$ref": "#/$defs/milliseconds", "default": 200, "description": "Delay after successful actions." },
+        "enabled": { "type": "boolean", "default": true },
+        "inverse": { "type": "boolean", "default": false, "description": "Invert the recognition match result." },
+        "max_hit": { "$ref": "#/$defs/unsignedInteger", "default": 4294967295, "description": "Maximum successful visits before the node follows its error path." },
+        "repeat": { "$ref": "#/$defs/unsignedInteger", "default": 1, "description": "Total number of times to execute the action list after a match." },
+        "repeat_delay": { "$ref": "#/$defs/milliseconds", "default": 0, "description": "Delay between repeated action lists." },
+        "attach": { "description": "Arbitrary application metadata retained with the node." }
+      },
+      "required": ["recognition"]
+    },
+    "nodeMetadata": {
+      "title": "Pipeline node metadata",
+      "allOf": [{ "$ref": "#/$defs/nodeFields" }],
+      "unevaluatedProperties": false
+    },
+    "edgeMetadata": {
+      "title": "Mermaid edge metadata",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "edge_type": {
+          "type": "string",
+          "enum": ["next", "error"],
+          "default": "next",
+          "description": "Normal transition or transition used when recognition or an action fails."
+        }
+      }
+    }
+  }
+}

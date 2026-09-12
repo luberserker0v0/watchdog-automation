@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tester",
+  "description": "Capability for the tester window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:event:default",
+    "opener:default"
+  ]
+}

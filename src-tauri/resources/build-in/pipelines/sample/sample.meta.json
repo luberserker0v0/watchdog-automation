@@ -1,0 +1,264 @@
+{
+  "nodes": {
+    "RecognizeTitle": {
+      "recognition": {
+        "type": "OCR",
+        "expected": "Login",
+        "threshold": 0.6
+      },
+      "actions": [
+        {
+          "type": "DoNothing"
+        }
+      ],
+      "timeout": 20000,
+      "rate_limit": 1000,
+      "pre_delay": 200,
+      "post_delay": 200,
+      "enabled": true,
+      "inverse": false,
+      "max_hit": 1
+    },
+    "InputAccount": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "InputText",
+          "input_text": "{{account}}"
+        }
+      ],
+      "params": [
+        {
+          "type": "text",
+          "key": "account",
+          "label": "Account",
+          "default": "admin"
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 100,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "InputPassword": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "InputText",
+          "input_text": "{{password}}"
+        }
+      ],
+      "params": [
+        {
+          "type": "password",
+          "key": "password",
+          "label": "Password",
+          "default": "123456"
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 100,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "ClickLogin": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "Click",
+          "target": true
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 500,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "LoginError": {
+      "recognition": {
+        "type": "OCR",
+        "expected": "Invalid",
+        "threshold": 0.6
+      },
+      "actions": [
+        {
+          "type": "ClickKey",
+          "key": [
+            27
+          ]
+        }
+      ],
+      "timeout": 5000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 200,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "VerifySuccess": {
+      "recognition": {
+        "type": "OCR",
+        "expected": "Dashboard",
+        "threshold": 0.6
+      },
+      "actions": [
+        {
+          "type": "DoNothing"
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 1000,
+      "pre_delay": 200,
+      "post_delay": 200,
+      "enabled": true,
+      "inverse": false,
+      "max_hit": 1
+    },
+    "ClickNotification": {
+      "recognition": {
+        "type": "TemplateMatch",
+        "template": "notification.png",
+        "threshold": 0.8
+      },
+      "actions": [
+        {
+          "type": "Click",
+          "target": true
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 300,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "SwipeCards": {
+      "recognition": {
+        "type": "ColorMatch",
+        "lower": [
+          90,
+          100,
+          200
+        ],
+        "upper": [
+          120,
+          140,
+          255
+        ]
+      },
+      "actions": [
+        {
+          "type": "Swipe",
+          "begin": true,
+          "end": [
+            500,
+            400
+          ],
+          "duration": 300
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 300,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "ScrollList": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "Scroll",
+          "target": true,
+          "dx": 0,
+          "dy": 200
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 300,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "PressDelete": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "LongPress",
+          "target": true,
+          "duration": 1500
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 300,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "ClickRefresh": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "Click",
+          "target": [
+            300,
+            400
+          ]
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 200,
+      "enabled": true,
+      "max_hit": 1
+    },
+    "Done": {
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "StopTask"
+        }
+      ],
+      "enabled": true,
+      "max_hit": 1
+    }
+  },
+  "edges": {
+    "RecognizeTitle->InputAccount": { "edge_type": "next" },
+    "InputAccount->InputPassword": { "edge_type": "next" },
+    "InputPassword->ClickLogin": { "edge_type": "next" },
+    "ClickLogin->VerifySuccess": { "edge_type": "next" },
+    "ClickLogin->LoginError": { "edge_type": "error" },
+    "LoginError->VerifySuccess": { "edge_type": "next" },
+    "VerifySuccess->ClickNotification": { "edge_type": "next" },
+    "ClickNotification->SwipeCards": { "edge_type": "next" },
+    "SwipeCards->ScrollList": { "edge_type": "next" },
+    "ScrollList->PressDelete": { "edge_type": "next" },
+    "PressDelete->ClickRefresh": { "edge_type": "next" },
+    "ClickRefresh->Done": { "edge_type": "next" }
+  }
+}

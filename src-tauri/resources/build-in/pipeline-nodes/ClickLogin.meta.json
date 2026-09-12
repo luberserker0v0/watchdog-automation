@@ -1,0 +1,32 @@
+{
+  "nodes": {
+    "ClickLogin": {
+      "target": {
+        "type": "window",
+        "title": "^Target UI - Login$",
+        "capture_area": "client"
+      },
+      "recognition": {
+        "type": "OCR",
+        "expected": "^Login$",
+        "threshold": 0.6,
+        "candidate_selection": {
+          "order": "bottom_to_top",
+          "index": 0
+        }
+      },
+      "actions": [
+        {
+          "type": "Click",
+          "target": true
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 500,
+      "enabled": true,
+      "max_hit": 1
+    }
+  }
+}

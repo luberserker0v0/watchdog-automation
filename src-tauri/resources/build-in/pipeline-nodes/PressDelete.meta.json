@@ -1,0 +1,35 @@
+{
+  "nodes": {
+    "PressDelete": {
+      "target": {
+        "type": "window",
+        "title": "^Target UI - Dashboard$",
+        "capture_area": "client"
+      },
+      "recognition": {
+        "type": "OCR",
+        "expected": "Delete",
+        "threshold": 0.6
+      },
+      "actions": [
+        {
+          "type": "LongPress",
+          "target": true,
+          "target_offset": [
+            0,
+            -55,
+            0,
+            0
+          ],
+          "duration": 1600
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 300,
+      "enabled": true,
+      "max_hit": 1
+    }
+  }
+}

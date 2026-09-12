@@ -1,0 +1,11 @@
+{
+  "rust-analyzer.linkedProjects": [
+    "./src-tauri/Cargo.toml"
+  ],
+  "json.schemas": [
+    {
+      "fileMatch": ["**/*.meta.json"],
+      "url": "./schemas/watchdog-metadata.schema.json"
+    }
+  ]
+}

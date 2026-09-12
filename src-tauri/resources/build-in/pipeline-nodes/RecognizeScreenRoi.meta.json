@@ -1,0 +1,30 @@
+{
+  "nodes": {
+    "RecognizeScreenRoi": {
+      "target": {
+        "type": "screen",
+        "index": 0
+      },
+      "recognition": {
+        "type": "DirectHit",
+        "roi": [
+          0,
+          0,
+          200,
+          120
+        ]
+      },
+      "actions": [
+        {
+          "type": "DoNothing"
+        }
+      ],
+      "timeout": 5000,
+      "rate_limit": 500,
+      "pre_delay": 0,
+      "post_delay": 0,
+      "enabled": true,
+      "max_hit": 1
+    }
+  }
+}

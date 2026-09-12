@@ -1,0 +1,80 @@
+[package]
+name = "watch-dog"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+default-run = "watch-dog"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "watch_dog_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "watch-dog"
+path = "src/main.rs"
+
+[features]
+app-tester = []
+app-target = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+xcap = "0.9.8"
+log = "0.4"
+fern = "0.7"
+chrono = "0.4"
+base64 = "0.22"
+image = "0.25"
+imageproc = "0.25"
+ab_glyph = "0.2"
+turbojpeg = { version = "1", features = ["image"] }
+regex-lite = "0.1"
+enigo = { version = "0.2", features = ["serde"] }
+notify = "6"
+async-trait = "0.1"
+lazy_static = "1"
+tokio = { version = "1", features = ["full"] }
+thiserror = "1"
+paddleocr_rs_onnx = { path = "paddleocr_rs_onnx_patch", features = ["directml"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-capture = "2.0.1"
+windows = { version = "0.62.2", features = [
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+] }
+windows-core = "0.62"
+
+[dependencies.ort]
+version = "=2.0.0-rc.13"
+default-features = false
+features = ["std", "ndarray", "load-dynamic", "api-24"]
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
