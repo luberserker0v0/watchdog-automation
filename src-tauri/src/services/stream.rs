@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinHandle;
@@ -44,6 +45,10 @@ pub struct StreamFrame {
     pub height: u32,
     pub target: StreamTarget,
     pub bounds: Option<CaptureBounds>,
+    #[serde(skip)]
+    pub captured_at: Instant,
+    pub session_id: u64,
+    pub sequence: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -55,7 +60,16 @@ pub struct StreamStatus {
     pub start_time: Option<u64>,
     pub engine: String,
     pub capture_area: String,
+    pub owner: String,
+    pub owner_id: Option<String>,
+    pub session_id: u64,
+    pub frame_width: Option<u32>,
+    pub frame_height: Option<u32>,
+    pub client_width: Option<u32>,
+    pub client_height: Option<u32>,
 }
+
+static FRAME_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StreamTarget {
@@ -74,6 +88,7 @@ struct StreamStoppedPayload {
     reason: String,
     target_type: String,
     target_index: usize,
+    session_id: u64,
 }
 
 fn stream_target_identity(target: &StreamTarget) -> (&'static str, usize) {
@@ -81,6 +96,54 @@ fn stream_target_identity(target: &StreamTarget) -> (&'static str, usize) {
         StreamTarget::Screen { index } => ("screen", *index),
         StreamTarget::Window { hwnd, .. } => ("window", *hwnd),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn current_window_client_size(hwnd: usize) -> Option<[u32; 2]> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+
+    let hwnd = HWND(hwnd as isize as *mut c_void);
+    let mut rect = RECT::default();
+    unsafe { GetClientRect(hwnd, &mut rect).ok()? };
+    Some([
+        (rect.right - rect.left).max(0) as u32,
+        (rect.bottom - rect.top).max(0) as u32,
+    ])
+}
+
+#[cfg(not(target_os = "windows"))]
+fn current_window_client_size(_hwnd: usize) -> Option<[u32; 2]> {
+    None
+}
+
+fn emit_frame_available(app: &AppHandle, frame: &StreamFrame) {
+    let (target_type, target_index) = stream_target_identity(&frame.target);
+    let capture_area = match &frame.target {
+        StreamTarget::Window {
+            capture_area: CaptureArea::Client,
+            ..
+        } => "client",
+        _ => "frame",
+    };
+    let client_size = match &frame.target {
+        StreamTarget::Window { hwnd, .. } => current_window_client_size(*hwnd),
+        StreamTarget::Screen { .. } => None,
+    };
+    let _ = app.emit(
+        "stream-frame",
+        serde_json::json!({
+            "session_id": frame.session_id,
+            "sequence": frame.sequence,
+            "target_type": target_type,
+            "target_index": target_index,
+            "capture_area": capture_area,
+            "frame_width": frame.width,
+            "frame_height": frame.height,
+            "client_width": client_size.map(|size| size[0]),
+            "client_height": client_size.map(|size| size[1]),
+        }),
+    );
 }
 
 fn finish_stream_session(
@@ -106,6 +169,7 @@ fn finish_stream_session(
             reason: reason.to_string(),
             target_type: target_type.to_string(),
             target_index,
+            session_id,
         },
     );
     log::info!("Stream ended: reason={}, target={:?}", reason, target);
@@ -341,6 +405,7 @@ impl GraphicsCaptureApiHandler for CaptureHandler {
         frame: &mut Frame,
         _capture_control: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
+        let captured_at = Instant::now();
         let width = frame.width();
         let height = frame.height();
 
@@ -409,10 +474,13 @@ impl GraphicsCaptureApiHandler for CaptureHandler {
             height: h as u32,
             target: self.target.clone(),
             bounds: resolve_frame_bounds(&self.target, w as u32, h as u32),
+            captured_at,
+            session_id: self.session_id,
+            sequence: FRAME_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1,
         };
         *FRAME_CACHE.lock().map_err(|e| e.to_string())? = Some(stream_frame.clone());
+        emit_frame_available(&self.app, &stream_frame);
         let _ = self.sender.send(stream_frame);
-        let _ = self.app.emit("stream-frame", ());
 
         Ok(())
     }
@@ -447,6 +515,7 @@ pub struct StreamService {
     engine: Arc<Mutex<CaptureEngine>>,
     sender: broadcast::Sender<StreamFrame>,
     start_time: Arc<Mutex<Option<tokio::time::Instant>>>,
+    owner: Mutex<(String, Option<String>)>,
 }
 
 impl StreamService {
@@ -463,6 +532,7 @@ impl StreamService {
             engine: Arc::new(Mutex::new(CaptureEngine::Graphics)),
             sender,
             start_time: Arc::new(Mutex::new(None)),
+            owner: Mutex::new(("none".to_string(), None)),
         }
     }
 
@@ -474,13 +544,59 @@ impl StreamService {
         self.is_streaming.load(Ordering::Relaxed)
     }
 
+    pub async fn reject_if_pipeline_owned(&self) -> Result<(), String> {
+        let owner = self.owner.lock().await;
+        if owner.0 == "pipeline" {
+            return Err(format!(
+                "Capture is owned by pipeline '{}'; stop it before using this tool",
+                owner.1.as_deref().unwrap_or("unknown")
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn acquire_pipeline_owner(&self, run_id: &str) -> Result<(), String> {
+        let mut owner = self.owner.lock().await;
+        if owner.0 == "pipeline" {
+            return Err(format!(
+                "Capture is owned by pipeline '{}'; stop it before starting another pipeline",
+                owner.1.as_deref().unwrap_or("unknown")
+            ));
+        }
+        *owner = ("pipeline".to_string(), Some(run_id.to_string()));
+        Ok(())
+    }
+
+    pub async fn acquire_manual_owner(&self) -> Result<(), String> {
+        let mut owner = self.owner.lock().await;
+        if owner.0 == "pipeline" {
+            return Err(format!(
+                "Capture is owned by pipeline '{}'; stop it before using this tool",
+                owner.1.as_deref().unwrap_or("unknown")
+            ));
+        }
+        *owner = ("manual".to_string(), None);
+        Ok(())
+    }
+
+    pub async fn set_owner(&self, kind: &str, id: Option<String>) {
+        *self.owner.lock().await = (kind.to_string(), id);
+    }
+
+    pub async fn release_owner(&self, kind: &str, id: Option<&str>) {
+        let mut owner = self.owner.lock().await;
+        if owner.0 == kind && id.map_or(true, |value| owner.1.as_deref() == Some(value)) {
+            *owner = ("none".to_string(), None);
+        }
+    }
+
     pub async fn start(
         &self,
         app: AppHandle,
         fps: u32,
         target: StreamTarget,
         engine: CaptureEngine,
-    ) {
+    ) -> Result<(), String> {
         if self.is_streaming.load(Ordering::Relaxed) {
             self.stop().await;
         }
@@ -495,22 +611,20 @@ impl StreamService {
         *self.start_time.lock().await = Some(tokio::time::Instant::now());
         self.is_streaming.store(true, Ordering::Relaxed);
 
-        match engine {
+        let start_result = match engine {
             #[cfg(target_os = "windows")]
-            CaptureEngine::Graphics => {
-                self.start_graphics(app, target, session_id).await;
-            }
+            CaptureEngine::Graphics => self.start_graphics(app, target, session_id).await,
             #[cfg(target_os = "windows")]
-            CaptureEngine::Dxgi => {
-                self.start_dxgi(app, fps, target, session_id).await;
-            }
-            CaptureEngine::Gdi => {
-                self.start_gdi(app, fps, target, session_id).await;
-            }
+            CaptureEngine::Dxgi => self.start_dxgi(app, fps, target, session_id).await,
+            CaptureEngine::Gdi => self.start_gdi(app, fps, target, session_id).await,
             #[cfg(not(target_os = "windows"))]
-            _ => {
-                self.start_gdi(app, fps, target, session_id).await;
-            }
+            _ => self.start_gdi(app, fps, target, session_id).await,
+        };
+        if let Err(error) = start_result {
+            self.is_streaming.store(false, Ordering::Relaxed);
+            *self.target.lock().await = None;
+            *self.start_time.lock().await = None;
+            return Err(error);
         }
 
         log::info!(
@@ -519,12 +633,18 @@ impl StreamService {
             log_target,
             log_engine
         );
+        Ok(())
     }
 
     // ===== Windows-only: Graphics Capture =====
 
     #[cfg(target_os = "windows")]
-    async fn start_graphics(&self, app: AppHandle, target: StreamTarget, session_id: u64) {
+    async fn start_graphics(
+        &self,
+        app: AppHandle,
+        target: StreamTarget,
+        session_id: u64,
+    ) -> Result<(), String> {
         let sender = self.sender.clone();
         let start_time = self.start_time.clone();
         let is_streaming = self.is_streaming.clone();
@@ -560,12 +680,14 @@ impl StreamService {
                     Ok(Err(e)) => {
                         log::error!("Failed to create capture settings: {}", e);
                         *start_time.lock().await = None;
-                        return;
+                        self.is_streaming.store(false, Ordering::Relaxed);
+                        return Err(e);
                     }
                     Err(e) => {
                         log::error!("Capture settings thread panicked: {}", e);
                         *start_time.lock().await = None;
-                        return;
+                        self.is_streaming.store(false, Ordering::Relaxed);
+                        return Err(format!("Capture settings thread panicked: {e}"));
                     }
                 };
 
@@ -577,6 +699,8 @@ impl StreamService {
                     Err(e) => {
                         log::error!("Failed to start graphics capture: {}", e);
                         *start_time.lock().await = None;
+                        self.is_streaming.store(false, Ordering::Relaxed);
+                        return Err(format!("Failed to start graphics capture: {e}"));
                     }
                 }
             }
@@ -609,12 +733,14 @@ impl StreamService {
                     Ok(Err(e)) => {
                         log::error!("Failed to create capture settings: {}", e);
                         *start_time.lock().await = None;
-                        return;
+                        self.is_streaming.store(false, Ordering::Relaxed);
+                        return Err(e);
                     }
                     Err(e) => {
                         log::error!("Capture settings thread panicked: {}", e);
                         *start_time.lock().await = None;
-                        return;
+                        self.is_streaming.store(false, Ordering::Relaxed);
+                        return Err(format!("Capture settings thread panicked: {e}"));
                     }
                 };
 
@@ -626,16 +752,25 @@ impl StreamService {
                     Err(e) => {
                         log::error!("Failed to start graphics capture: {}", e);
                         *start_time.lock().await = None;
+                        self.is_streaming.store(false, Ordering::Relaxed);
+                        return Err(format!("Failed to start graphics capture: {e}"));
                     }
                 }
             }
         }
+        Ok(())
     }
 
     // ===== Windows-only: DXGI =====
 
     #[cfg(target_os = "windows")]
-    async fn start_dxgi(&self, app: AppHandle, fps: u32, target: StreamTarget, session_id: u64) {
+    async fn start_dxgi(
+        &self,
+        app: AppHandle,
+        fps: u32,
+        target: StreamTarget,
+        session_id: u64,
+    ) -> Result<(), String> {
         let is_streaming = self.is_streaming.clone();
         let session_generation = self.session_generation.clone();
         let sender = self.sender.clone();
@@ -648,7 +783,7 @@ impl StreamService {
                 log::error!("Failed to prepare DXGI capture: {}", error);
                 *start_time.lock().await = None;
                 self.is_streaming.store(false, Ordering::Relaxed);
-                return;
+                return Err(format!("Failed to prepare DXGI capture: {error}"));
             }
         };
 
@@ -673,6 +808,7 @@ impl StreamService {
                     break;
                 }
 
+                let captured_at = Instant::now();
                 match dxgi_capture.capture_jpeg(timeout_ms, crop) {
                     Ok(buf) => {
                         let (width, height) = image::load_from_memory(&buf)
@@ -685,11 +821,14 @@ impl StreamService {
                             height,
                             target: target_clone.clone(),
                             bounds: resolve_frame_bounds(&target_clone, width, height),
+                            captured_at,
+                            session_id,
+                            sequence: FRAME_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1,
                         };
                         *FRAME_CACHE.lock().unwrap_or_else(|e| e.into_inner()) =
                             Some(stream_frame.clone());
+                        emit_frame_available(&app, &stream_frame);
                         let _ = sender.send(stream_frame);
-                        let _ = app.emit("stream-frame", ());
                     }
                     Err(e) => {
                         log::warn!("DXGI stream capture failed: {}", e);
@@ -703,11 +842,18 @@ impl StreamService {
         });
 
         *self.handle.lock().await = Some(handle);
+        Ok(())
     }
 
     // ===== Cross-platform: GDI / xcap polling =====
 
-    async fn start_gdi(&self, app: AppHandle, fps: u32, target: StreamTarget, session_id: u64) {
+    async fn start_gdi(
+        &self,
+        app: AppHandle,
+        fps: u32,
+        target: StreamTarget,
+        session_id: u64,
+    ) -> Result<(), String> {
         let is_streaming = self.is_streaming.clone();
         let session_generation = self.session_generation.clone();
         let sender = self.sender.clone();
@@ -757,6 +903,7 @@ impl StreamService {
                 }
 
                 let target = target_clone.clone();
+                let captured_at = Instant::now();
                 let result = tokio::task::spawn_blocking(move || match &target {
                     StreamTarget::Screen { index } => {
                         services::capture::capture_screen_jpeg(*index)
@@ -784,11 +931,14 @@ impl StreamService {
                                 actual_width,
                                 actual_height,
                             ),
+                            captured_at,
+                            session_id,
+                            sequence: FRAME_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1,
                         };
                         *FRAME_CACHE.lock().unwrap_or_else(|e| e.into_inner()) =
                             Some(stream_frame.clone());
+                        emit_frame_available(&app, &stream_frame);
                         let _ = sender.send(stream_frame);
-                        let _ = app.emit("stream-frame", ());
                     }
                     Err(e) => {
                         log::warn!("Stream capture failed: {}", e);
@@ -802,6 +952,7 @@ impl StreamService {
         });
 
         *self.handle.lock().await = Some(handle);
+        Ok(())
     }
 
     // ===== Shared: stop/status =====
@@ -821,8 +972,30 @@ impl StreamService {
 
         *self.target.lock().await = None;
         *self.start_time.lock().await = None;
+        *STREAM_FRAME.lock().unwrap_or_else(|e| e.into_inner()) = None;
         *FRAME_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
         log::info!("Stream stopped");
+    }
+
+    pub async fn stop_and_emit(&self, app: &AppHandle, reason: &str) {
+        let was_streaming = self.is_streaming();
+        let target = self.target.lock().await.clone();
+        let session_id = self.session_generation.load(Ordering::Acquire);
+        self.stop().await;
+        if was_streaming {
+            if let Some(target) = target {
+                let (target_type, target_index) = stream_target_identity(&target);
+                let _ = app.emit(
+                    "stream-stopped",
+                    StreamStoppedPayload {
+                        reason: reason.to_string(),
+                        target_type: target_type.to_string(),
+                        target_index,
+                        session_id,
+                    },
+                );
+            }
+        }
     }
 
     pub fn stop_sync(&self) {
@@ -850,6 +1023,7 @@ impl StreamService {
             *guard = None;
         }
 
+        *STREAM_FRAME.lock().unwrap_or_else(|e| e.into_inner()) = None;
         *FRAME_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
         log::info!("Stream stopped (sync)");
     }
@@ -860,6 +1034,8 @@ impl StreamService {
         let fps = *self.fps.lock().await;
         let start_time = *self.start_time.lock().await;
         let engine = self.engine.lock().await.clone();
+        let owner = self.owner.lock().await.clone();
+        let session_id = self.session_generation.load(Ordering::Acquire);
 
         let (target_type, target_index, capture_area) = match &target {
             Some(StreamTarget::Screen { index }) => {
@@ -886,6 +1062,18 @@ impl StreamService {
             CaptureEngine::Dxgi => "dxgi".to_string(),
             CaptureEngine::Graphics => "graphics".to_string(),
         };
+        let cached_frame = FRAME_CACHE
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+            .filter(|frame| {
+                frame.session_id == session_id && Some(&frame.target) == target.as_ref()
+            })
+            .map(|frame| (frame.width, frame.height));
+        let client_size = match &target {
+            Some(StreamTarget::Window { hwnd, .. }) => current_window_client_size(*hwnd),
+            _ => None,
+        };
 
         StreamStatus {
             is_streaming,
@@ -895,6 +1083,13 @@ impl StreamService {
             start_time: start_time_ms,
             engine: engine_str,
             capture_area,
+            owner: owner.0,
+            owner_id: owner.1,
+            session_id,
+            frame_width: cached_frame.map(|size| size.0),
+            frame_height: cached_frame.map(|size| size.1),
+            client_width: client_size.map(|size| size[0]),
+            client_height: client_size.map(|size| size[1]),
         }
     }
 }

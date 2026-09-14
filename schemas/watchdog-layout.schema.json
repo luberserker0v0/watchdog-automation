@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watchdog.local/schemas/watchdog-layout.schema.json",
+  "title": "WatchDog Pipeline Layout",
+  "description": "Optional shareable graph layout stored beside a pipeline's Mermaid and metadata files. This file affects presentation only and is never used for pipeline execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["nodes"],
+  "properties": {
+    "nodes": {
+      "type": "object",
+      "default": {},
+      "description": "Supported value: object mapping Mermaid node IDs to graph positions. Default: an empty object, which uses WatchDog's automatic graph layout for every node. IDs must exist in the adjacent pipeline metadata file.",
+      "markdownDescription": "**Supported value**\n\nAn object mapping Mermaid node IDs to graph positions. IDs must exist in the adjacent pipeline metadata file.\n\n**Default:** `{}`, which uses WatchDog's automatic graph layout for every node.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "description": "A node ID declared by the adjacent Mermaid and metadata files."
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/nodePosition"
+      }
+    }
+  },
+  "$defs": {
+    "nodePosition": {
+      "title": "Graph node position",
+      "description": "The node's top-left position in graph coordinates. Coordinates are rounded to integers when saved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "description": "Supported value: signed integer horizontal graph coordinate in pixels. Required; there is no implicit default.",
+          "markdownDescription": "**Supported value**\n\nSigned integer horizontal graph coordinate in pixels.\n\n**Required:** yes; there is no implicit default."
+        },
+        "y": {
+          "type": "integer",
+          "description": "Supported value: signed integer vertical graph coordinate in pixels. Required; there is no implicit default.",
+          "markdownDescription": "**Supported value**\n\nSigned integer vertical graph coordinate in pixels.\n\n**Required:** yes; there is no implicit default."
+        }
+      }
+    }
+  }
+}

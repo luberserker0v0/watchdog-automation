@@ -1,10 +1,10 @@
+pub mod layout;
 pub mod mermaid;
 pub mod meta;
 
 use crate::modules::pipeline::models::edge::{Edge, EdgeType};
 use crate::modules::pipeline::models::graph::PipelineGraph;
-use crate::modules::pipeline::models::node::{Node, NodeConfig};
-use crate::modules::pipeline::models::recognizer::{Recognition, RecognitionConfig};
+use crate::modules::pipeline::models::node::Node;
 
 pub fn build_graph(
     mermaid: &mermaid::MermaidGraph,
@@ -18,18 +18,10 @@ pub fn build_graph(
                 .nodes
                 .get(&flow_node.id)
                 .cloned()
-                .unwrap_or_else(|| NodeConfig {
-                    recognition: RecognitionConfig::from(Recognition::TemplateMatch {
-                        template: format!(
-                            "{}.png",
-                            flow_node.label.to_lowercase().replace(' ', "_")
-                        ),
-                        threshold: None,
-                    }),
-                    ..NodeConfig::default()
-                });
+                .unwrap_or_default();
             Node {
                 id: flow_node.id.clone(),
+                label: flow_node.label.clone(),
                 config,
             }
         })
@@ -55,7 +47,7 @@ pub fn build_graph(
     PipelineGraph {
         version: "1.0".to_string(),
         desktop: None,
-        target: None,
+        target: metadata.target.clone(),
         nodes,
         edges,
     }
@@ -72,5 +64,19 @@ mod tests {
             meta::parse(r#"{"nodes":{},"edges":{"A->B":{"edge_type":"error"}}}"#).unwrap();
         let graph = build_graph(&mermaid, &metadata);
         assert!(matches!(graph.edges[0].edge_type, EdgeType::Error));
+    }
+
+    #[test]
+    fn metadata_top_level_target_becomes_the_graph_target() {
+        let mermaid = mermaid::parse("flowchart TD\nA").unwrap();
+        let metadata = meta::parse(
+            r#"{"target":{"type":"screen","index":2},"nodes":{"A":{"recognition":{"type":"DirectHit"}}}}"#,
+        )
+        .unwrap();
+        let graph = build_graph(&mermaid, &metadata);
+        assert!(matches!(
+            graph.target,
+            Some(crate::modules::pipeline::models::graph::PipelineTarget::Screen { index: 2 })
+        ));
     }
 }

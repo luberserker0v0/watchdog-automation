@@ -5,6 +5,7 @@ use crate::modules::pipeline::models::node::NodeConfig;
 fn node(id: &str) -> Node {
     Node {
         id: id.to_string(),
+        label: id.to_string(),
         config: NodeConfig::default(),
     }
 }
@@ -118,6 +119,44 @@ fn test_window_capture_area_defaults_to_frame() {
         client,
         PipelineTarget::Window {
             capture_area: CaptureArea::Client,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn filterless_window_target_is_valid_and_inherits_window_identity() {
+    let target: PipelineTarget =
+        serde_json::from_str(r#"{"type":"window","capture_area":"client"}"#).unwrap();
+    assert!(!target.has_window_filters());
+    assert!(matches!(
+        target,
+        PipelineTarget::Window {
+            process: None,
+            class: None,
+            title: None,
+            capture_area: CaptureArea::Client,
+            window_size: None,
+        }
+    ));
+
+    let filtered: PipelineTarget =
+        serde_json::from_str(r#"{"type":"window","process":"watch-dog-target"}"#).unwrap();
+    assert!(filtered.has_window_filters());
+}
+
+#[test]
+fn window_size_is_client_size_metadata_independent_of_capture_area() {
+    let target: PipelineTarget = serde_json::from_str(
+        r#"{"type":"window","capture_area":"frame","window_size":[1280,720]}"#,
+    )
+    .unwrap();
+    assert_eq!(target.window_size(), Some([1280, 720]));
+    assert!(matches!(
+        target,
+        PipelineTarget::Window {
+            capture_area: CaptureArea::Frame,
+            window_size: Some([1280, 720]),
             ..
         }
     ));

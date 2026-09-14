@@ -4,6 +4,10 @@ import { usePreferencesStore } from "../../../core/stores/usePreferencesStore";
 import { useOverlayStore } from "../../stores/useOverlayStore";
 import { useLogStore } from "../../stores/useLogStore";
 import { getWindowDetails, type WindowDetailInfo } from "../../../../api/window";
+import { saveRegionCapture } from "../../../../api/screen";
+import { useCaptureFrameStore } from "../../stores/useCaptureFrameStore";
+import { useStreamStore } from "../../stores/useStreamStore";
+import { getTimestamp } from "../../utils";
 
 interface Selection {
   x: number;
@@ -37,6 +41,11 @@ export default function InspectorTab(props: InspectorTabProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [details, setDetails] = useState<WindowDetailInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savingRegion, setSavingRegion] = useState(false);
+  const [regionStatus, setRegionStatus] = useState<string | null>(null);
+  const captureBuf = useCaptureFrameStore((s) => s.frames[mode].captureBuf);
+  const hasFrame = useCaptureFrameStore((s) => s.frames[mode].previewUrl !== null);
+  const isStreaming = useStreamStore((s) => s.isStreaming);
   const appendLog = useLogStore((s) => s.appendLog);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
@@ -80,6 +89,26 @@ export default function InspectorTab(props: InspectorTabProps) {
     }
   }, [appendLog]);
 
+  const handleRegionCapture = useCallback(async () => {
+    if (!selection || selection.w <= 0 || selection.h <= 0) return;
+    setSavingRegion(true);
+    setRegionStatus(null);
+    try {
+      const filename = `region_${getTimestamp()}_${Date.now()}.png`;
+      const path = await saveRegionCapture(isStreaming ? null : captureBuf, selection, filename);
+      if (!mounted.current) return;
+      setRegionStatus(`已儲存：${path}`);
+      appendLog({ source: "debug", label: "區域截圖", detail: `${selection.x}, ${selection.y}, ${selection.w}, ${selection.h} → ${path}`, result: "success" });
+    } catch (error) {
+      if (!mounted.current) return;
+      const message = String(error);
+      setRegionStatus(`儲存失敗：${message}`);
+      appendLog({ source: "debug", label: "區域截圖", detail: message, result: "error" });
+    } finally {
+      if (mounted.current) setSavingRegion(false);
+    }
+  }, [appendLog, captureBuf, isStreaming, selection]);
+
   const label = mode === "screen" ? "螢幕座標" : "視窗座標";
 
   return (
@@ -116,12 +145,21 @@ export default function InspectorTab(props: InspectorTabProps) {
         </button>
         <button
           className="debug-copy-btn"
+          onClick={handleRegionCapture}
+          disabled={!hasFrame || !selection || selection.w <= 0 || selection.h <= 0 || savingRegion}
+          title="將選取區域儲存到 visions 資料夾"
+        >
+          {savingRegion ? "儲存中..." : "區域截圖"}
+        </button>
+        <button
+          className="debug-copy-btn"
           onClick={handleLoadDetails}
           disabled={loading}
         >
           {loading ? "載入中..." : "視窗詳情"}
         </button>
       </div>
+      {regionStatus && <div className="debug-region-status" title={regionStatus}>{regionStatus}</div>}
 
       {showDetails && createPortal(
         <div className="debug-details-overlay" onClick={() => setShowDetails(false)}>

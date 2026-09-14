@@ -12,6 +12,13 @@ export interface WindowDetailInfo {
   height: number;
 }
 
+export interface ResizeWindowResult {
+  hwnd: number;
+  expected: [number, number];
+  actual: [number, number];
+  resized: boolean;
+}
+
 export async function getWindows(filter?: WindowState, desktopId?: string): Promise<WindowInfo[]> {
   return invoke("get_windows", { filter, desktopId: desktopId ?? null });
 }
@@ -22,4 +29,11 @@ export async function captureWindowByHwnd(hwnd: number, captureArea: "frame" | "
 
 export async function getWindowDetails(): Promise<WindowDetailInfo[]> {
   return invoke("get_window_details");
+}
+
+export async function resizeWindowClient(
+  hwnd: number,
+  size: [number, number],
+): Promise<ResizeWindowResult> {
+  return invoke("resize_window_client", { hwnd, width: size[0], height: size[1] });
 }

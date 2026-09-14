@@ -163,7 +163,10 @@ If old behavior remains, confirm that the launched executable comes from the exp
 
 ## Pipeline files
 
-Each pipeline consists of a Mermaid `<name>.md` flow and a matching `<name>.meta.json` configuration. The node tester uses the same metadata shape. See the [pipeline metadata guide](pipeline-meta.md) for supported nodes, edges, recognition, actions, and parameters.
+Each pipeline has a Mermaid `<name>.md` flow and matching `<name>.meta.json` execution configuration. It may also have a shareable `<name>.layout.json` containing graph node positions. The node tester uses the same metadata shape.
+
+- See the [pipeline metadata guide](pipeline-meta.md) for targets, nodes, edges, recognition, actions, parameters, and runtime defaults.
+- See the [pipeline layout guide](pipeline-layout.md) for graph editing, the layout file format, and sharing behavior.
 
 ## Project and runtime resources
 
@@ -186,7 +189,7 @@ User-provided resources and runtime output are stored separately:
 ```text
 %USERPROFILE%\.watch_dog\
 ├── resources\
-│   ├── pipelines\       User pipeline Mermaid and metadata files
+│   ├── pipelines\       User Mermaid, metadata, and optional graph-layout files
 │   ├── pipeline-nodes\  User node-test metadata
 │   ├── images\          User template-matching images
 │   └── models\          User/custom model files

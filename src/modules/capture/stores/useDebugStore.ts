@@ -1,14 +1,24 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { PipelineTarget } from "../../../api/pipeline";
+import {
+  createNodeEmulatorDraft,
+  defaultActionDraft,
+  defaultParamDraft,
+  type NodeEmulatorDraft,
+} from "../components/tools/nodeEmulatorModel";
 
 type ActionType = "Click" | "LongPress" | "Swipe" | "Scroll" | "InputText" | "ClickKey";
 type RecogType = "DirectHit" | "TemplateMatch" | "OCR" | "ColorMatch";
+export type DebugToolId = "inspector" | "action" | "recognition" | "node-emulator";
 
 interface DebugState {
   showSelection: boolean;
   showRoi: boolean;
   showResultRoi: boolean;
-  debugPanelOpen: boolean;
+  activeToolId: DebugToolId;
+  nodeEmulatorDraft: NodeEmulatorDraft;
+  nodeEmulatorInitialized: boolean;
 
   actionType: ActionType;
   actionFields: Record<string, string>;
@@ -24,7 +34,10 @@ interface DebugState {
   setRecogType: (type: RecogType) => void;
   setRecogField: (key: string, value: string) => void;
   clearRecogFields: () => void;
-  toggleDebugPanel: () => void;
+  setActiveToolId: (id: DebugToolId) => void;
+  setNodeEmulatorDraft: (draft: NodeEmulatorDraft) => void;
+  initializeNodeEmulatorTarget: (target: PipelineTarget) => void;
+  useNodeEmulatorTarget: (target: PipelineTarget) => void;
 }
 
 export const useDebugStore = create<DebugState>()(
@@ -38,7 +51,9 @@ export const useDebugStore = create<DebugState>()(
       actionFields: {},
       recogType: "DirectHit" as RecogType,
       recogFields: {},
-      debugPanelOpen: false,
+      activeToolId: "inspector" as DebugToolId,
+      nodeEmulatorDraft: createNodeEmulatorDraft(),
+      nodeEmulatorInitialized: false,
 
       setShowSelection: (show) => set({ showSelection: show }),
       setShowRoi: (show) => set({ showRoi: show }),
@@ -51,20 +66,52 @@ export const useDebugStore = create<DebugState>()(
       setRecogField: (key, value) =>
         set((s) => ({ recogFields: { ...s.recogFields, [key]: value } })),
       clearRecogFields: () => set({ recogFields: {} }),
-      toggleDebugPanel: () => set((s) => ({ debugPanelOpen: !s.debugPanelOpen })),
+      setActiveToolId: (activeToolId) => set({ activeToolId }),
+      setNodeEmulatorDraft: (nodeEmulatorDraft) => set({ nodeEmulatorDraft, nodeEmulatorInitialized: true }),
+      initializeNodeEmulatorTarget: (target) => set((state) => state.nodeEmulatorInitialized
+        ? state
+        : {
+            nodeEmulatorDraft: { ...state.nodeEmulatorDraft, target },
+            nodeEmulatorInitialized: true,
+          }),
+      useNodeEmulatorTarget: (target) => set((state) => ({
+        nodeEmulatorDraft: { ...state.nodeEmulatorDraft, target },
+        nodeEmulatorInitialized: true,
+      })),
     }),
     {
       name: "watchdog:debug",
       partialize: (state) => ({
-        showSelection: state.showSelection,
-        showRoi: state.showRoi,
-        showResultRoi: state.showResultRoi,
         actionType: state.actionType,
         actionFields: state.actionFields,
         recogType: state.recogType,
         recogFields: state.recogFields,
-        debugPanelOpen: state.debugPanelOpen,
+        activeToolId: state.activeToolId,
+        nodeEmulatorDraft: state.nodeEmulatorDraft,
+        nodeEmulatorInitialized: state.nodeEmulatorInitialized,
       }),
+      merge: (persisted, current) => {
+        const stored = persisted as Partial<DebugState>;
+        const storedDraft = stored.nodeEmulatorDraft;
+        return {
+          ...current,
+          ...stored,
+          nodeEmulatorInitialized: stored.nodeEmulatorInitialized ?? Boolean(storedDraft),
+          nodeEmulatorDraft: storedDraft
+            ? {
+                ...current.nodeEmulatorDraft,
+                ...storedDraft,
+                recognition: { ...current.nodeEmulatorDraft.recognition, ...storedDraft.recognition },
+                actions: Array.isArray(storedDraft.actions)
+                  ? storedDraft.actions.map((action) => ({ ...defaultActionDraft(), ...action }))
+                  : current.nodeEmulatorDraft.actions,
+                params: Array.isArray(storedDraft.params)
+                  ? storedDraft.params.map((param) => ({ ...defaultParamDraft(), ...param }))
+                  : current.nodeEmulatorDraft.params,
+              }
+            : current.nodeEmulatorDraft,
+        };
+      },
     },
   ),
 );

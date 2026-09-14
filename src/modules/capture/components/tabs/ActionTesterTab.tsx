@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useDebugStore } from "../../stores/useDebugStore";
 import { useLogStore } from "../../stores/useLogStore";
-import { testAction, type Action } from "../../../../api/pipeline";
+import {
+  testAction,
+  type Action,
+  type ActionTestContext,
+} from "../../../../api/pipeline";
 
 type ActionType = "Click" | "LongPress" | "Swipe" | "Scroll" | "InputText" | "ClickKey";
 
@@ -115,7 +119,11 @@ function buildAction(type: ActionType, fields: Record<string, string>): Action {
   }
 }
 
-export default function ActionTesterTab() {
+interface ActionTesterTabProps {
+  context?: ActionTestContext;
+}
+
+export default function ActionTesterTab({ context }: ActionTesterTabProps) {
   const actionType = useDebugStore((s) => s.actionType);
   const fields = useDebugStore((s) => s.actionFields);
   const setActionType = useDebugStore((s) => s.setActionType);
@@ -137,7 +145,7 @@ export default function ActionTesterTab() {
     setResult(null);
     try {
       const action = buildAction(actionType, fields);
-      const msg = await testAction(action);
+      const msg = await testAction(action, context);
       setResult(msg);
       appendLog({ source: "debug", label: "動作", detail: `${actionType}: ${msg}`, result: msg.startsWith("Error") ? "error" : "success" });
     } catch (e) {
@@ -147,6 +155,18 @@ export default function ActionTesterTab() {
       setLoading(false);
     }
   };
+
+  const positionalAction = actionType === "Click"
+    || actionType === "LongPress"
+    || actionType === "Swipe"
+    || actionType === "Scroll";
+  const coordinateSpace = !positionalAction
+    ? "Not used by this action"
+    : context?.type === "screen"
+      ? `Screen ${context.index}`
+      : context?.type === "window"
+        ? `Window ${context.capture_area}`
+        : "Capture target unavailable";
 
   const renderFields = () => {
     switch (actionType) {
@@ -254,8 +274,17 @@ export default function ActionTesterTab() {
           ))}
         </select>
       </div>
+      <div className="action-field-row">
+        <label>Coordinate space</label>
+        <span>{coordinateSpace}</span>
+      </div>
       {renderFields()}
-      <button className="action-execute-btn" onClick={handleExecute} disabled={loading}>
+      <button
+        className="action-execute-btn"
+        onClick={handleExecute}
+        disabled={loading || (positionalAction && !context)}
+        title={positionalAction && !context ? "Capture a target image before testing this action" : undefined}
+      >
         {loading ? "執行中..." : "執行"}
       </button>
       {result && (

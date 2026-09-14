@@ -1,15 +1,18 @@
 import { useEffect, useRef } from "react";
 import MermaidGraph from "./MermaidGraph";
+import type { PipelineGraph } from "../../../api/pipeline";
 
 interface PipelinePreviewModalProps {
   name: string;
   mermaid: string;
+  graph?: PipelineGraph | null;
   onClose: () => void;
 }
 
 export default function PipelinePreviewModal({
   name,
   mermaid,
+  graph,
   onClose,
 }: PipelinePreviewModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -46,6 +49,7 @@ export default function PipelinePreviewModal({
         <div className="pipeline-preview-content">
           <MermaidGraph
             mermaid={mermaid}
+            flow={graph}
             currentNodeId={null}
             selectedNodeId={null}
             onNodeClick={() => {}}

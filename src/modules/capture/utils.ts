@@ -12,7 +12,7 @@ export interface Coords {
 }
 
 export function getCoords(
-  e: React.MouseEvent,
+  e: { clientX: number; clientY: number },
   container: HTMLDivElement,
   img: HTMLImageElement,
 ): Coords | null {

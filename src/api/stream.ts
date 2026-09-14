@@ -8,12 +8,32 @@ export interface StreamStatus {
   start_time: number | null;
   engine: string;
   capture_area: "frame" | "client";
+  owner: "none" | "manual" | "pipeline" | "node_test";
+  owner_id: string | null;
+  session_id: number;
+  frame_width: number | null;
+  frame_height: number | null;
+  client_width: number | null;
+  client_height: number | null;
+}
+
+export interface StreamFramePayload {
+  session_id: number;
+  sequence: number;
+  target_type: "screen" | "window";
+  target_index: number;
+  capture_area: "frame" | "client";
+  frame_width: number;
+  frame_height: number;
+  client_width: number | null;
+  client_height: number | null;
 }
 
 export interface StreamStoppedPayload {
   reason: "target_closed" | "capture_closed" | string;
   target_type: "screen" | "window";
   target_index: number;
+  session_id: number;
 }
 
 export async function startStream(

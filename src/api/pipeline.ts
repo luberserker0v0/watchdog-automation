@@ -32,6 +32,21 @@ export interface CandidateSelection {
 
 export type CaptureArea = "frame" | "client";
 
+export type ActionTestContext =
+  | {
+      type: "screen";
+      index: number;
+      frame_width: number;
+      frame_height: number;
+    }
+  | {
+      type: "window";
+      hwnd: number;
+      capture_area: CaptureArea;
+      frame_width: number;
+      frame_height: number;
+    };
+
 // ============ Action Types ============
 
 export type Target =
@@ -80,7 +95,7 @@ export type ParamType = "text" | "password" | "number" | "dropdown" | "switch" |
 export interface ParamDef {
   type: ParamType;
   key: string;
-  label: string;
+  label?: string;
   placeholder?: string;
   default?: string | number | boolean;
   options?: string[];
@@ -90,7 +105,20 @@ export interface ParamDef {
 
 export type PipelineTarget =
   | { type: "screen"; index?: number }
-  | { type: "window"; process?: string; class?: string; title?: string; capture_area?: CaptureArea };
+  | { type: "window"; process?: string; class?: string; title?: string; capture_area?: CaptureArea; window_size?: [number, number] };
+
+export type PipelineStartError =
+  | { code: "generic"; message: string }
+  | {
+      code: "window_size_mismatch";
+      hwnd: number;
+      title: string;
+      expected: [number, number];
+      before: [number, number];
+      actual: [number, number];
+      resize_attempted: boolean;
+      diagnostic: string;
+    };
 
 export interface Region {
   x: number;
@@ -105,6 +133,8 @@ export interface MatchResult {
   box_region: Region | null;
   text: string | null;
   candidates: MatchCandidate[];
+  raw_candidate_count?: number;
+  distinct_candidate_count?: number;
   selection_error?: string;
 }
 
@@ -118,6 +148,7 @@ export interface MatchCandidate {
 
 export interface Node {
   id: string;
+  label?: string;
   recognition: Recognition;
   actions?: Action[];
   params?: ParamDef[];
@@ -151,12 +182,23 @@ export interface PipelineGraph {
   subroutines?: Record<string, PipelineGraph>;
 }
 
+export interface PipelineNodePosition {
+  x: number;
+  y: number;
+}
+
+export interface PipelineLayout {
+  nodes: Record<string, PipelineNodePosition>;
+}
+
 // ============ Command Types ============
 
 export interface LoadResult {
   graph: PipelineGraph;
   mermaid: string;
   meta: string;
+  layout?: PipelineLayout | null;
+  layout_writable: boolean;
 }
 
 export interface ValidationError {
@@ -170,6 +212,7 @@ export interface StepResult {
   confidence: number;
   box_region: Region | null;
   actions_fired: number;
+  skipped?: boolean;
   duration_ms: number;
   error: string | null;
   timings_ms?: Record<string, number>;
@@ -188,6 +231,9 @@ export interface PipelineStatus {
   step_count: number;
   elapsed_ms: number;
   step_results: StepResult[];
+  error?: string | null;
+  attempt_count?: number;
+  effective_target?: PipelineTarget | null;
 }
 
 export interface PipelineInfo {
@@ -209,6 +255,13 @@ export async function savePipeline(
   return invoke<boolean>("save_pipeline", { graph, path });
 }
 
+export async function savePipelineLayout(
+  path: string,
+  positions: Record<string, PipelineNodePosition>,
+): Promise<boolean> {
+  return invoke<boolean>("save_pipeline_layout", { path, positions });
+}
+
 export async function validatePipeline(
   graph: PipelineGraph,
 ): Promise<ValidationError[]> {
@@ -221,6 +274,29 @@ export async function listPipelines(): Promise<PipelineInfo[]> {
 
 export async function startPipeline(path: string, userParams?: Record<string, unknown>, saveDebugImages?: boolean, detailedTimings?: boolean): Promise<string> {
   return invoke<string>("start_pipeline", { path, userParams, saveDebugImages, detailedTimings });
+}
+
+export function normalizePipelineStartError(error: unknown): PipelineStartError {
+  let value = error;
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return { code: "generic", message: String(error) }; }
+  }
+  if (value && typeof value === "object") {
+    const candidate = value as Partial<PipelineStartError> & { message?: unknown };
+    const isSize = (size: unknown): size is [number, number] =>
+      Array.isArray(size) && size.length === 2 && size.every((item) => typeof item === "number");
+    if (
+      candidate.code === "window_size_mismatch"
+      && isSize(candidate.expected)
+      && isSize(candidate.before)
+      && isSize(candidate.actual)
+    ) return candidate as PipelineStartError;
+    if (candidate.code === "generic" && typeof candidate.message === "string") {
+      return { code: "generic", message: candidate.message };
+    }
+    if (value instanceof Error) return { code: "generic", message: value.message };
+  }
+  return { code: "generic", message: String(error) };
 }
 
 export async function stopPipeline(runId: string): Promise<boolean> {
@@ -237,8 +313,8 @@ export async function getPipelineStatus(
   return invoke<PipelineStatus>("get_pipeline_status", { runId });
 }
 
-export async function testAction(action: Action): Promise<string> {
-  return invoke<string>("test_action", { action });
+export async function testAction(action: Action, context?: ActionTestContext): Promise<string> {
+  return invoke<string>("test_action", { action, context });
 }
 
 export async function testRecognition(

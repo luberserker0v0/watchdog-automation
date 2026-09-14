@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useDesktopStore } from "../stores/useDesktopStore";
 import { useWindowStore } from "../stores/useWindowStore";
+import { useStreamStore } from "../stores/useStreamStore";
 
 export default function DesktopFilter() {
   const desktops = useDesktopStore((s) => s.desktops);
@@ -9,6 +10,7 @@ export default function DesktopFilter() {
   const fetchDesktops = useDesktopStore((s) => s.fetchDesktops);
   const setSelectedDesktop = useDesktopStore((s) => s.setSelectedDesktop);
   const fetchWindows = useWindowStore((s) => s.fetchWindows);
+  const pipelineControlled = useStreamStore((state) => state.captureOwner === "pipeline");
 
   const vdSupported = !(desktops.length === 1 && desktops[0].id === "default");
   const currentDesktop = desktops.find((d) => d.is_current);
@@ -36,6 +38,7 @@ export default function DesktopFilter() {
       <label>桌面</label>
       <select
         value={currentValue}
+        disabled={pipelineControlled}
         onChange={(e) => {
           setSelectedDesktop(e.target.value || null);
           void fetchWindows();

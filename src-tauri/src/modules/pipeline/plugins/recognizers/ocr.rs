@@ -308,6 +308,8 @@ impl RecognizerPlugin for OcrRecognizer {
             box_region: selected.map(|candidate| candidate.region),
             text: Some(combined_text),
             candidates,
+            raw_candidate_count: None,
+            distinct_candidate_count: None,
             selection_error: None,
         })
     }

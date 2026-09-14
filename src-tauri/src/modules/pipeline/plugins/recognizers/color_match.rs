@@ -99,6 +99,8 @@ impl RecognizerPlugin for ColorMatchRecognizer {
             },
             text: None,
             candidates: Vec::new(),
+            raw_candidate_count: None,
+            distinct_candidate_count: None,
             selection_error: None,
         })
     }

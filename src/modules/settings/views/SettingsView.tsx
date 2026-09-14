@@ -173,6 +173,9 @@ export default function SettingsView() {
                 />
                 <span className="settings-toggle-slider" />
               </label>
+              <span className="settings-item-hint">
+                開啟後，每次節點辨識嘗試都會各自儲存影像，包含成功、重試與逾時
+              </span>
             </div>
             {saveDebugImages && (
               <div className="settings-item">

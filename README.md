@@ -97,4 +97,5 @@ Outputs use the same names under `src-tauri\target\release\`. Both commands buil
 ## Documentation
 
 - [Development, builds, resources, and troubleshooting](docs/development.md)
-- [Pipeline Mermaid and metadata format](docs/pipeline-meta.md)
+- [Pipeline Mermaid and execution metadata](docs/pipeline-meta.md)
+- [Shareable pipeline graph layouts](docs/pipeline-layout.md)

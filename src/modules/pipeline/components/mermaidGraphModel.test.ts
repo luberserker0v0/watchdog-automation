@@ -10,3 +10,19 @@ describe("mermaid graph model", () => {
     expect(computeBBox(nodes).height).toBeGreaterThan(36);
   });
 });
+
+it("automatically aligns sibling branches without overlap", () => {
+  const nodes = [
+    { id: "start", label: "Start", x: 0, y: 0 },
+    { id: "next", label: "Next", x: 0, y: 0 },
+    { id: "error", label: "Error", x: 0, y: 0 },
+  ];
+  const arranged = layoutGraph(nodes, [
+    { from: "start", to: "next", isError: false },
+    { from: "start", to: "error", isError: true },
+  ]);
+  const next = arranged.find((node) => node.id === "next")!;
+  const error = arranged.find((node) => node.id === "error")!;
+  expect(next.y).toBe(error.y);
+  expect(Math.abs(next.x - error.x)).toBeGreaterThanOrEqual(120);
+});

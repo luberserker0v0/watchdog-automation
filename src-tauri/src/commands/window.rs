@@ -11,6 +11,14 @@ pub struct WindowDetailInfo {
     pub height: i32,
 }
 
+#[derive(serde::Serialize)]
+pub struct ResizeWindowResult {
+    pub hwnd: usize,
+    pub expected: [u32; 2],
+    pub actual: [u32; 2],
+    pub resized: bool,
+}
+
 #[tauri::command]
 pub fn get_windows(
     filter: Option<WindowState>,
@@ -46,4 +54,44 @@ pub fn get_window_details() -> Result<Vec<WindowDetailInfo>, String> {
             height: d.height,
         })
         .collect())
+}
+
+#[tauri::command]
+pub async fn resize_window_client(
+    hwnd: usize,
+    width: u32,
+    height: u32,
+    stream_state: tauri::State<'_, super::stream::StreamState>,
+) -> Result<ResizeWindowResult, String> {
+    if width == 0 || height == 0 {
+        return Err("Window client width and height must be positive".to_string());
+    }
+    stream_state.0.reject_if_pipeline_owned().await?;
+    let expected = [width, height];
+    let resize = tokio::task::spawn_blocking(move || {
+        crate::repositories::window::prepare_window_size(hwnd, expected)
+    })
+    .await
+    .map_err(|error| format!("Window resize worker failed: {error}"))?;
+    let resized = match resize {
+        Ok(snapshot) => snapshot.is_some(),
+        Err(mismatch) => {
+            return Err(format!(
+                "Could not resize '{}' to {}x{} (reached {}x{}): {}",
+                mismatch.title,
+                mismatch.expected[0],
+                mismatch.expected[1],
+                mismatch.actual[0],
+                mismatch.actual[1],
+                mismatch.diagnostic
+            ));
+        }
+    };
+    let actual = crate::repositories::window::get_window_client_size(hwnd)?;
+    Ok(ResizeWindowResult {
+        hwnd,
+        expected,
+        actual,
+        resized,
+    })
 }

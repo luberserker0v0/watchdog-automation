@@ -1,4 +1,5 @@
 import { useUiStore, type ActiveView } from "../stores/useUiStore";
+import { usePreferencesStore } from "../stores/usePreferencesStore";
 
 interface NavItem {
   id: ActiveView;
@@ -16,6 +17,9 @@ export default function Sidebar() {
   const setActiveView = useUiStore((s) => s.setActiveView);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const capturePanelVisible = usePreferencesStore((state) => state.capturePanelVisible);
+  const setCapturePanelVisible = usePreferencesStore((state) => state.setCapturePanelVisible);
+  const setCapturePanelOpen = useUiStore((state) => state.setCapturePanelOpen);
 
   return (
     <aside className={`sidebar ${sidebarOpen ? "expanded" : ""}`}>
@@ -44,6 +48,18 @@ export default function Sidebar() {
       </div>
 
       <div className="sidebar-bottom">
+        <button
+          className={`sidebar-nav-item ${capturePanelVisible ? "active" : ""}`}
+          onClick={() => {
+            setCapturePanelVisible(!capturePanelVisible);
+            if (!capturePanelVisible) setCapturePanelOpen(false);
+          }}
+          title={capturePanelVisible ? "Hide Capture" : "Show Capture"}
+          aria-pressed={capturePanelVisible}
+        >
+          <span className="sidebar-nav-icon">🖥</span>
+          {sidebarOpen && <span className="sidebar-nav-label">Capture</span>}
+        </button>
         <button
           className={`sidebar-nav-item ${activeView === "settings" ? "active" : ""}`}
           onClick={() => setActiveView("settings")}

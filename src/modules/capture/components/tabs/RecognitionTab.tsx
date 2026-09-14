@@ -245,6 +245,14 @@ export default function RecognitionTab(props: RecognitionTabProps) {
             <span className="debug-label">Confidence</span>
             <span className="debug-value">{(result.confidence * 100).toFixed(1)}%</span>
           </div>
+          {result.raw_candidate_count !== undefined && (
+            <div className="recog-result-row">
+              <span className="debug-label">Candidates</span>
+              <span className="debug-value">
+                {result.raw_candidate_count} raw → {result.distinct_candidate_count ?? result.candidates.length} distinct
+              </span>
+            </div>
+          )}
           {result.box_region && (
             <div className="recog-result-row">
               <span className="debug-label">Region</span>

@@ -61,6 +61,8 @@ impl Default for NodeConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
     pub id: String,
+    #[serde(default)]
+    pub label: String,
     #[serde(flatten)]
     pub config: NodeConfig,
 }

@@ -1,6 +1,7 @@
 import { useStreamStore } from "../stores/useStreamStore";
 import { usePipelineStore } from "../../pipeline/stores/usePipelineStore";
 import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { refreshOpenPreviewContext } from "../services/previewWindowManager";
 
 export default function StreamButton() {
   const isStreaming = useStreamStore((s) => s.isStreaming);
@@ -8,18 +9,21 @@ export default function StreamButton() {
   const elapsedTime = useStreamStore((s) => s.elapsedTime);
   const start = useStreamStore((s) => s.start);
   const stop = useStreamStore((s) => s.stop);
+  const captureOwner = useStreamStore((s) => s.captureOwner);
+  const captureOwnerId = useStreamStore((s) => s.captureOwnerId);
   const isPipelineRunning = usePipelineStore((s) => s.isExecuting);
   const showFps = usePreferencesStore((s) => s.showFps);
 
-  const isDisabled = isPipelineRunning;
+  const isDisabled = isPipelineRunning || captureOwner === "pipeline";
 
-  const handleToggle = () => {
+  const handleToggle = async () => {
     if (isDisabled) return;
     if (isStreaming) {
-      stop();
+      await stop();
     } else {
-      start();
+      await start();
     }
+    await refreshOpenPreviewContext();
   };
 
   const dotClass = isStreaming ? "on" : "off";
@@ -29,7 +33,7 @@ export default function StreamButton() {
     <div className="stream-group">
       <button
         className={`stream-toggle ${isStreaming ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
-        onClick={handleToggle}
+        onClick={() => void handleToggle()}
         disabled={isDisabled}
       >
         <span className={`stream-dot ${dotClass}`} />
@@ -40,6 +44,9 @@ export default function StreamButton() {
       )}
       {isStreaming && (
         <span className="stream-duration">{elapsedTime}</span>
+      )}
+      {captureOwner === "pipeline" && (
+        <span className="stream-duration" title={captureOwnerId ?? undefined}>Pipeline controlled</span>
       )}
     </div>
   );

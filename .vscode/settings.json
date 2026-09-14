@@ -4,6 +4,10 @@
   ],
   "json.schemas": [
     {
+      "fileMatch": ["**/*.layout.json"],
+      "url": "./schemas/watchdog-layout.schema.json"
+    },
+    {
       "fileMatch": ["**/*.meta.json"],
       "url": "./schemas/watchdog-metadata.schema.json"
     }

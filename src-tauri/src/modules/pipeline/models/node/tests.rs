@@ -5,6 +5,7 @@ use crate::modules::pipeline::models::recognizer::{Recognition, RecognitionConfi
 fn test_node_creation() {
     let node = Node {
         id: "Start".to_string(),
+        label: "Start".to_string(),
         config: NodeConfig {
             recognition: RecognitionConfig {
                 kind: Recognition::TemplateMatch {
@@ -26,6 +27,7 @@ fn test_node_creation() {
 fn test_node_serde_keeps_recognition_owned_fields_nested() {
     let node = Node {
         id: "Test".to_string(),
+        label: "Test".to_string(),
         config: NodeConfig {
             recognition: RecognitionConfig {
                 kind: Recognition::Ocr {
@@ -65,9 +67,9 @@ fn test_node_serde_keeps_recognition_owned_fields_nested() {
 
 #[test]
 fn test_node_defaults() {
-    let node: Node =
-        serde_json::from_str(r#"{"id":"Test","recognition":{"type":"DirectHit"}}"#).unwrap();
+    let node: Node = serde_json::from_str(r#"{"id":"Test"}"#).unwrap();
     assert_eq!(node.id, "Test");
+    assert!(matches!(node.recognition.kind, Recognition::DirectHit));
     assert!(node.actions.is_empty());
     assert!(node.recognition.roi.is_none());
     assert!(node.recognition.roi_offset.is_none());

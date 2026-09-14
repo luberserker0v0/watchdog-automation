@@ -18,6 +18,8 @@ export interface NodeTestResult {
   duration_ms: number;
   error: string | null;
   candidates: MatchCandidate[];
+  raw_candidate_count?: number;
+  distinct_candidate_count?: number;
   selection_error?: string;
   screen_click_position?: [number, number];
   timings_ms?: Record<string, number>;
@@ -32,12 +34,20 @@ export async function openWindow(target: PipelineTarget): Promise<string> {
 }
 
 export type NodeParamValue = string | number | boolean;
+export type NodeExecutionMode = "recognize_only" | "full";
 
 export async function testNode(
   node: NodeMetaInfo,
   saveDebugImages?: boolean,
   userParams?: Record<string, NodeParamValue>,
   detailedTimings?: boolean,
+  executionMode?: NodeExecutionMode,
 ): Promise<NodeTestResult> {
-  return invoke<NodeTestResult>("test_node", { node, saveDebugImages, userParams, detailedTimings });
+  return invoke<NodeTestResult>("test_node", {
+    node,
+    saveDebugImages,
+    userParams,
+    detailedTimings,
+    executionMode,
+  });
 }

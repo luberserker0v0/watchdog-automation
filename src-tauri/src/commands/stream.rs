@@ -37,13 +37,22 @@ pub async fn start_stream(
         _ => CaptureEngine::Gdi,
     };
 
-    state.0.start(app, fps, target, capture_engine).await;
+    state.0.acquire_manual_owner().await?;
+    if let Err(error) = state.0.start(app, fps, target, capture_engine).await {
+        state.0.release_owner("manual", None).await;
+        return Err(error);
+    }
     Ok(())
 }
 
 #[tauri::command]
-pub async fn stop_stream(state: tauri::State<'_, StreamState>) -> Result<(), String> {
-    state.0.stop().await;
+pub async fn stop_stream(
+    state: tauri::State<'_, StreamState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    state.0.reject_if_pipeline_owned().await?;
+    state.0.stop_and_emit(&app, "user_stopped").await;
+    state.0.release_owner("manual", None).await;
     Ok(())
 }
 

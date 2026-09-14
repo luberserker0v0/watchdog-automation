@@ -213,3 +213,19 @@ fn effective_match_applies_inverse_but_never_inverts_selection_errors() {
     };
     assert!(!effective_match(&invalid_selection, true));
 }
+
+#[test]
+fn debug_candidate_limit_preserves_a_selected_candidate_outside_the_prefix() {
+    let mut candidates = (0..150)
+        .map(|rank| {
+            let mut value = candidate(rank, rank as i32, 0, 1.0);
+            value.selected = rank == 120;
+            value
+        })
+        .collect();
+    limit_debug_candidates(&mut candidates, 100);
+    assert_eq!(candidates.len(), 100);
+    assert!(candidates
+        .iter()
+        .any(|candidate| candidate.rank == 120 && candidate.selected));
+}

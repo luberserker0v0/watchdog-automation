@@ -58,6 +58,7 @@ function formatPipelineTarget(target: PipelineTarget): string {
   if (target.class) parts.push(`class="${target.class}"`);
   if (target.title) parts.push(`title="${target.title}"`);
   parts.push(`capture_area="${target.capture_area ?? "frame"}"`);
+  if (target.window_size) parts.push(`window_size=[${target.window_size.join(", ")}]`);
   return `Window { ${parts.join(", ")} }`;
 }
 
@@ -179,6 +180,14 @@ export default function NodeTester() {
       }
       if (result.selection_error) {
         appendLog({ source: "debug", label: "NodeTest", detail: result.selection_error, result: "error" });
+      }
+      if (result.raw_candidate_count !== undefined) {
+        appendLog({
+          source: "debug",
+          label: "Template candidates",
+          detail: `${result.raw_candidate_count} raw → ${result.distinct_candidate_count ?? result.candidates.length} distinct`,
+          result: "info",
+        });
       }
       for (const candidate of result.candidates ?? []) {
         appendLog({

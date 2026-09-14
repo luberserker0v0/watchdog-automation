@@ -101,6 +101,8 @@ impl PluginRegistry {
                     }),
                     text: None,
                     candidates: Vec::new(),
+                    raw_candidate_count: None,
+                    distinct_candidate_count: None,
                     selection_error: None,
                 })
             }
@@ -144,6 +146,34 @@ impl PluginRegistry {
                 }
             }
         }?;
+
+        if let Some(region) = result.box_region.take() {
+            result.box_region =
+                shared::clip_region_to_frame(&region, screenshot.width(), screenshot.height());
+            if result.matched && result.box_region.is_none() {
+                return Err(PluginError::RecognitionFailed(format!(
+                    "Recognizer returned box {},{},{},{} outside frame {}x{}",
+                    region.x,
+                    region.y,
+                    region.width,
+                    region.height,
+                    screenshot.width(),
+                    screenshot.height()
+                )));
+            }
+        }
+        result.candidates = result
+            .candidates
+            .into_iter()
+            .filter_map(|mut candidate| {
+                candidate.region = shared::clip_region_to_frame(
+                    &candidate.region,
+                    screenshot.width(),
+                    screenshot.height(),
+                )?;
+                Some(candidate)
+            })
+            .collect();
 
         let supports_candidate_selection = matches!(
             recognition,

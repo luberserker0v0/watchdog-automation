@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { listPipelines, type PipelineInfo } from "../../../api/pipeline";
 import MermaidGraph from "../components/MermaidGraph";
@@ -20,13 +20,14 @@ function formatTime(ms: number) {
 function PipelineExecutionHeader() {
   const summary = usePipelineStore(useShallow((state) => {
     const entries = state.pipelineIds.map((id) => state.pipelinesById[id]);
-    const running = entries.find((entry) => entry.status === "running");
+    const active = state.activeId ? state.pipelinesById[state.activeId] : undefined;
     return {
       isExecuting: state.isExecuting,
       completed: entries.filter((entry) => entry.status === "completed").length,
       total: entries.length,
       checked: entries.filter((entry) => entry.isChecked).length,
-      elapsedMs: running?.elapsedMs ?? 0,
+      elapsedMs: active?.elapsedMs ?? 0,
+      activeStatus: state.activeId ? state.pipelinesById[state.activeId]?.status : undefined,
     };
   }));
   const start = usePipelineStore((state) => state.startExecution);
@@ -38,8 +39,10 @@ function PipelineExecutionHeader() {
       <h2>Pipeline</h2>
       <div className="pipeline-execution-controls">
         <button className="pipeline-btn pipeline-btn-primary" onClick={start} disabled={summary.isExecuting || summary.checked === 0}>▶ Start</button>
-        <button className="pipeline-btn pipeline-btn-secondary" onClick={pause} disabled={!summary.isExecuting}>⏸ Pause</button>
-        <button className="pipeline-btn pipeline-btn-danger" onClick={stop} disabled={!summary.isExecuting}>■ Stop</button>
+        <button className="pipeline-btn pipeline-btn-secondary" onClick={pause} disabled={!summary.isExecuting || summary.activeStatus === "stopping"}>
+          {summary.activeStatus === "paused" ? "▶ Resume" : "⏸ Pause"}
+        </button>
+        <button className="pipeline-btn pipeline-btn-danger" onClick={stop} disabled={!summary.isExecuting || summary.activeStatus === "stopping"}>■ Stop</button>
         <span className="pipeline-status-text">
           {summary.isExecuting
             ? `${summary.completed}/${summary.total}  ${formatTime(summary.elapsedMs)}`
@@ -96,71 +99,101 @@ function PipelineList({ onPreview }: { onPreview: (id: string) => void }) {
   );
 }
 
-function PipelineGraphPanel() {
+function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
+  const [focusMode, setFocusMode] = useState(false);
   const displayedId = usePipelineStore(selectDisplayedPipelineId);
   const graph = usePipelineStore(useShallow((state) => {
     const entry = displayedId ? state.pipelinesById[displayedId] : undefined;
-    return { mermaid: entry?.mermaid ?? "", currentNodeId: entry?.currentNodeId ?? null };
+    return {
+      name: entry?.name ?? "Pipeline graph",
+      path: entry?.path ?? "",
+      mermaid: entry?.mermaid ?? "",
+      flow: entry?.graph ?? null,
+      currentNodeId: entry?.currentNodeId ?? null,
+      layoutWritable: entry?.layoutWritable ?? false,
+    };
   }));
-  if (!graph.mermaid) return <div className="pipeline-main" />;
   return (
-    <div className="pipeline-main">
-      <div className="pipeline-graph-panel">
-        <MermaidGraph mermaid={graph.mermaid} currentNodeId={graph.currentNodeId} selectedNodeId={null} onNodeClick={() => undefined} />
+    <section className="pipeline-graph-pane" aria-label="Pipeline graph">
+      <div className="pipeline-pane-header">
+        <div className="pipeline-pane-title">
+          <span className="pipeline-pane-eyebrow">Graph</span>
+          <strong title={graph.name}>{graph.name}</strong>
+        </div>
+        <div className="pipeline-pane-actions">
+          <label className="pipeline-focus-switch" title="Keep the current running node centered">
+            <input
+              type="checkbox"
+              role="switch"
+              checked={focusMode}
+              onChange={(event) => setFocusMode(event.target.checked)}
+            />
+            <span className="pipeline-focus-toggle" aria-hidden="true"><span /></span>
+            <span className="pipeline-focus-label">Focus current</span>
+          </label>
+          <button type="button" className="pipeline-pane-action" onClick={onCollapse} title="Hide graph">
+            Hide graph
+          </button>
+        </div>
       </div>
-    </div>
+      <div className="pipeline-graph-panel">
+        {graph.mermaid ? (
+        <MermaidGraph
+          mermaid={graph.mermaid}
+          flow={graph.flow}
+          currentNodeId={graph.currentNodeId}
+          selectedNodeId={null}
+          onNodeClick={() => undefined}
+          focusCurrentNode={focusMode}
+          layoutKey={graph.path}
+          allowNodeLayout
+          layoutWritable={graph.layoutWritable}
+        />
+        ) : (
+          <div className="pipeline-graph-empty">Select or add a pipeline to view its graph.</div>
+        )}
+      </div>
+    </section>
   );
 }
 
 function Preview({ id, onClose }: { id: string; onClose: () => void }) {
   const preview = usePipelineStore(useShallow((state) => {
     const entry = state.pipelinesById[id];
-    return { name: entry?.name ?? "", mermaid: entry?.mermaid ?? "" };
+    return { name: entry?.name ?? "", mermaid: entry?.mermaid ?? "", graph: entry?.graph ?? null };
   }));
   if (!preview.mermaid) return null;
-  return <PipelinePreviewModal name={preview.name} mermaid={preview.mermaid} onClose={onClose} />;
+  return <PipelinePreviewModal name={preview.name} mermaid={preview.mermaid} graph={preview.graph} onClose={onClose} />;
 }
 
 export default function PipelineView() {
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const [graphCollapsed, setGraphCollapsed] = useState(false);
+  const pipelineCount = usePipelineStore((state) => state.pipelineIds.length);
   const showPreview = useCallback((id: string) => setPreviewId(id), []);
-
-  useEffect(() => () => dragCleanupRef.current?.(), []);
-
-  const startResize = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    const list = listRef.current;
-    if (!list) return;
-    const startY = event.clientY;
-    const startHeight = list.getBoundingClientRect().height;
-    const move = (moveEvent: MouseEvent) => {
-      list.style.height = `${Math.max(60, Math.min(300, startHeight + moveEvent.clientY - startY))}px`;
-    };
-    const finish = () => {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", finish);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      dragCleanupRef.current = null;
-    };
-    dragCleanupRef.current?.();
-    dragCleanupRef.current = finish;
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", finish);
-    document.body.style.cursor = "ns-resize";
-    document.body.style.userSelect = "none";
-  }, []);
 
   return (
     <div className="pipeline-view">
       <PipelineExecutionHeader />
-      <div className="pipeline-list" ref={listRef} style={{ height: 120 }}>
-        <PipelineList onPreview={showPreview} />
+      <div className={`pipeline-workspace ${graphCollapsed ? "graph-collapsed" : ""}`}>
+        <section className="pipeline-browser-pane" aria-label="Loaded pipelines">
+          <div className="pipeline-pane-header">
+            <div className="pipeline-pane-title">
+              <span className="pipeline-pane-eyebrow">Pipelines</span>
+              <strong>{pipelineCount} loaded</strong>
+            </div>
+            {graphCollapsed && (
+              <button type="button" className="pipeline-pane-action" onClick={() => setGraphCollapsed(false)}>
+                Show graph
+              </button>
+            )}
+          </div>
+          <div className="pipeline-list">
+            <PipelineList onPreview={showPreview} />
+          </div>
+        </section>
+        {!graphCollapsed && <PipelineGraphPanel onCollapse={() => setGraphCollapsed(true)} />}
       </div>
-      <div className="drag-handle" onMouseDown={startResize}><div className="drag-handle-grip" /></div>
-      <PipelineGraphPanel />
       {previewId && <Preview id={previewId} onClose={() => setPreviewId(null)} />}
     </div>
   );

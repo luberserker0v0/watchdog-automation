@@ -1,4 +1,5 @@
 use super::parse;
+use crate::modules::pipeline::models::graph::{CaptureArea, PipelineTarget};
 use crate::modules::pipeline::models::recognizer::Recognition;
 
 #[test]
@@ -33,9 +34,10 @@ fn parses_the_single_metadata_shape() {
 
 #[test]
 fn applies_node_defaults() {
-    let metadata = parse(r#"{"nodes":{"Done":{"recognition":{"type":"DirectHit"}}}}"#).unwrap();
+    let metadata = parse(r#"{"nodes":{"Done":{}}}"#).unwrap();
     let node = metadata.nodes.get("Done").unwrap();
     assert!(metadata.edges.is_empty());
+    assert!(matches!(node.recognition.kind, Recognition::DirectHit));
     assert!(node.actions.is_empty());
     assert_eq!(node.timeout, 20000);
     assert_eq!(node.rate_limit, 1000);
@@ -59,10 +61,36 @@ fn rejects_flow_fields_in_metadata_json() {
 }
 
 #[test]
+fn rejects_visual_layout_fields_in_metadata_json() {
+    assert!(parse(r#"{"nodes":{},"layout":{"nodes":{}}}"#).is_err());
+}
+
+#[test]
 fn parses_mermaid_edge_configuration() {
     let metadata = parse(r#"{"nodes":{},"edges":{"Login->Error":{"edge_type":"error"}}}"#).unwrap();
     assert!(matches!(
         metadata.edges["Login->Error"].edge_type,
         crate::modules::pipeline::models::edge::EdgeType::Error
+    ));
+}
+
+#[test]
+fn parses_top_level_filterless_window_target() {
+    let metadata = parse(
+        r#"{
+            "target": {"type":"window","capture_area":"client"},
+            "nodes": {}
+        }"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        metadata.target,
+        Some(PipelineTarget::Window {
+            process: None,
+            class: None,
+            title: None,
+            capture_area: CaptureArea::Client,
+            window_size: None,
+        })
     ));
 }

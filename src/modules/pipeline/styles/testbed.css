@@ -43,6 +43,8 @@
 }
 
 .testbed-graph-wrapper {
+  --graph-grid-color: #cbd5e1;
+  --graph-edge-color: #475569;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -65,8 +67,75 @@
   cursor: grab;
 }
 
+.testbed-graph-flow.region-selecting {
+  cursor: crosshair;
+}
+
 .testbed-graph-flow svg {
   display: block;
+}
+
+.testbed-graph-node.layout-editing {
+  cursor: move;
+}
+
+.testbed-layout-controls {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-size: 11px;
+}
+
+.testbed-region-selection {
+  fill: rgba(59, 130, 246, 0.12);
+  stroke: #3b82f6;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
+}
+
+.testbed-layout-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.testbed-layout-controls input {
+  margin: 0;
+  accent-color: #3b82f6;
+}
+
+.testbed-layout-controls button {
+  padding: 3px 7px;
+  border: 1px solid #d8d8d8;
+  border-radius: 4px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.testbed-layout-controls button:hover:not(:disabled) {
+  border-color: #3b82f6;
+  color: #2563eb;
+}
+
+.testbed-layout-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .testbed-graph-empty {
@@ -472,8 +541,28 @@
     color: #aaa;
   }
 
+  .testbed-graph-wrapper {
+    --graph-grid-color: #475569;
+    --graph-edge-color: #cbd5e1;
+  }
+
   .testbed-minimap {
     border-color: #444;
+  }
+
+  .testbed-layout-controls {
+    border-color: #444;
+    background: rgba(26, 26, 26, 0.94);
+  }
+
+  .testbed-layout-controls label {
+    color: #aaa;
+  }
+
+  .testbed-layout-controls button {
+    border-color: #444;
+    background: #2a2a2a;
+    color: #aaa;
   }
 
   .pipeline-select {

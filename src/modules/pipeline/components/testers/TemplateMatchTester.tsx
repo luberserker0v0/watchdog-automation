@@ -72,6 +72,14 @@ export default function TemplateMatchTester({ recognition }: Props) {
               {result.confidence.toFixed(3)}
             </span>
           </div>
+          {result.raw_candidate_count !== undefined && (
+            <div className="tester-result-row">
+              <span className="tester-label">Candidates</span>
+              <span className="tester-value">
+                {result.raw_candidate_count} raw → {result.distinct_candidate_count ?? result.candidates.length} distinct
+              </span>
+            </div>
+          )}
           {result.box_region && (
             <div className="tester-result-row">
               <span className="tester-label">Region</span>

@@ -30,6 +30,8 @@ beforeEach(() => {
     selectedId: "a",
     activeId: null,
     isExecuting: false,
+    batchIds: [],
+    resizeIssue: null,
   });
 });
 
@@ -101,5 +103,34 @@ describe("PipelineCard render isolation", () => {
     expect(usePipelineStore.getState().pipelinesById.b.userParams.name).toBe("Alice");
     await user.click(getByRole("checkbox"));
     expect(usePipelineStore.getState().pipelinesById.b.isChecked).toBe(false);
+  });
+
+  it("shows actionable expected and current sizes for a blocked preflight", async () => {
+    const user = userEvent.setup();
+    usePipelineStore.setState((state) => ({
+      activeId: "a",
+      batchIds: ["a"],
+      resizeIssue: {
+        pipelineId: "a",
+        code: "window_size_mismatch",
+        hwnd: 42,
+        title: "Target",
+        expected: [1280, 720],
+        before: [900, 600],
+        actual: [900, 600],
+        resize_attempted: true,
+        diagnostic: "Window rejected resizing",
+      },
+      pipelinesById: {
+        ...state.pipelinesById,
+        a: { ...state.pipelinesById.a, status: "needs_resize" },
+      },
+    }));
+    const { getByRole, getByText } = render(<PipelineCard id="a" onPreview={() => undefined} />);
+    expect(getByText(/Expected content size 1280 × 720/)).toBeTruthy();
+    expect(getByText(/current size 900 × 600/)).toBeTruthy();
+    await user.click(getByRole("button", { name: "Cancel" }));
+    expect(usePipelineStore.getState().resizeIssue).toBeNull();
+    expect(usePipelineStore.getState().pipelinesById.a.status).toBe("idle");
   });
 });

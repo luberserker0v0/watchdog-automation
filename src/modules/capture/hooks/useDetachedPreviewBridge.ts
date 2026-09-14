@@ -3,9 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getStreamStatus } from "../../../api/stream";
 import type { StreamStoppedPayload } from "../../../api/stream";
-import type { CaptureMode } from "../../core/stores/usePreferencesStore";
+import type { CaptureArea, CaptureMode } from "../../core/stores/usePreferencesStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
+import type { PipelineTarget } from "../../../api/pipeline";
 
 export interface TargetInfoPayload {
   targetName: string;
@@ -13,6 +14,12 @@ export interface TargetInfoPayload {
   engine: string;
   statusClass: "idle" | "streaming" | "captured";
   statusLabel: string;
+  targetIndex: number | null;
+  captureArea?: CaptureArea;
+  target?: PipelineTarget;
+  expectedSize?: [number, number] | null;
+  frameSize?: [number, number] | null;
+  clientSize?: [number, number] | null;
 }
 
 export function useDetachedPreviewBridge() {
@@ -23,44 +30,59 @@ export function useDetachedPreviewBridge() {
   useEffect(() => {
     let disposed = false;
     let frameTimer: ReturnType<typeof setInterval> | null = null;
+    let sessionId = 0;
     const cleanups: Array<() => void> = [];
     const frameStore = useCaptureFrameStore.getState();
 
     const setup = async () => {
+      const stopFrameTimer = () => {
+        if (!frameTimer) return;
+        clearInterval(frameTimer);
+        frameTimer = null;
+      };
+
+      const syncStream = async () => {
+        try {
+          const status = await getStreamStatus();
+          if (disposed) return;
+          if (!status.is_streaming) {
+            sessionId = 0;
+            stopFrameTimer();
+            setStreaming(false);
+            return;
+          }
+
+          sessionId = status.session_id;
+          const mode = status.target_type as CaptureMode;
+          setStreaming(true);
+          setCaptureMode(mode);
+          stopFrameTimer();
+          frameStore.setStreamFrameUrl(mode, `http://watchdog.localhost/frame?t=${Date.now()}`);
+          frameTimer = setInterval(() => {
+            frameStore.setStreamFrameUrl(mode, `http://watchdog.localhost/frame?t=${Date.now()}`);
+          }, 100);
+        } catch {
+          // A detached still-image preview does not require an active stream.
+        }
+      };
+
       const unlistenStopped = await listen<StreamStoppedPayload>("stream-stopped", (event) => {
         if (disposed) return;
-        if (frameTimer) {
-          clearInterval(frameTimer);
-          frameTimer = null;
-        }
+        if (sessionId && event.payload.session_id !== sessionId) return;
+        stopFrameTimer();
+        sessionId = 0;
         setStreaming(false);
         frameStore.clearFrame(event.payload.target_type);
       });
       if (disposed) { unlistenStopped(); return; } else cleanups.push(unlistenStopped);
 
       const unlistenTarget = await listen<TargetInfoPayload>("preview-target-info", (event) => {
-        if (!disposed) setTargetInfo(event.payload);
+        if (disposed) return;
+        setTargetInfo(event.payload);
+        setCaptureMode(event.payload.mode);
+        void syncStream();
       });
       if (disposed) { unlistenTarget(); return; } else cleanups.push(unlistenTarget);
-
-      try {
-        const status = await getStreamStatus();
-        if (status.is_streaming) {
-          const mode = status.target_type as CaptureMode;
-          if (!disposed) {
-            setStreaming(true);
-            setCaptureMode(mode);
-            frameStore.setStreamFrameUrl(mode, `http://watchdog.localhost/frame?t=${Date.now()}`);
-            frameTimer = setInterval(() => {
-              frameStore.setStreamFrameUrl(mode, `http://watchdog.localhost/frame?t=${Date.now()}`);
-            }, 100);
-          }
-          await getCurrentWebviewWindow().emit("preview-ready");
-          return;
-        }
-      } catch {
-        // A detached still-image preview does not require an active stream.
-      }
 
       const unlistenImage = await listen<{ bytes: number[]; mode: CaptureMode }>("preview-image", (event) => {
         const { bytes, mode } = event.payload;
@@ -71,6 +93,8 @@ export function useDetachedPreviewBridge() {
         useOverlayStore.getState().clearCursor();
       });
       if (disposed) { unlistenImage(); return; } else cleanups.push(unlistenImage);
+
+      await syncStream();
       await getCurrentWebviewWindow().emit("preview-ready");
     };
 

@@ -1,6 +1,7 @@
 import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useWindowStore } from "../stores/useWindowStore";
+import { useStreamStore } from "../stores/useStreamStore";
 
 function ScreenTargetSelect() {
   const items = useScreenStore((state) => state.screens);
@@ -8,9 +9,10 @@ function ScreenTargetSelect() {
   const setSelectedIndex = useScreenStore((state) => state.setSelectedIndex);
   const fetchScreens = useScreenStore((state) => state.fetchScreens);
   const isLoading = useScreenStore((state) => state.isLoading);
+  const pipelineControlled = useStreamStore((state) => state.captureOwner === "pipeline");
   return (
     <>
-      <select value={selectedIndex ?? ""} disabled={isLoading} onChange={(event) => {
+      <select value={selectedIndex ?? ""} disabled={isLoading || pipelineControlled} onChange={(event) => {
         if (event.target.value) setSelectedIndex(Number(event.target.value));
       }}>
         <option value="">{isLoading ? "載入中..." : "選擇目標"}</option>
@@ -25,7 +27,7 @@ function ScreenTargetSelect() {
         className="target-refresh-btn"
         aria-label="重新載入螢幕"
         title="重新載入螢幕"
-        disabled={isLoading}
+        disabled={isLoading || pipelineControlled}
         onClick={() => void fetchScreens()}
       >
         ↻
@@ -40,9 +42,10 @@ function WindowTargetSelect() {
   const setSelectedIndex = useWindowStore((state) => state.setSelectedIndex);
   const fetchWindows = useWindowStore((state) => state.fetchWindows);
   const isLoading = useWindowStore((state) => state.isLoading);
+  const pipelineControlled = useStreamStore((state) => state.captureOwner === "pipeline");
   return (
     <>
-      <select value={selectedIndex ?? ""} disabled={isLoading} onChange={(event) => {
+      <select value={selectedIndex ?? ""} disabled={isLoading || pipelineControlled} onChange={(event) => {
         if (event.target.value) setSelectedIndex(Number(event.target.value));
       }}>
         <option value="">{isLoading ? "載入中..." : "選擇目標"}</option>
@@ -57,7 +60,7 @@ function WindowTargetSelect() {
         className="target-refresh-btn"
         aria-label="重新載入視窗"
         title="重新載入視窗（套用目前篩選）"
-        disabled={isLoading}
+        disabled={isLoading || pipelineControlled}
         onClick={() => void fetchWindows()}
       >
         ↻

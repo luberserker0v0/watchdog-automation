@@ -1,10 +1,21 @@
 {
+  "target": {
+    "title": "^Target UI$",
+    "type": "window",
+    "capture_area": "client",
+    "window_size": [
+      500, 600
+    ]
+  },
   "nodes": {
     "RecognizeTitle": {
       "recognition": {
         "type": "OCR",
-        "expected": "Login",
-        "threshold": 0.6
+        "expected": "Welcome Back",
+        "threshold": 0.6,
+        "roi": [
+          175, 178, 159, 40
+        ]
       },
       "actions": [
         {
@@ -15,15 +26,26 @@
       "rate_limit": 1000,
       "pre_delay": 200,
       "post_delay": 200,
-      "enabled": true,
-      "inverse": false,
       "max_hit": 1
     },
     "InputAccount": {
       "recognition": {
-        "type": "DirectHit"
+        "type": "OCR",
+        "expected": "Account",
+        "roi": [
+          75, 255, 58, 24
+        ]
       },
       "actions": [
+        {
+          "type": "Click",
+          "target_offset": [
+            35,
+            35,
+            0,
+            0
+          ]
+        },
         {
           "type": "InputText",
           "input_text": "{{account}}"
@@ -41,14 +63,26 @@
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 100,
-      "enabled": true,
       "max_hit": 1
     },
     "InputPassword": {
       "recognition": {
-        "type": "DirectHit"
+        "type": "OCR",
+        "expected": "Password",
+        "roi": [
+          74, 336, 70, 23
+        ]
       },
       "actions": [
+        {
+          "type": "Click",
+          "target_offset": [
+            35,
+            35,
+            0,
+            0
+          ]
+        },
         {
           "type": "InputText",
           "input_text": "{{password}}"
@@ -66,30 +100,33 @@
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 100,
-      "enabled": true,
       "max_hit": 1
     },
     "ClickLogin": {
       "recognition": {
-        "type": "DirectHit"
+        "type": "OCR",
+        "roi": [
+         221, 427, 59, 100
+        ]
       },
       "actions": [
         {
-          "type": "Click",
-          "target": true
+          "type": "Click"
         }
       ],
       "timeout": 10000,
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 500,
-      "enabled": true,
       "max_hit": 1
     },
     "LoginError": {
       "recognition": {
         "type": "OCR",
         "expected": "Invalid",
+        "roi": [
+          178, 398, 150, 21
+        ],
         "threshold": 0.6
       },
       "actions": [
@@ -104,13 +141,15 @@
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 200,
-      "enabled": true,
       "max_hit": 1
     },
     "VerifySuccess": {
       "recognition": {
         "type": "OCR",
         "expected": "Dashboard",
+        "roi": [
+          182, 95, 128, 36
+        ],
         "threshold": 0.6
       },
       "actions": [
@@ -122,27 +161,23 @@
       "rate_limit": 1000,
       "pre_delay": 200,
       "post_delay": 200,
-      "enabled": true,
-      "inverse": false,
       "max_hit": 1
     },
     "ClickNotification": {
       "recognition": {
         "type": "TemplateMatch",
-        "template": "notification.png",
+        "template": "sample/notification.png",
         "threshold": 0.8
       },
       "actions": [
         {
-          "type": "Click",
-          "target": true
+          "type": "Click"
         }
       ],
       "timeout": 10000,
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 300,
-      "enabled": true,
       "max_hit": 1
     },
     "SwipeCards": {
@@ -163,9 +198,11 @@
         {
           "type": "Swipe",
           "begin": true,
-          "end": [
-            500,
-            400
+          "end_offset": [
+            -100,
+            0,
+            0,
+            0
           ],
           "duration": 300
         }
@@ -174,36 +211,65 @@
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 300,
-      "enabled": true,
       "max_hit": 1
     },
     "ScrollList": {
       "recognition": {
-        "type": "DirectHit"
+        "type": "OCR",
+        "expected": "NOTIFICATIONS",
+        "roi": [
+          10, 307, 113, 18
+        ],
+        "threshold": 0.6
       },
       "actions": [
         {
           "type": "Scroll",
-          "target": true,
+          "target_offset": [
+            0,
+            100,
+            0,
+            0
+          ],
           "dx": 0,
-          "dy": 200
+          "dy": 100
         }
       ],
       "timeout": 10000,
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 300,
-      "enabled": true,
+      "max_hit": 1
+    },
+    "ScrollPage": {
+      "actions": [
+        {
+          "type": "Scroll",
+          "target": [
+            100,
+            100,
+            0,
+            0
+          ],
+          "dx": 0,
+          "dy": 1
+        }
+      ],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "pre_delay": 100,
+      "post_delay": 300,
       "max_hit": 1
     },
     "PressDelete": {
       "recognition": {
-        "type": "DirectHit"
+        "type": "TemplateMatch",
+        "template": "sample/delete.png",
+        "threshold": 0.7
       },
       "actions": [
         {
           "type": "LongPress",
-          "target": true,
           "duration": 1500
         }
       ],
@@ -211,27 +277,23 @@
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 300,
-      "enabled": true,
       "max_hit": 1
     },
     "ClickRefresh": {
       "recognition": {
-        "type": "DirectHit"
+        "type": "TemplateMatch",
+        "template": "sample/refresh.png",
+        "threshold": 0.7
       },
       "actions": [
         {
-          "type": "Click",
-          "target": [
-            300,
-            400
-          ]
+          "type": "Click"
         }
       ],
       "timeout": 10000,
       "rate_limit": 500,
       "pre_delay": 100,
       "post_delay": 200,
-      "enabled": true,
       "max_hit": 1
     },
     "Done": {
@@ -243,7 +305,6 @@
           "type": "StopTask"
         }
       ],
-      "enabled": true,
       "max_hit": 1
     }
   },
@@ -257,7 +318,8 @@
     "VerifySuccess->ClickNotification": { "edge_type": "next" },
     "ClickNotification->SwipeCards": { "edge_type": "next" },
     "SwipeCards->ScrollList": { "edge_type": "next" },
-    "ScrollList->PressDelete": { "edge_type": "next" },
+    "ScrollList->ScrollPage": { "edge_type": "next" },
+    "ScrollPage->PressDelete": { "edge_type": "next" },
     "PressDelete->ClickRefresh": { "edge_type": "next" },
     "ClickRefresh->Done": { "edge_type": "next" }
   }

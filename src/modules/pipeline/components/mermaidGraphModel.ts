@@ -5,6 +5,7 @@ export interface BBox { minX: number; minY: number; maxX: number; maxY: number; 
 export const NODE_W = 120;
 export const NODE_H = 36;
 const NODE_SPACING = 100;
+const NODE_COLUMN_SPACING = 180;
 export const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 3];
 
 export function parseMermaidGraph(mermaid: string): { nodes: GraphNode[]; edges: GraphEdge[] } {
@@ -34,14 +35,25 @@ export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]) {
   const incoming = new Set(edges.map((edge) => edge.to));
   const entry = nodes.find((node) => !incoming.has(node.id));
   if (entry) { queue.push({ id: entry.id, depth: 0 }); visited.add(entry.id); }
+  const levels = new Map<number, GraphNode[]>();
   let maxDepth = 0;
   while (queue.length) {
     const current = queue.shift()!;
     const node = byId.get(current.id);
-    if (node) { node.x = 100; node.y = 40 + current.depth * NODE_SPACING; maxDepth = Math.max(maxDepth, current.depth); }
+    if (node) {
+      levels.set(current.depth, [...(levels.get(current.depth) ?? []), node]);
+      maxDepth = Math.max(maxDepth, current.depth);
+    }
     for (const child of children.get(current.id) ?? []) {
       if (!visited.has(child)) { visited.add(child); queue.push({ id: child, depth: current.depth + 1 }); }
     }
+  }
+  for (const [depth, levelNodes] of levels) {
+    const centerOffset = (levelNodes.length - 1) / 2;
+    levelNodes.forEach((node, index) => {
+      node.x = 100 + (index - centerOffset) * NODE_COLUMN_SPACING;
+      node.y = 40 + depth * NODE_SPACING;
+    });
   }
   let y = 40 + (maxDepth + 2) * NODE_SPACING;
   for (const node of nodes) if (!visited.has(node.id)) { node.x = 100; node.y = y; y += NODE_SPACING; }

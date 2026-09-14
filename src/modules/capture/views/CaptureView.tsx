@@ -1,143 +1,99 @@
-import { useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { usePreferencesStore, type CaptureMode } from "../../core/stores/usePreferencesStore";
-import { useScreenStore } from "../stores/useScreenStore";
-import { useWindowStore } from "../stores/useWindowStore";
+import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
 import { useStreamStore } from "../stores/useStreamStore";
-import { getWindowDetails, type WindowDetailInfo } from "../../../api/window";
-import type { PipelineTarget } from "../../../api/pipeline";
-import type { StreamStoppedPayload } from "../../../api/stream";
+import { useUiStore } from "../../core/stores/useUiStore";
 import ModeSelector from "../components/ModeSelector";
 import DesktopFilter from "../components/DesktopFilter";
 import WindowStateFilter from "../components/WindowStateFilter";
 import TargetSelect from "../components/TargetSelect";
 import StreamButton from "../components/StreamButton";
 import CaptureButton from "../components/CaptureButton";
-import ImageLayout from "../components/ImageLayout";
+import WindowResizeControl from "../components/WindowResizeControl";
+import CaptureAreaSelector from "../components/CaptureAreaSelector";
+import CapturePreviewCard from "../components/CapturePreviewCard";
+import ExpandButton from "../components/ExpandButton";
+import { refreshOpenPreviewContext } from "../services/previewWindowManager";
 import "../styles/capture.css";
-
-interface UpdateCapturePayload {
-  type: "screen" | "window";
-  action: "streaming" | "capture";
-  target: PipelineTarget;
-  hwnd: number | null;
-}
-
-function matchWindowByTarget(
-  windows: { hwnd?: number; title: string; app_name: string }[],
-  target: PipelineTarget,
-  hwnd: number | null,
-): number {
-  if (hwnd) {
-    const idx = windows.findIndex((w) => w.hwnd === hwnd);
-    if (idx >= 0) return idx;
-  }
-  if (target.type === "window") {
-    const idx = windows.findIndex((w) => {
-      if (target.title && !new RegExp(target.title).test(w.title)) return false;
-      if (target.process && !new RegExp(target.process).test(w.app_name)) return false;
-      return true;
-    });
-    if (idx >= 0) return idx;
-  }
-  return -1;
-}
-
-async function matchWindowByClass(
-  windows: { hwnd?: number; title: string; app_name: string }[],
-  target: PipelineTarget,
-): Promise<number> {
-  if (target.type !== "window" || !target.class) return -1;
-  try {
-    const details: WindowDetailInfo[] = await getWindowDetails();
-    return windows.findIndex((w) => {
-      const detail = details.find((d) => d.hwnd === w.hwnd);
-      if (!detail) return false;
-      return new RegExp(target.class!).test(detail.class_name);
-    });
-  } catch {
-    return -1;
-  }
-}
 
 export default function CaptureView() {
   const mode = usePreferencesStore((s) => s.mode);
-  const fetchScreens = useScreenStore((s) => s.fetchScreens);
-  const fetchWindows = useWindowStore((s) => s.fetchWindows);
+  const capturePanelOpen = useUiStore((state) => state.capturePanelOpen);
+  const setCapturePanelOpen = useUiStore((state) => state.setCapturePanelOpen);
 
-  useEffect(() => {
-    if (mode === "screen") {
-      fetchScreens();
-    } else {
-      fetchWindows();
-    }
-  }, [mode, fetchScreens, fetchWindows]);
-
-  useEffect(() => {
-    const unlisten = listen<UpdateCapturePayload>("update_capture", async (event) => {
-      const { type, action, target, hwnd } = event.payload;
-
-      // 1. Switch mode
-      if (type !== usePreferencesStore.getState().mode) {
-        usePreferencesStore.getState().setMode(type as CaptureMode);
-      }
-
-      // 2. Select matching target
-      if (type === "window") {
-        await useWindowStore.getState().fetchWindows();
-        const windows = useWindowStore.getState().windows;
-
-        let matchedIndex = matchWindowByTarget(windows, target, hwnd);
-
-        // Fallback: match by class name via getWindowDetails
-        if (matchedIndex < 0 && target.type === "window" && target.class) {
-          matchedIndex = await matchWindowByClass(windows, target);
-        }
-
-        if (matchedIndex >= 0) {
-          useWindowStore.getState().setSelectedIndex(matchedIndex);
-        }
-      } else {
-        const index = target.type === "screen" ? (target.index ?? 0) : 0;
-        useScreenStore.getState().setSelectedIndex(index);
-      }
-
-      // 3. Start streaming
-      if (action === "streaming") {
-        const captureArea = target.type === "window" ? target.capture_area : undefined;
-        useStreamStore.getState().start(captureArea);
-      }
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen<StreamStoppedPayload>("stream-stopped", (event) => {
-      useStreamStore.getState().handleBackendStopped(event.payload.target_type);
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
+  if (!capturePanelOpen) {
+    return <CaptureRail onExpand={() => setCapturePanelOpen(true)} />;
+  }
 
   return (
     <div className="capture-view">
       <div className={`control-section ${mode}-mode`}>
-        <ModeSelector />
-        {mode === "window" && <DesktopFilter />}
-        {mode === "window" && <WindowStateFilter />}
-        <TargetSelect />
-        <div className="control-divider" />
+        <div className="capture-mode-row">
+          <ModeSelector />
+          <button
+            type="button"
+            className="capture-collapse-button"
+            onClick={() => setCapturePanelOpen(false)}
+            title="Collapse capture panel"
+            aria-label="Collapse capture panel"
+          >
+            ›
+          </button>
+        </div>
+        <div className="capture-primary-row">
+          <TargetSelect />
+          {mode === "window" && <CaptureAreaSelector />}
+        </div>
+        {mode === "window" && (
+          <details className="capture-advanced">
+            <summary>Window options</summary>
+            <div className="capture-advanced-content">
+              <DesktopFilter />
+              <WindowStateFilter />
+              <WindowResizeControl />
+            </div>
+          </details>
+        )}
         <div className="capture-actions">
           <StreamButton />
           <CaptureButton />
         </div>
       </div>
-      <ImageLayout />
+      <CapturePreviewCard />
     </div>
+  );
+}
+
+function CaptureRail({ onExpand }: { onExpand: () => void }) {
+  const mode = usePreferencesStore((state) => state.mode);
+  const isStreaming = useStreamStore((state) => state.isStreaming);
+  const captureOwner = useStreamStore((state) => state.captureOwner);
+  const start = useStreamStore((state) => state.start);
+  const stop = useStreamStore((state) => state.stop);
+  const pipelineControlled = captureOwner === "pipeline";
+  const toggleStream = async () => {
+    if (isStreaming) await stop();
+    else await start();
+    await refreshOpenPreviewContext();
+  };
+
+  return (
+    <aside className="capture-rail" aria-label="Capture controls">
+      <button type="button" className="capture-rail-button capture-rail-expand" onClick={onExpand} title="Expand capture panel" aria-label="Expand capture panel">‹</button>
+      <span className="capture-rail-mode" title={mode === "screen" ? "Screen capture" : "Window capture"} aria-label={mode === "screen" ? "Screen capture" : "Window capture"}>
+        {mode === "screen" ? "🖥" : "🪟"}
+      </span>
+      <span className={`capture-rail-status ${isStreaming ? "streaming" : "idle"}`} title={pipelineControlled ? "Pipeline controls capture" : isStreaming ? "Streaming" : "Idle"} />
+      <button
+        type="button"
+        className={`capture-rail-button ${isStreaming ? "active" : ""}`}
+        disabled={pipelineControlled}
+        onClick={() => void toggleStream()}
+        title={pipelineControlled ? "Pipeline controls capture" : isStreaming ? "Stop streaming" : "Start streaming"}
+        aria-label={isStreaming ? "Stop streaming" : "Start streaming"}
+      >
+        {isStreaming ? "■" : "▶"}
+      </button>
+      <div className="capture-rail-spacer" />
+      <ExpandButton />
+    </aside>
   );
 }

@@ -1,28 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { CaptureMode } from "../../core/stores/usePreferencesStore";
-import ActionTesterTab from "../components/tabs/ActionTesterTab";
-import InspectorTab from "../components/tabs/InspectorTab";
-import RecognitionTab from "../components/tabs/RecognitionTab";
+import DebugWorkbench from "../components/DebugWorkbench";
 import TargetInfo from "../components/TargetInfo";
 import { useDetachedPreviewBridge } from "../hooks/useDetachedPreviewBridge";
 import { useOverlayInteraction } from "../hooks/useOverlayInteraction";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
-
-type TabId = "inspector" | "action" | "recognition";
-const TABS: { id: TabId; label: string }[] = [
-  { id: "inspector", label: "座標" },
-  { id: "action", label: "動作" },
-  { id: "recognition", label: "辨識" },
-];
+import type { ActionTestContext } from "../../../api/pipeline";
 
 function PreviewFrame({ mode }: { mode: CaptureMode }) {
   const previewUrl = useCaptureFrameStore((state) => state.frames[mode].previewUrl);
   const setCursor = useOverlayStore((state) => state.setCursor);
   const clearCursor = useOverlayStore((state) => state.clearCursor);
   const setImageDimensions = useOverlayStore((state) => state.setImageDimensions);
-  const interaction = useOverlayInteraction({ onCursorMove: setCursor, onCursorLeave: clearCursor });
+  const interaction = useOverlayInteraction({ onCursorMove: setCursor, onCursorLeave: clearCursor, resetKey: mode });
 
   useEffect(() => {
     if (interaction.lastCoords) {
@@ -37,7 +29,7 @@ function PreviewFrame({ mode }: { mode: CaptureMode }) {
     <div className="preview-page-image-area">
       {interaction.renderSidePanel(!!previewUrl)}
       <div
-        className="preview-page-image-container"
+        className={`preview-page-image-container interaction-${interaction.interactionMode}${interaction.isPanning ? " is-panning" : ""}`}
         ref={interaction.containerRef}
         onMouseMove={interaction.handleMouseMove}
         onMouseDown={interaction.handleMouseDown}
@@ -47,7 +39,17 @@ function PreviewFrame({ mode }: { mode: CaptureMode }) {
       >
         {previewUrl ? (
           <>
-            <img ref={interaction.imgRef} src={previewUrl} alt="預覽" draggable={false} />
+            <img
+              ref={interaction.imgRef}
+              src={previewUrl}
+              alt="預覽"
+              draggable={false}
+              style={interaction.imageStyle}
+              onLoad={(event) => setImageDimensions({
+                width: event.currentTarget.naturalWidth,
+                height: event.currentTarget.naturalHeight,
+              })}
+            />
             {interaction.renderDragRect()}
             {interaction.renderSelectionRect()}
             {interaction.renderRoiRect()}
@@ -60,35 +62,50 @@ function PreviewFrame({ mode }: { mode: CaptureMode }) {
   );
 }
 
-function PreviewTabs({ mode, streaming }: { mode: CaptureMode; streaming: boolean }) {
-  const [activeTab, setActiveTab] = useState<TabId>("inspector");
+function PreviewWorkbench({
+  mode,
+  streaming,
+  actionContext,
+  currentTarget,
+}: {
+  mode: CaptureMode;
+  streaming: boolean;
+  actionContext?: ActionTestContext;
+  currentTarget?: import("../../../api/pipeline").PipelineTarget;
+}) {
   const hasPreview = useCaptureFrameStore((state) => state.frames[mode].previewUrl !== null);
   const captureBuf = useCaptureFrameStore((state) => state.frames[mode].captureBuf);
+  const captureLabel = mode === "screen" ? "Screen" : `Window ${actionContext?.type === "window" && actionContext.capture_area === "client" ? "client" : "frame"}`;
 
   return (
-    <div className={`preview-page-tabs ${!hasPreview ? "preview-page-tabs-hidden" : ""}`}>
-      {hasPreview && (
-        <>
-          <div className="debug-tab-bar">
-            {TABS.map((tab) => (
-              <button key={tab.id} className={`debug-tab-btn ${activeTab === tab.id ? "active" : ""}`} onClick={() => setActiveTab(tab.id)}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="debug-tab-content">
-            {activeTab === "inspector" && <InspectorTab captureMode={mode} />}
-            {activeTab === "action" && <ActionTesterTab />}
-            {activeTab === "recognition" && <RecognitionTab isStreaming={streaming} captureBuf={captureBuf} captureMode={mode} />}
-          </div>
-        </>
-      )}
-    </div>
+    <aside className="preview-page-tabs" aria-label="Debug workspace">
+      <DebugWorkbench
+        context={{ captureMode: mode, isStreaming: streaming, captureBuf, hasFrame: hasPreview, currentTarget, actionContext }}
+        captureControl={{ value: captureLabel, label: captureLabel, readOnly: true }}
+      />
+    </aside>
   );
 }
 
 export default function PreviewPage() {
   const { streaming, captureMode, targetInfo } = useDetachedPreviewBridge();
+  const imageDimensions = useOverlayStore((state) => state.imageDimensions);
+  const actionContext: ActionTestContext | undefined = targetInfo?.targetIndex != null && imageDimensions
+    ? captureMode === "screen"
+      ? {
+          type: "screen",
+          index: targetInfo.targetIndex,
+          frame_width: imageDimensions.width,
+          frame_height: imageDimensions.height,
+        }
+      : {
+          type: "window",
+          hwnd: targetInfo.targetIndex,
+          capture_area: targetInfo.captureArea ?? "frame",
+          frame_width: imageDimensions.width,
+          frame_height: imageDimensions.height,
+        }
+    : undefined;
   return (
     <div className="preview-page">
       <div className="preview-page-header">
@@ -105,11 +122,14 @@ export default function PreviewPage() {
             engine={targetInfo?.engine}
             statusClass={targetInfo?.statusClass}
             statusLabel={targetInfo?.statusLabel}
+            expectedSize={targetInfo?.expectedSize}
+            frameSize={targetInfo?.frameSize}
+            clientSize={targetInfo?.clientSize}
           />
           <PreviewFrame mode={captureMode} />
         </div>
+        <PreviewWorkbench mode={captureMode} streaming={streaming} actionContext={actionContext} currentTarget={targetInfo?.target} />
       </div>
-      <PreviewTabs mode={captureMode} streaming={streaming} />
     </div>
   );
 }

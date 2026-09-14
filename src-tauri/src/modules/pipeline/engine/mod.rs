@@ -13,6 +13,8 @@ pub enum PipelineState {
     Idle,
     Running,
     Paused,
+    Stopping,
+    Stopped,
     Completed,
     Failed(String),
 }
@@ -26,6 +28,9 @@ pub struct PipelineStatus {
     pub elapsed_ms: u64,
     pub step_results: Vec<StepResult>,
     pub original_desktop: Option<String>,
+    pub error: Option<String>,
+    pub attempt_count: usize,
+    pub effective_target: Option<crate::modules::pipeline::models::graph::PipelineTarget>,
 }
 
 pub struct ExecutionContext {
@@ -41,6 +46,7 @@ pub struct ExecutionContext {
     pub user_params: HashMap<String, serde_json::Value>,
     pub start_time: std::time::Instant,
     pub failed: bool,
+    pub failure_error: Option<String>,
     pub save_debug_images: bool,
     pub hwnd: Option<usize>,
 }
@@ -65,6 +71,7 @@ impl ExecutionContext {
             user_params,
             start_time: std::time::Instant::now(),
             failed: false,
+            failure_error: None,
             save_debug_images: false,
             hwnd: None,
         }
@@ -77,6 +84,8 @@ pub struct StepResult {
     pub confidence: f64,
     pub box_region: Option<Region>,
     pub actions_fired: usize,
+    #[serde(default)]
+    pub skipped: bool,
     pub duration_ms: u64,
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,6 +108,9 @@ pub struct RunHandle {
     pub step_results: Arc<Mutex<Vec<StepResult>>>,
     pub start_time: std::time::Instant,
     pub original_desktop: Arc<Mutex<Option<String>>>,
+    pub attempt_count: Arc<Mutex<usize>>,
+    pub effective_target:
+        Arc<Mutex<Option<crate::modules::pipeline::models::graph::PipelineTarget>>>,
 }
 
 impl RunHandle {
@@ -112,12 +124,19 @@ impl RunHandle {
             step_results: Arc::new(Mutex::new(Vec::new())),
             start_time: std::time::Instant::now(),
             original_desktop: Arc::new(Mutex::new(None)),
+            attempt_count: Arc::new(Mutex::new(0)),
+            effective_target: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn stop(&self) {
         if let Ok(mut stop) = self.should_stop.lock() {
             *stop = true;
+        }
+        if let Ok(mut state) = self.state.lock() {
+            if matches!(*state, PipelineState::Running | PipelineState::Paused) {
+                *state = PipelineState::Stopping;
+            }
         }
     }
 
@@ -138,6 +157,12 @@ impl RunHandle {
             .unwrap_or_default();
         let state = self.get_state();
         let original_desktop = self.original_desktop.lock().ok().and_then(|s| s.clone());
+        let attempt_count = self.attempt_count.lock().map(|value| *value).unwrap_or(0);
+        let effective_target = self
+            .effective_target
+            .lock()
+            .ok()
+            .and_then(|value| value.clone());
 
         PipelineStatus {
             run_id: self.run_id.clone(),
@@ -145,6 +170,8 @@ impl RunHandle {
                 PipelineState::Idle => "idle",
                 PipelineState::Running => "running",
                 PipelineState::Paused => "paused",
+                PipelineState::Stopping => "stopping",
+                PipelineState::Stopped => "stopped",
                 PipelineState::Completed => "completed",
                 PipelineState::Failed(_) => "failed",
             }
@@ -154,6 +181,12 @@ impl RunHandle {
             elapsed_ms: self.start_time.elapsed().as_millis() as u64,
             step_results,
             original_desktop,
+            error: match state {
+                PipelineState::Failed(message) => Some(message),
+                _ => None,
+            },
+            attempt_count,
+            effective_target,
         }
     }
 }

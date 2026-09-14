@@ -20,7 +20,6 @@
       "actions": [
         {
           "type": "Scroll",
-          "target": true,
           "target_offset": [
             0,
             100,

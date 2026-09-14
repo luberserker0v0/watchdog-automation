@@ -1,5 +1,5 @@
 use super::PluginError;
-use crate::modules::pipeline::models::action::Target;
+use crate::modules::pipeline::models::action::{Action, Target};
 use crate::modules::pipeline::models::graph::CaptureArea;
 use crate::modules::pipeline::models::recognizer::Region;
 use std::collections::HashMap;
@@ -20,28 +20,8 @@ pub fn resolve_recognition_roi(
         ));
     }
 
-    let Some([x, y, width, height]) = roi else {
-        return Ok((0, 0, frame_width, frame_height));
-    };
-    if *x == 0 && *y == 0 && *width == 0 && *height == 0 {
-        return Ok((0, 0, frame_width, frame_height));
-    }
-    if *x < 0 || *y < 0 || *width <= 0 || *height <= 0 {
-        return Err(PluginError::RecognitionFailed(format!(
-            "ROI must be 0,0,0,0 or positive x,y,width,height; received {x},{y},{width},{height}"
-        )));
-    }
-
-    let x = *x as u32;
-    let y = *y as u32;
-    if x >= frame_width || y >= frame_height {
-        return Err(PluginError::RecognitionFailed(format!(
-            "ROI origin {x},{y} is outside frame {frame_width}x{frame_height}"
-        )));
-    }
-    let width = (*width as u32).min(frame_width - x);
-    let height = (*height as u32).min(frame_height - y);
-    Ok((x, y, width, height))
+    resolve_recognition_roi_with_offset(roi, None, frame_width, frame_height)
+        .map(|[x, y, width, height]| (x as u32, y as u32, width as u32, height as u32))
 }
 
 pub fn resolve_recognition_roi_with_offset(
@@ -50,35 +30,59 @@ pub fn resolve_recognition_roi_with_offset(
     frame_width: u32,
     frame_height: u32,
 ) -> Result<[i32; 4], PluginError> {
-    let (x, y, width, height) = resolve_recognition_roi(roi, frame_width, frame_height)?;
+    if frame_width == 0 || frame_height == 0 {
+        return Err(PluginError::RecognitionFailed(
+            "Captured frame is empty".to_string(),
+        ));
+    }
+
+    let requested = match roi {
+        None | Some([0, 0, 0, 0]) => [0_i64, 0, frame_width as i64, frame_height as i64],
+        Some([x, y, width, height]) => {
+            if *width <= 0 || *height <= 0 {
+                return Err(PluginError::RecognitionFailed(format!(
+                    "ROI width and height must be positive; received {x},{y},{width},{height}"
+                )));
+            }
+            [*x as i64, *y as i64, *width as i64, *height as i64]
+        }
+    };
     let [offset_x, offset_y, offset_width, offset_height] =
         roi_offset.copied().unwrap_or([0, 0, 0, 0]);
     let adjusted = [
-        x as i64 + offset_x as i64,
-        y as i64 + offset_y as i64,
-        width as i64 + offset_width as i64,
-        height as i64 + offset_height as i64,
+        requested[0] + offset_x as i64,
+        requested[1] + offset_y as i64,
+        requested[2] + offset_width as i64,
+        requested[3] + offset_height as i64,
     ];
-    if adjusted[0] < 0
-        || adjusted[1] < 0
-        || adjusted[2] <= 0
-        || adjusted[3] <= 0
-        || adjusted.iter().any(|value| *value > i32::MAX as i64)
-    {
+    if adjusted[2] <= 0 || adjusted[3] <= 0 {
         return Err(PluginError::RecognitionFailed(format!(
             "ROI plus roi_offset is invalid: {},{},{},{}",
             adjusted[0], adjusted[1], adjusted[2], adjusted[3]
         )));
     }
-    let adjusted = [
-        adjusted[0] as i32,
-        adjusted[1] as i32,
-        adjusted[2] as i32,
-        adjusted[3] as i32,
-    ];
-    let (x, y, width, height) =
-        resolve_recognition_roi(Some(&adjusted), frame_width, frame_height)?;
-    Ok([x as i32, y as i32, width as i32, height as i32])
+    let right = adjusted[0]
+        .checked_add(adjusted[2])
+        .ok_or_else(|| PluginError::RecognitionFailed("ROI right edge overflowed".to_string()))?;
+    let bottom = adjusted[1]
+        .checked_add(adjusted[3])
+        .ok_or_else(|| PluginError::RecognitionFailed("ROI bottom edge overflowed".to_string()))?;
+    let left = adjusted[0].max(0);
+    let top = adjusted[1].max(0);
+    let right = right.min(frame_width as i64);
+    let bottom = bottom.min(frame_height as i64);
+    if left >= right || top >= bottom {
+        return Err(PluginError::RecognitionFailed(format!(
+            "ROI {},{},{},{} does not overlap frame {}x{}",
+            adjusted[0], adjusted[1], adjusted[2], adjusted[3], frame_width, frame_height
+        )));
+    }
+    Ok([
+        left as i32,
+        top as i32,
+        (right - left) as i32,
+        (bottom - top) as i32,
+    ])
 }
 
 /// Resolves an action target after applying its four-component offset.
@@ -136,8 +140,16 @@ pub fn resolve_target_region_with_offset(
     };
 
     if let Some([offset_x, offset_y, offset_width, offset_height]) = target_offset {
-        region.x = region.x.saturating_add(*offset_x);
-        region.y = region.y.saturating_add(*offset_y);
+        region.x = region.x.checked_add(*offset_x).ok_or_else(|| {
+            PluginError::ActionFailed(
+                "target_offset overflowed the target x coordinate".to_string(),
+            )
+        })?;
+        region.y = region.y.checked_add(*offset_y).ok_or_else(|| {
+            PluginError::ActionFailed(
+                "target_offset overflowed the target y coordinate".to_string(),
+            )
+        })?;
         if !is_point {
             let width = region.width as i64 + *offset_width as i64;
             let height = region.height as i64 + *offset_height as i64;
@@ -171,6 +183,296 @@ pub struct CaptureBounds {
     pub top: i32,
     pub width: u32,
     pub height: u32,
+}
+
+/// Intersects recognizer output with the encoded frame. Recognition geometry is
+/// safe to clip; action geometry deliberately uses strict validation below.
+pub fn clip_region_to_frame(
+    region: &Region,
+    frame_width: u32,
+    frame_height: u32,
+) -> Option<Region> {
+    if frame_width == 0 || frame_height == 0 || region.width == 0 || region.height == 0 {
+        return None;
+    }
+    let left = (region.x as i64).max(0);
+    let top = (region.y as i64).max(0);
+    let right = (region.x as i64 + region.width as i64).min(frame_width as i64);
+    let bottom = (region.y as i64 + region.height as i64).min(frame_height as i64);
+    (left < right && top < bottom).then_some(Region {
+        x: left as i32,
+        y: top as i32,
+        width: (right - left) as u32,
+        height: (bottom - top) as u32,
+    })
+}
+
+fn region_edges(region: &Region) -> Result<(i64, i64, i64, i64), PluginError> {
+    let left = region.x as i64;
+    let top = region.y as i64;
+    let right = left.checked_add(region.width as i64).ok_or_else(|| {
+        PluginError::ActionFailed("Target region right edge overflowed".to_string())
+    })?;
+    let bottom = top.checked_add(region.height as i64).ok_or_else(|| {
+        PluginError::ActionFailed("Target region bottom edge overflowed".to_string())
+    })?;
+    Ok((left, top, right, bottom))
+}
+
+/// Requires an action target to remain completely inside a capture coordinate space.
+/// Zero-sized regions are points and use half-open bounds (`0 <= x < width`).
+pub fn validate_local_action_region(
+    region: &Region,
+    frame_width: u32,
+    frame_height: u32,
+) -> Result<(), PluginError> {
+    if frame_width == 0 || frame_height == 0 {
+        return Err(PluginError::ActionFailed(
+            "Captured frame is empty".to_string(),
+        ));
+    }
+    let (left, top, right, bottom) = region_edges(region)?;
+    let point = region.width == 0 && region.height == 0;
+    let inside = if point {
+        left >= 0 && top >= 0 && left < frame_width as i64 && top < frame_height as i64
+    } else {
+        region.width > 0
+            && region.height > 0
+            && left >= 0
+            && top >= 0
+            && right <= frame_width as i64
+            && bottom <= frame_height as i64
+    };
+    if inside {
+        Ok(())
+    } else {
+        Err(PluginError::ActionFailed(format!(
+            "Target {},{},{},{} is outside capture frame {}x{} (valid x: 0..{}, y: 0..{})",
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            frame_width,
+            frame_height,
+            frame_width - 1,
+            frame_height - 1
+        )))
+    }
+}
+
+pub fn action_anchor(region: &Region) -> Result<Region, PluginError> {
+    let x = i32::try_from(region.x as i64 + region.width as i64 / 2).map_err(|_| {
+        PluginError::ActionFailed("Resolved target center x overflowed i32".to_string())
+    })?;
+    let y = i32::try_from(region.y as i64 + region.height as i64 / 2).map_err(|_| {
+        PluginError::ActionFailed("Resolved target center y overflowed i32".to_string())
+    })?;
+    Ok(Region {
+        x,
+        y,
+        width: 0,
+        height: 0,
+    })
+}
+
+pub fn validate_screen_action_region(
+    region: &Region,
+    bounds: CaptureBounds,
+) -> Result<(), PluginError> {
+    let (left, top, right, bottom) = region_edges(region)?;
+    let bound_right = bounds.left as i64 + bounds.width as i64;
+    let bound_bottom = bounds.top as i64 + bounds.height as i64;
+    let point = region.width == 0 && region.height == 0;
+    let inside = if point {
+        left >= bounds.left as i64
+            && top >= bounds.top as i64
+            && left < bound_right
+            && top < bound_bottom
+    } else {
+        region.width > 0
+            && region.height > 0
+            && left >= bounds.left as i64
+            && top >= bounds.top as i64
+            && right <= bound_right
+            && bottom <= bound_bottom
+    };
+    if inside {
+        Ok(())
+    } else {
+        Err(PluginError::ActionFailed(format!(
+            "Mapped target {},{},{},{} is outside screen bounds {},{},{},{}",
+            region.x,
+            region.y,
+            region.width,
+            region.height,
+            bounds.left,
+            bounds.top,
+            bounds.width,
+            bounds.height
+        )))
+    }
+}
+
+fn map_axis(
+    value: i64,
+    source_size: u32,
+    target_origin: i32,
+    target_size: u32,
+) -> Result<i32, PluginError> {
+    if source_size == 0 || target_size == 0 {
+        return Err(PluginError::ActionFailed(
+            "Cannot map through empty bounds".to_string(),
+        ));
+    }
+    let numerator = value as i128 * target_size as i128;
+    let mapped =
+        target_origin as i128 + (numerator + source_size as i128 / 2) / source_size as i128;
+    i32::try_from(mapped)
+        .map_err(|_| PluginError::ActionFailed("Mapped coordinate overflowed i32".to_string()))
+}
+
+pub fn map_region_checked(
+    region: &Region,
+    frame_width: u32,
+    frame_height: u32,
+    bounds: CaptureBounds,
+) -> Result<Region, PluginError> {
+    validate_local_action_region(region, frame_width, frame_height)?;
+    let (left, top, right, bottom) = region_edges(region)?;
+    let mapped_left = map_axis(left, frame_width, bounds.left, bounds.width)?;
+    let mapped_top = map_axis(top, frame_height, bounds.top, bounds.height)?;
+    let mapped_right = map_axis(right, frame_width, bounds.left, bounds.width)?;
+    let mapped_bottom = map_axis(bottom, frame_height, bounds.top, bounds.height)?;
+    if (region.width > 0 && mapped_right <= mapped_left)
+        || (region.height > 0 && mapped_bottom <= mapped_top)
+    {
+        return Err(PluginError::ActionFailed(
+            "Target region collapsed while mapping to screen pixels".to_string(),
+        ));
+    }
+    let mapped = Region {
+        x: mapped_left,
+        y: mapped_top,
+        width: mapped_right.abs_diff(mapped_left),
+        height: mapped_bottom.abs_diff(mapped_top),
+    };
+    validate_screen_action_region(&mapped, bounds)?;
+    Ok(mapped)
+}
+
+fn map_action_target_checked(
+    target: &Target,
+    offset: Option<&[i32; 4]>,
+    box_region: Option<&Region>,
+    prev_regions: &HashMap<String, Region>,
+    frame_width: u32,
+    frame_height: u32,
+    bounds: CaptureBounds,
+) -> Result<Target, PluginError> {
+    let local = resolve_target_region_with_offset(target, offset, box_region, prev_regions)?;
+    // Built-in pointer actions execute at the resolved region's centre. The
+    // region itself may extend beyond an image edge after an offset, but that is
+    // harmless as long as the actual input anchor remains inside the frame.
+    // Validate and map the primitive we really send to the OS, not its visual
+    // source rectangle.
+    let anchor = action_anchor(&local)?;
+    let mapped = map_region_checked(&anchor, frame_width, frame_height, bounds)?;
+    Ok(Target::Coordinate([mapped.x, mapped.y]))
+}
+
+/// Resolves all built-in positional action targets in capture-local pixels,
+/// validates them, and converts them to physical screen pixels.
+pub fn map_action_checked(
+    action: &Action,
+    box_region: Option<&Region>,
+    prev_regions: &HashMap<String, Region>,
+    frame_width: u32,
+    frame_height: u32,
+    bounds: CaptureBounds,
+) -> Result<Action, PluginError> {
+    Ok(match action {
+        Action::Click {
+            target,
+            target_offset,
+        } => Action::Click {
+            target: map_action_target_checked(
+                target,
+                target_offset.as_ref(),
+                box_region,
+                prev_regions,
+                frame_width,
+                frame_height,
+                bounds,
+            )?,
+            target_offset: None,
+        },
+        Action::LongPress {
+            target,
+            target_offset,
+            duration,
+        } => Action::LongPress {
+            target: map_action_target_checked(
+                target,
+                target_offset.as_ref(),
+                box_region,
+                prev_regions,
+                frame_width,
+                frame_height,
+                bounds,
+            )?,
+            target_offset: None,
+            duration: *duration,
+        },
+        Action::Swipe {
+            begin,
+            begin_offset,
+            end,
+            end_offset,
+            duration,
+        } => Action::Swipe {
+            begin: map_action_target_checked(
+                begin,
+                begin_offset.as_ref(),
+                box_region,
+                prev_regions,
+                frame_width,
+                frame_height,
+                bounds,
+            )?,
+            begin_offset: None,
+            end: map_action_target_checked(
+                end,
+                end_offset.as_ref(),
+                box_region,
+                prev_regions,
+                frame_width,
+                frame_height,
+                bounds,
+            )?,
+            end_offset: None,
+            duration: *duration,
+        },
+        Action::Scroll {
+            target,
+            target_offset,
+            dx,
+            dy,
+        } => Action::Scroll {
+            target: map_action_target_checked(
+                target,
+                target_offset.as_ref(),
+                box_region,
+                prev_regions,
+                frame_width,
+                frame_height,
+                bounds,
+            )?,
+            target_offset: None,
+            dx: *dx,
+            dy: *dy,
+        },
+        other => other.clone(),
+    })
 }
 
 pub fn map_region(
@@ -356,6 +658,16 @@ mod coordinate_tests {
     }
 
     #[test]
+    fn recognition_roi_clips_every_edge_and_rejects_no_overlap() {
+        assert_eq!(
+            resolve_recognition_roi(Some(&[-20, -10, 50, 40]), 640, 480).unwrap(),
+            (0, 0, 30, 30)
+        );
+        assert!(resolve_recognition_roi(Some(&[-100, 10, 20, 20]), 640, 480).is_err());
+        assert!(resolve_recognition_roi(Some(&[640, 10, 20, 20]), 640, 480).is_err());
+    }
+
+    #[test]
     fn roi_offset_changes_the_effective_recognition_scope() {
         assert_eq!(
             resolve_recognition_roi_with_offset(
@@ -449,6 +761,140 @@ mod coordinate_tests {
             }
         );
         assert_eq!(mapped.center(), (-80, 140));
+    }
+
+    #[test]
+    fn checked_action_mapping_rejects_points_and_regions_outside_frame() {
+        let bounds = CaptureBounds {
+            left: -200,
+            top: 80,
+            width: 1280,
+            height: 720,
+        };
+        assert!(map_region_checked(
+            &Region {
+                x: 1280,
+                y: 10,
+                width: 0,
+                height: 0
+            },
+            1280,
+            720,
+            bounds,
+        )
+        .is_err());
+        assert!(map_region_checked(
+            &Region {
+                x: 1200,
+                y: 650,
+                width: 100,
+                height: 80
+            },
+            1280,
+            720,
+            bounds,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn checked_action_mapping_supports_negative_monitor_origins() {
+        let mapped = map_region_checked(
+            &Region {
+                x: 640,
+                y: 360,
+                width: 0,
+                height: 0,
+            },
+            1280,
+            720,
+            CaptureBounds {
+                left: -1280,
+                top: -100,
+                width: 1280,
+                height: 720,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            mapped,
+            Region {
+                x: -640,
+                y: 260,
+                width: 0,
+                height: 0
+            }
+        );
+    }
+
+    #[test]
+    fn swipe_allows_shifted_source_region_when_actual_anchor_is_inside() {
+        let action = Action::Swipe {
+            begin: Target::RecognizedBool(true),
+            begin_offset: Some([-100, 0, 0, 0]),
+            end: Target::RecognizedBool(true),
+            end_offset: Some([0, 100, 0, 0]),
+            duration: 200,
+        };
+        let mapped = map_action_checked(
+            &action,
+            Some(&Region {
+                x: 64,
+                y: 10,
+                width: 453,
+                height: 358,
+            }),
+            &HashMap::new(),
+            500,
+            600,
+            CaptureBounds {
+                left: 0,
+                top: 0,
+                width: 500,
+                height: 600,
+            },
+        )
+        .unwrap();
+        match mapped {
+            Action::Swipe { begin, end, .. } => {
+                assert!(matches!(begin, Target::Coordinate([190, 189])));
+                assert!(matches!(end, Target::Coordinate([290, 289])));
+            }
+            _ => panic!("expected swipe"),
+        }
+    }
+
+    #[test]
+    fn action_rejects_shifted_region_when_its_anchor_is_outside() {
+        let action = Action::Click {
+            target: Target::Region([-500, 10, 453, 358]),
+            target_offset: None,
+        };
+        assert!(map_action_checked(
+            &action,
+            None,
+            &HashMap::new(),
+            500,
+            600,
+            CaptureBounds {
+                left: 0,
+                top: 0,
+                width: 500,
+                height: 600,
+            },
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn target_offset_overflow_is_an_error_instead_of_saturating() {
+        let result = resolve_target_region_with_offset(
+            &Target::Coordinate([i32::MAX, 10]),
+            Some(&[1, 0, 0, 0]),
+            None,
+            &HashMap::new(),
+        );
+        assert!(result.is_err());
     }
 
     #[test]

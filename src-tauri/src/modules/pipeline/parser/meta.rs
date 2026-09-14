@@ -1,4 +1,5 @@
 use crate::modules::pipeline::models::edge::EdgeType;
+use crate::modules::pipeline::models::graph::PipelineTarget;
 use crate::modules::pipeline::models::node::NodeConfig;
 use std::collections::HashMap;
 
@@ -7,6 +8,8 @@ use std::collections::HashMap;
 pub struct MetadataFile {
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
     pub schema: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<PipelineTarget>,
     #[serde(default)]
     pub nodes: HashMap<String, NodeConfig>,
     #[serde(default)]

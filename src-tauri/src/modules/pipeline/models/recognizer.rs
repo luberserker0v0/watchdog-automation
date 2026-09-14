@@ -124,6 +124,12 @@ pub struct MatchResult {
     pub text: Option<String>,
     #[serde(default)]
     pub candidates: Vec<MatchCandidate>,
+    /// Number of threshold-passing detections before recognizer-specific
+    /// consolidation such as template overlap suppression.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_candidate_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distinct_candidate_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selection_error: Option<String>,
 }
@@ -136,6 +142,8 @@ impl Default for MatchResult {
             box_region: None,
             text: None,
             candidates: Vec::new(),
+            raw_candidate_count: None,
+            distinct_candidate_count: None,
             selection_error: None,
         }
     }
@@ -202,6 +210,26 @@ pub fn select_candidate(
 
     candidates[selection.index].selected = true;
     (Some(candidates[selection.index].clone()), candidates, None)
+}
+
+pub fn limit_debug_candidates(candidates: &mut Vec<MatchCandidate>, maximum: usize) {
+    if candidates.len() <= maximum {
+        return;
+    }
+    let selected = candidates
+        .iter()
+        .find(|candidate| candidate.selected)
+        .cloned();
+    candidates.truncate(maximum);
+    if let Some(selected) = selected {
+        if !candidates.iter().any(|candidate| candidate.selected) {
+            if let Some(last) = candidates.last_mut() {
+                *last = selected;
+            } else if maximum > 0 {
+                candidates.push(selected);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

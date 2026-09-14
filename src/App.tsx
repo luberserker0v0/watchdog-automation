@@ -10,10 +10,13 @@ import NodeTestView from "./modules/pipeline/views/NodeTestView";
 import ExecutionLog from "./modules/pipeline/components/ExecutionLog";
 import PreviewPage from "./modules/capture/views/PreviewPage";
 import SettingsView from "./modules/settings/views/SettingsView";
+import { useCaptureController } from "./modules/capture/hooks/useCaptureController";
 import "./modules/core/styles/sidebar.css";
 import "./App.css";
 
 function SplitLayout() {
+  const capturePanelOpen = useUiStore((state) => state.capturePanelOpen);
+  const capturePanelVisible = usePreferencesStore((state) => state.capturePanelVisible);
   return (
     <ResizableSplit
       left={<>
@@ -21,6 +24,8 @@ function SplitLayout() {
         <ExecutionLog />
       </>}
       right={<CaptureView />}
+      rightCollapsed={!capturePanelOpen}
+      rightHidden={!capturePanelVisible}
     />
   );
 }
@@ -51,6 +56,7 @@ function MainContent() {
 function App() {
   const isPreview = window.location.hash === "#preview";
   const recognitionDevice = usePreferencesStore((state) => state.recognitionDevice);
+  useCaptureController(!isPreview);
 
   useEffect(() => {
     if (isPreview) return;

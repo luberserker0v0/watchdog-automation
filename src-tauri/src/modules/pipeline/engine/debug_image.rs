@@ -32,6 +32,7 @@ const COLOR_FOCUS_ROI: Rgb<u8> = Rgb([255, 184, 0]);
 const COLOR_BOX: Rgb<u8> = Rgb([0, 255, 0]);
 const COLOR_TARGET: Rgb<u8> = Rgb([0, 200, 255]);
 const COLOR_DARK_BG: Rgb<u8> = Rgb([30, 30, 30]);
+const MAX_ADDITIONAL_CANDIDATE_OVERLAYS: usize = 32;
 
 fn rank_color(rank: usize) -> Rgb<u8> {
     let (r, g, b) = RANK_COLORS.get(rank).copied().unwrap_or(RANK_COLORS[6]);
@@ -77,6 +78,29 @@ fn format_action_labels(actions: &[Action]) -> String {
         .join(" -> ")
 }
 
+pub struct DebugImageContext {
+    pub attempt: usize,
+    pub frame_sequence: u64,
+    pub capture_target: String,
+    pub capture_area: String,
+    pub actions_run_afterward: bool,
+}
+
+fn debug_image_filename(
+    node_id: &str,
+    step: usize,
+    timestamp: &str,
+    context: Option<&DebugImageContext>,
+) -> String {
+    match context {
+        Some(context) => format!(
+            "{}_s{}_a{}_f{}_{}.jpg",
+            node_id, step, context.attempt, context.frame_sequence, timestamp
+        ),
+        None => format!("{}_{}.jpg", node_id, timestamp),
+    }
+}
+
 pub fn save_debug_image(
     screenshot: &DynamicImage,
     node_id: &str,
@@ -86,6 +110,7 @@ pub fn save_debug_image(
     match_result: &MatchResult,
     actions: &[Action],
     recognized_regions: &HashMap<String, crate::modules::pipeline::models::recognizer::Region>,
+    context: Option<&DebugImageContext>,
 ) -> Result<(), String> {
     let src = screenshot.to_rgb8();
     let original_w = src.width();
@@ -106,10 +131,26 @@ pub fn save_debug_image(
     .unwrap_or((0, 0, original_w, src.height()));
     draw_focus_roi(&mut img, focus_roi);
 
-    // Candidate rectangles use rank colors and are independent of the amber
-    // configured ROI border.
-    for candidate in &match_result.candidates {
+    // Keep the screenshot readable even when a permissive matcher returns many
+    // objects. Draw representative unselected candidates first and the selected
+    // candidate last so it can never be hidden by another outline.
+    let mut drawn_candidate_count = 0usize;
+    for candidate in match_result
+        .candidates
+        .iter()
+        .filter(|candidate| !candidate.selected)
+        .take(MAX_ADDITIONAL_CANDIDATE_OVERLAYS)
+    {
         draw_roi_border(&mut img, &candidate, rank_color(candidate.rank));
+        drawn_candidate_count += 1;
+    }
+    if let Some(selected) = match_result
+        .candidates
+        .iter()
+        .find(|candidate| candidate.selected)
+    {
+        draw_roi_border(&mut img, selected, COLOR_BOX);
+        drawn_candidate_count += 1;
     }
 
     // Box is the selected recognition result; Target is the action geometry
@@ -135,17 +176,20 @@ pub fn save_debug_image(
         recognition,
         focus_roi,
         match_result,
+        drawn_candidate_count,
         &action_targets,
         actions,
         step,
+        node_id,
+        context,
     );
 
     // Save as JPEG
     let dir = debug_visions_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create debug dir: {}", e))?;
 
-    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("{}_{}.jpg", node_id, timestamp);
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
+    let filename = debug_image_filename(node_id, step, &timestamp.to_string(), context);
     let path = dir.join(&filename);
 
     let jpeg_bytes = turbojpeg::compress_image(&img, 80, turbojpeg::Subsamp::None)
@@ -205,12 +249,26 @@ fn draw_action_symbol(
     box_region: Option<&crate::modules::pipeline::models::recognizer::Region>,
     recognized_regions: &HashMap<String, crate::modules::pipeline::models::recognizer::Region>,
 ) -> Vec<crate::modules::pipeline::models::recognizer::Region> {
-    use crate::modules::pipeline::plugins::shared::resolve_target_region_with_offset;
+    use crate::modules::pipeline::plugins::shared::{
+        action_anchor, resolve_target_region_with_offset, validate_local_action_region,
+    };
     let mut targets = Vec::new();
     let mut resolve = |target, offset| {
         resolve_target_region_with_offset(target, offset, box_region, recognized_regions)
             .ok()
-            .inspect(|region| draw_region_border(img, region, COLOR_TARGET, 2))
+            .inspect(|region| {
+                let color = if action_anchor(region)
+                    .and_then(|anchor| {
+                        validate_local_action_region(&anchor, img.width(), img.height())
+                    })
+                    .is_ok()
+                {
+                    COLOR_TARGET
+                } else {
+                    COLOR_RED
+                };
+                draw_region_border(img, region, color, 2);
+            })
     };
     match action {
         Action::Click {
@@ -508,9 +566,12 @@ fn draw_info_panel(
     recognition: &Recognition,
     focus_roi: (u32, u32, u32, u32),
     match_result: &MatchResult,
+    drawn_candidate_count: usize,
     action_targets: &[crate::modules::pipeline::models::recognizer::Region],
     actions: &[Action],
     step: usize,
+    node_id: &str,
+    context: Option<&DebugImageContext>,
 ) {
     let panel_w = 200;
     let panel_h = img.height() as i32;
@@ -561,13 +622,52 @@ fn draw_info_panel(
     };
     draw_text_line(img, px + 8, py + 80, &target_label, COLOR_TARGET);
 
-    // Candidates count (line 5)
-    let cand_label = format!("{} candidates", match_result.candidates.len());
-    draw_text_line(img, px + 8, py + 100, &cand_label, COLOR_WHITE);
+    let raw_count = match_result
+        .raw_candidate_count
+        .unwrap_or(match_result.candidates.len());
+    draw_text_line(
+        img,
+        px + 8,
+        py + 100,
+        &format!("RAW {}", raw_count),
+        COLOR_WHITE,
+    );
+    draw_text_line(
+        img,
+        px + 8,
+        py + 120,
+        &format!(
+            "DISTINCT {}",
+            match_result
+                .distinct_candidate_count
+                .unwrap_or(match_result.candidates.len())
+        ),
+        COLOR_WHITE,
+    );
+    let overlay_label = if drawn_candidate_count < match_result.candidates.len() {
+        format!(
+            "DRAWN {}/{} LIMITED",
+            drawn_candidate_count,
+            match_result.candidates.len()
+        )
+    } else {
+        format!(
+            "DRAWN {}/{}",
+            drawn_candidate_count,
+            match_result.candidates.len()
+        )
+    };
+    draw_text_line(img, px + 8, py + 140, &overlay_label, COLOR_WHITE);
 
-    // Match status (line 6)
+    // Match status
+    let selected_rank = match_result
+        .candidates
+        .iter()
+        .find(|candidate| candidate.selected)
+        .map(|candidate| format!(" #{}", candidate.rank))
+        .unwrap_or_default();
     let match_label = if match_result.matched {
-        format!("YES ({:.3})", match_result.confidence)
+        format!("YES{} ({:.3})", selected_rank, match_result.confidence)
     } else {
         format!("NO ({:.3})", match_result.confidence)
     };
@@ -576,15 +676,53 @@ fn draw_info_panel(
     } else {
         COLOR_RED
     };
-    draw_text_line(img, px + 8, py + 120, &match_label, match_color);
+    draw_text_line(img, px + 8, py + 160, &match_label, match_color);
 
     // Action (line 7)
     let action_label = format_action_labels(actions);
-    draw_text_line(img, px + 8, py + 140, &action_label, COLOR_YELLOW);
+    draw_text_line(img, px + 8, py + 180, &action_label, COLOR_YELLOW);
 
     // Step number (line 8)
     let step_label = format!("Step #{}", step);
-    draw_text_line(img, px + 8, py + 160, &step_label, COLOR_WHITE);
+    draw_text_line(img, px + 8, py + 200, &step_label, COLOR_WHITE);
+
+    draw_text_line(
+        img,
+        px + 8,
+        py + 220,
+        &format!("Node {}", node_id),
+        COLOR_WHITE,
+    );
+    if let Some(context) = context {
+        draw_text_line(
+            img,
+            px + 8,
+            py + 240,
+            &format!(
+                "Attempt {} Frame {}",
+                context.attempt, context.frame_sequence
+            ),
+            COLOR_WHITE,
+        );
+        draw_text_line(
+            img,
+            px + 8,
+            py + 260,
+            &format!("{} {}", context.capture_target, context.capture_area),
+            COLOR_WHITE,
+        );
+        draw_text_line(
+            img,
+            px + 8,
+            py + 280,
+            if context.actions_run_afterward {
+                "Actions run afterward"
+            } else {
+                "No actions afterward"
+            },
+            COLOR_YELLOW,
+        );
+    }
 }
 
 /// Simple 5x7 bitmap font for ASCII characters (0-9, A-Z, basic symbols)
@@ -971,5 +1109,21 @@ mod tests {
         assert_eq!(targets[0].center(), (140, 158));
         assert_eq!(*image.get_pixel(140, 158), COLOR_CYAN);
         assert_eq!(format_action_labels(&actions), "Click -> InputText");
+    }
+
+    #[test]
+    fn debug_filename_distinguishes_every_node_attempt_and_frame() {
+        let context = DebugImageContext {
+            attempt: 2,
+            frame_sequence: 17,
+            capture_target: "Window 42".to_string(),
+            capture_area: "client".to_string(),
+            actions_run_afterward: false,
+        };
+
+        assert_eq!(
+            debug_image_filename("InputAccount", 4, "20260914_010203_456", Some(&context)),
+            "InputAccount_s4_a2_f17_20260914_010203_456.jpg"
+        );
     }
 }

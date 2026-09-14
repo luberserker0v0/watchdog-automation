@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "preview",
   "description": "Capability for the preview window",
-  "windows": ["preview-*"],
+  "windows": ["capture-preview"],
   "permissions": [
     "core:default",
     "core:event:default",

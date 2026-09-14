@@ -9,6 +9,7 @@ flowchart TD
     ClickNotification["ClickNotification"]
     SwipeCards["SwipeCards"]
     ScrollList["ScrollList"]
+    ScrollPage["ScrollPage"]
     PressDelete["PressDelete"]
     ClickRefresh["ClickRefresh"]
     Done["Done"]
@@ -22,7 +23,8 @@ flowchart TD
     VerifySuccess --> ClickNotification
     ClickNotification --> SwipeCards
     SwipeCards --> ScrollList
-    ScrollList --> PressDelete
+    ScrollList --> ScrollPage
+    ScrollPage --> PressDelete
     PressDelete --> ClickRefresh
     ClickRefresh --> Done
 ```

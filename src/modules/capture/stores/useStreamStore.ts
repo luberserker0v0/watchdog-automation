@@ -6,6 +6,7 @@ import {
   stopStream,
   getStreamStatus,
   type StreamStoppedPayload,
+  type StreamFramePayload,
 } from "../../../api/stream";
 import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
 import { useScreenStore } from "./useScreenStore";
@@ -19,11 +20,17 @@ interface StreamState {
   actualFps: number;
   startTime: number | null;
   elapsedTime: string;
+  captureOwner: string;
+  captureOwnerId: string | null;
+  sessionId: number;
+  frameSize: [number, number] | null;
+  clientSize: [number, number] | null;
+  setCaptureSizes: (frameSize: [number, number] | null, clientSize: [number, number] | null) => void;
   setFps: (fps: number) => void;
   start: (captureAreaOverride?: CaptureArea) => Promise<void>;
   stop: () => Promise<void>;
   refreshStatus: () => Promise<void>;
-  handleBackendStopped: (targetType: CaptureMode) => void;
+  handleBackendStopped: (payload: StreamStoppedPayload | CaptureMode) => void;
 }
 
 let unlistenStream: (() => void) | null = null;
@@ -69,6 +76,32 @@ function stopFpsTimer() {
   lastFpsTime = 0;
 }
 
+async function ensureStreamListeners(get: () => StreamState) {
+  if (!unlistenStopped) {
+    unlistenStopped = await listen<StreamStoppedPayload>("stream-stopped", (event) => {
+      get().handleBackendStopped(event.payload);
+    });
+  }
+  if (!unlistenStream) {
+    unlistenStream = await listen<StreamFramePayload>("stream-frame", (event) => {
+      if (get().sessionId && event.payload?.session_id !== get().sessionId) return;
+      frameCount++;
+      const mode = event.payload?.target_type ?? usePreferencesStore.getState().mode;
+      const frameSize: [number, number] | null = event.payload?.frame_width && event.payload?.frame_height
+        ? [event.payload.frame_width, event.payload.frame_height]
+        : null;
+      const clientSize: [number, number] | null = event.payload?.client_width && event.payload?.client_height
+        ? [event.payload.client_width, event.payload.client_height]
+        : null;
+      get().setCaptureSizes(frameSize, clientSize);
+      useCaptureFrameStore.getState().setStreamFrameUrl(
+        mode,
+        "http://watchdog.localhost/frame?t=" + Date.now(),
+      );
+    });
+  }
+}
+
 export const useStreamStore = create<StreamState>()(
   persist(
     (set, get) => ({
@@ -77,6 +110,13 @@ export const useStreamStore = create<StreamState>()(
       actualFps: 0,
       startTime: null,
       elapsedTime: "00:00",
+      captureOwner: "none",
+      captureOwnerId: null,
+      sessionId: 0,
+      frameSize: null,
+      clientSize: null,
+
+      setCaptureSizes: (frameSize, clientSize) => set({ frameSize, clientSize }),
 
       setFps: async (fps) => {
         set({ fps });
@@ -90,11 +130,7 @@ export const useStreamStore = create<StreamState>()(
         const { fps } = get();
         const mode = usePreferencesStore.getState().mode;
 
-        if (!unlistenStopped) {
-          unlistenStopped = await listen<StreamStoppedPayload>("stream-stopped", (event) => {
-            get().handleBackendStopped(event.payload.target_type);
-          });
-        }
+        await ensureStreamListeners(get);
 
         let targetType: string;
         let targetIndex: number;
@@ -122,7 +158,7 @@ export const useStreamStore = create<StreamState>()(
             : "frame";
           await startStream(fps, targetType, targetIndex, targetHwnd, engine, captureArea);
           const now = Date.now();
-          set({ isStreaming: true, startTime: now, elapsedTime: "00:00", actualFps: 0 });
+          set({ isStreaming: true, startTime: now, elapsedTime: "00:00", actualFps: 0, captureOwner: "manual", captureOwnerId: null, frameSize: null, clientSize: null });
 
           elapsedTimer = setInterval(() => {
             const { startTime } = get();
@@ -135,15 +171,6 @@ export const useStreamStore = create<StreamState>()(
             startFpsTimer(set);
           }
 
-          if (!unlistenStream) {
-            unlistenStream = await listen<void>("stream-frame", () => {
-              frameCount++;
-
-              const url = `http://watchdog.localhost/frame?t=${Date.now()}`;
-              const mode = usePreferencesStore.getState().mode;
-              useCaptureFrameStore.getState().setStreamFrameUrl(mode, url);
-            });
-          }
         } catch (e) {
           console.error("Stream start failed:", e);
         }
@@ -152,7 +179,7 @@ export const useStreamStore = create<StreamState>()(
       stop: async () => {
         try {
           await stopStream();
-          set({ isStreaming: false, startTime: null, elapsedTime: "00:00", actualFps: 0 });
+          set({ isStreaming: false, startTime: null, elapsedTime: "00:00", actualFps: 0, captureOwner: "none", captureOwnerId: null, sessionId: 0, frameSize: null, clientSize: null });
           stopFpsTimer();
           if (elapsedTimer) {
             clearInterval(elapsedTimer);
@@ -166,13 +193,16 @@ export const useStreamStore = create<StreamState>()(
             unlistenStopped();
             unlistenStopped = null;
           }
+          useCaptureFrameStore.getState().clearFrame(usePreferencesStore.getState().mode);
         } catch (e) {
           console.error("Stream stop failed:", e);
         }
       },
 
-      handleBackendStopped: (targetType) => {
-        set({ isStreaming: false, startTime: null, elapsedTime: "00:00", actualFps: 0 });
+      handleBackendStopped: (payload) => {
+        const targetType = typeof payload === "string" ? payload : payload.target_type;
+        if (typeof payload !== "string" && get().sessionId && payload.session_id !== get().sessionId) return;
+        set({ isStreaming: false, startTime: null, elapsedTime: "00:00", actualFps: 0, captureOwner: "none", captureOwnerId: null, sessionId: 0, frameSize: null, clientSize: null });
         stopFpsTimer();
         if (elapsedTimer) {
           clearInterval(elapsedTimer);
@@ -194,11 +224,23 @@ export const useStreamStore = create<StreamState>()(
           const status = await getStreamStatus();
           const isStreaming = status.is_streaming;
           const startTime = status.start_time ? Date.now() - status.start_time : null;
+          if (isStreaming && (status.target_type === "screen" || status.target_type === "window")) {
+            usePreferencesStore.getState().setMode(status.target_type);
+            if (status.target_type === "window") {
+              usePreferencesStore.getState().setWindowCaptureArea(status.capture_area);
+            }
+            await ensureStreamListeners(get);
+          }
           set({
             isStreaming,
             fps: status.fps,
             startTime,
             elapsedTime: startTime ? formatElapsed(Date.now() - startTime) : "00:00",
+            captureOwner: status.owner,
+            captureOwnerId: status.owner_id,
+            sessionId: status.session_id,
+            frameSize: status.frame_width && status.frame_height ? [status.frame_width, status.frame_height] : null,
+            clientSize: status.client_width && status.client_height ? [status.client_width, status.client_height] : null,
           });
 
           if (isStreaming && !elapsedTimer) {
@@ -216,6 +258,10 @@ export const useStreamStore = create<StreamState>()(
             clearInterval(elapsedTimer);
             elapsedTimer = null;
             stopFpsTimer();
+          }
+          if (!isStreaming) {
+            useCaptureFrameStore.getState().clearFrame("screen");
+            useCaptureFrameStore.getState().clearFrame("window");
           }
         } catch (e) {
           console.error("Stream status failed:", e);
