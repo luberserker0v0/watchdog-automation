@@ -21,6 +21,7 @@ interface OverlayState {
   setRoi: (roi: OverlayRect | null) => void;
   setResultRoi: (resultRoi: OverlayRect | null) => void;
   setImageDimensions: (imageDimensions: { width: number; height: number } | null) => void;
+  clearRecognition: () => void;
   clearAll: () => void;
 }
 
@@ -38,5 +39,6 @@ export const useOverlayStore = create<OverlayState>((set) => ({
   setRoi: (roi) => set({ roi }),
   setResultRoi: (resultRoi) => set({ resultRoi }),
   setImageDimensions: (imageDimensions) => set({ imageDimensions }),
+  clearRecognition: () => set({ roi: null, resultRoi: null }),
   clearAll: () => set({ selection: null, roi: null, resultRoi: null }),
 }));

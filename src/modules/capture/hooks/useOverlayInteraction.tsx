@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { useDebugStore } from "../stores/useDebugStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
-import { getCoords, imgToNatural, type Coords } from "../utils";
+import { getCoords, getImageGeometry, imgToNatural, type Coords } from "../utils";
 
 interface UseOverlayInteractionOptions {
   onCursorMove?: (x: number, y: number) => void;
@@ -148,6 +148,35 @@ export function useOverlayInteraction(options: UseOverlayInteractionOptions = {}
     const coords = getCoords(pointer, container, img);
     if (coords) setLastCoords(coords);
   }, [imageTransform]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const img = imgRef.current;
+    if (!container || !img) return;
+    const geometry = getImageGeometry(container, img);
+    if (!geometry) return;
+    setLastCoords((current) => {
+      const next: Coords = {
+        overlayX: geometry.offsetX,
+        overlayY: geometry.offsetY,
+        imgX: 0,
+        imgY: 0,
+        displayW: geometry.displayW,
+        displayH: geometry.displayH,
+        naturalW: geometry.naturalW,
+        naturalH: geometry.naturalH,
+      };
+      return current
+        && current.overlayX === next.overlayX
+        && current.overlayY === next.overlayY
+        && current.displayW === next.displayW
+        && current.displayH === next.displayH
+        && current.naturalW === next.naturalW
+        && current.naturalH === next.naturalH
+        ? current
+        : next;
+    });
+  }, [imageTransform, resultRoi, roi, selection]);
 
   const handleWheel = useCallback((e: WheelEvent) => {
     const container = containerRef.current;

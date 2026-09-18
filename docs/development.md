@@ -165,7 +165,7 @@ If old behavior remains, confirm that the launched executable comes from the exp
 
 Each pipeline has a Mermaid `<name>.md` flow and matching `<name>.meta.json` execution configuration. It may also have a shareable `<name>.layout.json` containing graph node positions. The node tester uses the same metadata shape.
 
-- See the [pipeline metadata guide](pipeline-meta.md) for targets, nodes, edges, recognition, actions, parameters, and runtime defaults.
+- See the [pipeline metadata guide](pipeline-meta.md) for targets, nodes, recognition, actions, parameters, and runtime defaults.
 - See the [pipeline layout guide](pipeline-layout.md) for graph editing, the layout file format, and sharing behavior.
 
 ## Project and runtime resources

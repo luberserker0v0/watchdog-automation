@@ -20,7 +20,6 @@ describe("node emulator metadata model", () => {
     expect(draft.actions[0].type).toBe("DoNothing");
     expect(draft.timeout).toBe("20000");
     expect(result.errors).toEqual({});
-    expect(result.value?.metadata.edges).toEqual({});
     expect(result.value?.metadata.target).toEqual(target);
     expect(result.value?.metadata.nodes.EmulatedNode).toMatchObject({
       enabled: true,
@@ -38,6 +37,16 @@ describe("node emulator metadata model", () => {
       type: "window",
       capture_area: "client",
     });
+  });
+
+  it("serializes a prior-node ROI reference and rejects invalid IDs", () => {
+    const draft = createNodeEmulatorDraft();
+    draft.recognition.roi = "FindPanel";
+    expect(buildNodeEmulator(draft).value?.metadata.nodes.EmulatedNode.recognition.roi).toBe("FindPanel");
+    draft.recognition.roi = "Find-Panel";
+    expect(buildNodeEmulator(draft).value?.metadata.nodes.EmulatedNode.recognition.roi).toBe("Find-Panel");
+    draft.recognition.roi = "bad id";
+    expect(buildNodeEmulator(draft).errors["recognition.roi"]).toMatch(/valid earlier node ID/);
   });
 
   it("serializes window_size on the metadata target rather than the node", () => {
@@ -82,14 +91,14 @@ describe("node emulator metadata model", () => {
       action("Custom", { customName: "plugin_action", customParam: "{\"flag\":true}" }),
     ];
     draft.params = [parameter("text", "text", "abc"), parameter("password", "password", "secret"), parameter("number", "number", "3.5"), parameter("dropdown", "choice", "one"), parameter("switch", "enabled", "true"), parameter("color", "color", "#ffffff")];
-    Object.assign(draft, { timeout: "11", rateLimit: "12", preDelay: "13", postDelay: "14", maxHit: "15", repeat: "2", repeatDelay: "16", attach: "{\"owner\":\"tester\"}" });
+    Object.assign(draft, { timeout: "11", errorTimeout: "12", rateLimit: "13", preDelay: "14", postDelay: "15", maxHit: "16", repeat: "2", repeatDelay: "17", attach: "{\"owner\":\"tester\"}" });
 
     const result = buildNodeEmulator(draft);
     expect(result.errors).toEqual({});
     const node = result.value!.metadata.nodes.AllFields;
     expect(node.actions?.map((item) => item.type)).toEqual(["DoNothing", "Click", "LongPress", "Swipe", "Scroll", "ClickKey", "InputText", "StopTask", "Custom"]);
     expect(node.params?.map((item) => item.type)).toEqual(["text", "password", "number", "dropdown", "switch", "color"]);
-    expect(node).toMatchObject({ timeout: 11, rate_limit: 12, pre_delay: 13, post_delay: 14, max_hit: 15, repeat: 2, repeat_delay: 16, attach: { owner: "tester" } });
+    expect(node).toMatchObject({ kind: "Normal", timeout: 11, error_timeout: 12, rate_limit: 13, pre_delay: 14, post_delay: 15, max_hit: 16, repeat: 2, repeat_delay: 17, attach: { owner: "tester" } });
     expect(result.value!.paramValues).toMatchObject({ number: 3.5, enabled: true, choice: "one" });
   });
 

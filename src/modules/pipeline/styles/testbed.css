@@ -711,9 +711,11 @@
   .target-log-node { color: #e0e7ff; }
   .target-log-msg { color: #a5b4fc; }
   .target-log-conf { color: #6366f1; }
-  .target-key-btn { border-color: #3730a3; background: #1e1b4b; color: #a5b4fc; }
-  .target-key-btn:hover { border-color: #818cf8; color: #c7d2fe; }
-  .target-key-flash { color: #a5b4fc; background: #312e81; }
+  .target-key-detect-area { border-color: #3730a3; background: #1e1b4b; }
+  .target-key-detect-area:focus { border-color: #818cf8; box-shadow: 0 0 0 3px #312e81; }
+  .target-key-detect-area.has-key { border-color: #818cf8; background: #312e81; }
+  .target-key-detect-label { color: #6366f1; }
+  .target-key-detect-value { color: #a5b4fc; }
   .target-swipe-vertical { border-color: #3730a3; background: #1e1b4b; }
   .target-scroll-horizontal::-webkit-scrollbar { height: 0; }
   .target-scroll-h-label { color: #6366f1; }

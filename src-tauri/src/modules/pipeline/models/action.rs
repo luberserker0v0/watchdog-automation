@@ -51,7 +51,7 @@ pub enum Action {
     },
 
     #[serde(rename = "ClickKey")]
-    ClickKey { key: Vec<u32> },
+    ClickKey { key: Vec<serde_json::Value> },
 
     #[serde(rename = "InputText")]
     InputText { input_text: String },

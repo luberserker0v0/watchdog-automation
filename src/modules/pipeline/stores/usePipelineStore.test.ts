@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useLogStore } from "../../capture/stores/useLogStore";
 import { usePipelineStore } from "./usePipelineStore";
 
 const pipelineApi = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ beforeEach(() => {
     batchIds: [],
     resizeIssue: null,
   });
+  useLogStore.setState({ entries: [], nextId: 1 });
 });
 
 describe("usePipelineStore", () => {
@@ -49,10 +51,10 @@ describe("usePipelineStore", () => {
     const [firstId, secondId] = before.pipelineIds;
     const second = before.pipelinesById[secondId];
 
-    before.updateParams(firstId, "name", "changed");
+    before.updateParams(firstId, "start", "name", "changed");
     const after = usePipelineStore.getState();
 
-    expect(after.pipelinesById[firstId].userParams.name).toBe("changed");
+    expect(after.pipelinesById[firstId].userParams["start"].name).toBe("changed");
     expect(after.pipelinesById[secondId]).toBe(second);
   });
 
@@ -107,6 +109,51 @@ describe("usePipelineStore", () => {
     expect(usePipelineStore.getState().pipelinesById[id]).toMatchObject({
       status: "paused",
       runId: "run-1",
+    });
+  });
+
+  it("applies only newer backend status events and appends a step once", async () => {
+    await usePipelineStore.getState().addPipeline("one.yml");
+    const id = usePipelineStore.getState().pipelineIds[0];
+    usePipelineStore.setState((state) => ({
+      pipelinesById: {
+        ...state.pipelinesById,
+        [id]: { ...state.pipelinesById[id], status: "running", runId: "run-events" },
+      },
+    }));
+    const event = {
+      run_id: "run-events", revision: 2, state: "running", current_node_id: "start", step_count: 1,
+      elapsed_ms: 42, error: null,
+      appended_step: { node_id: "start", matched: true, confidence: 1, box_region: null, actions_fired: 0, duration_ms: 42, error: null },
+    };
+    usePipelineStore.getState().applyStatusEvent(event);
+    usePipelineStore.getState().applyStatusEvent({ ...event, revision: 1, current_node_id: "stale" });
+
+    const entry = usePipelineStore.getState().pipelinesById[id];
+    expect(entry.currentNodeId).toBe("start");
+    expect(entry.statusRevision).toBe(2);
+    expect(entry.lastStepResults).toHaveLength(1);
+    expect(useLogStore.getState().entries.filter((item) => item.label === "one")).toHaveLength(1);
+  });
+
+  it("adds a GUI log entry when pipeline startup fails", async () => {
+    await usePipelineStore.getState().addPipeline("broken.yml");
+    pipelineApi.startPipeline.mockRejectedValueOnce({
+      code: "generic",
+      message: "Target window did not appear within 10000ms after launch",
+    });
+
+    await usePipelineStore.getState().startExecution();
+
+    const entry = usePipelineStore.getState().pipelinesById[
+      usePipelineStore.getState().pipelineIds[0]
+    ];
+    expect(entry).toMatchObject({ status: "failed", error: expect.stringContaining("Target window") });
+    const logs = useLogStore.getState().entries;
+    expect(logs[logs.length - 1]).toMatchObject({
+      source: "pipeline",
+      result: "error",
+      detail: expect.stringContaining("Pipeline failed before execution"),
     });
   });
 

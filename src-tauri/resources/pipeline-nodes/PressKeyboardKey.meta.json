@@ -8,7 +8,7 @@
       },
       "recognition": {
         "type": "OCR",
-        "expected": "^Key Shortcuts$",
+        "expected": "^Key Detect Area$",
         "threshold": 0.6,
         "candidate_selection": {
           "order": "native",
@@ -19,7 +19,7 @@
         {
           "type": "ClickKey",
           "key": [
-            13
+            27
           ]
         }
       ],

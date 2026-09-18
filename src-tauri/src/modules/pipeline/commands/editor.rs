@@ -1,5 +1,5 @@
 use crate::modules::pipeline::models::edge::EdgeType;
-use crate::modules::pipeline::models::graph::PipelineGraph;
+use crate::modules::pipeline::models::graph::{PipelineGraph, PipelineTarget};
 use crate::modules::pipeline::parser;
 use crate::utils::paths;
 
@@ -23,35 +23,49 @@ pub fn validate_pipeline_sources(
     metadata: &parser::meta::MetadataFile,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
+
+    // Validate instance references point to existing node templates
+    if let Some(instances) = &metadata.instances {
+        for (instance_id, instance) in instances {
+            if !metadata.nodes.contains_key(&instance.node) {
+                errors.push(ValidationError {
+                    error_type: "invalid_instance_reference".to_string(),
+                    message: format!(
+                        "Instance '{}' references non-existent node '{}'",
+                        instance_id, instance.node
+                    ),
+                });
+            }
+        }
+    }
+
+    // Check that every mermaid node has metadata (either via instance or node lookup)
     let flow_ids: std::collections::HashSet<&str> =
         mermaid.nodes.iter().map(|node| node.id.as_str()).collect();
-    let metadata_ids: std::collections::HashSet<&str> =
+    let instance_ids: std::collections::HashSet<&str> = metadata
+        .instances
+        .as_ref()
+        .map(|instances| instances.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    let metadata_keys: std::collections::HashSet<&str> =
         metadata.nodes.keys().map(String::as_str).collect();
-    for id in flow_ids.difference(&metadata_ids) {
-        errors.push(ValidationError {
-            error_type: "missing_node_metadata".to_string(),
-            message: format!("Mermaid node '{}' has no metadata", id),
-        });
-    }
-    for id in metadata_ids.difference(&flow_ids) {
-        errors.push(ValidationError {
-            error_type: "orphan_node_metadata".to_string(),
-            message: format!("Metadata node '{}' is not present in Mermaid", id),
-        });
-    }
-    let flow_edges: std::collections::HashSet<String> = mermaid
-        .edges
-        .iter()
-        .map(|edge| format!("{}->{}", edge.from, edge.to))
-        .collect();
-    for key in metadata.edges.keys() {
-        if !flow_edges.contains(key) {
+
+    for id in flow_ids.difference(&instance_ids) {
+        // Node ID not in instances, check if label is in nodes
+        let node = mermaid.nodes.iter().find(|n| n.id == *id).unwrap();
+        let lookup_key = if node.label.is_empty() {
+            node.id.as_str()
+        } else {
+            node.label.as_str()
+        };
+        if !metadata_keys.contains(lookup_key) {
             errors.push(ValidationError {
-                error_type: "orphan_edge_metadata".to_string(),
-                message: format!("Metadata edge '{}' is not present in Mermaid", key),
+                error_type: "missing_node_metadata".to_string(),
+                message: format!("Mermaid node '{}' has no metadata", id),
             });
         }
     }
+
     errors
 }
 
@@ -75,50 +89,78 @@ pub fn list_pipelines() -> Result<Vec<PipelineInfo>, String> {
     let mut pipelines = Vec::new();
 
     let built_in = paths::built_in_pipelines_dir();
+    log::info!("Scanning built-in pipelines: {}", built_in.display());
     scan_pipelines_dir(&built_in, "built-in", &mut pipelines);
 
     let user = paths::user_pipelines_dir();
+    log::info!("Scanning user pipelines: {}", user.display());
     scan_pipelines_dir(&user, "custom", &mut pipelines);
 
+    log::info!("Found {} pipeline(s)", pipelines.len());
     Ok(pipelines)
 }
 
 #[tauri::command]
 pub fn load_pipeline(path: String) -> Result<LoadResult, String> {
+    log::info!("Loading pipeline: {}", path);
     let base_path = std::path::Path::new(&path);
-    let parent = base_path.parent().ok_or("Invalid path")?;
+    let parent = base_path.parent().ok_or_else(|| {
+        let msg = "Invalid path".to_string();
+        log::error!("load_pipeline: {}", msg);
+        msg
+    })?;
     let stem = base_path
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or("Invalid filename")?;
+        .ok_or_else(|| {
+            let msg = "Invalid filename".to_string();
+            log::error!("load_pipeline: {}", msg);
+            msg
+        })?;
 
     let mermaid_path = parent.join(format!("{}.md", stem));
     let meta_path = parent.join(format!("{}.meta.json", stem));
     let layout_path = parent.join(format!("{}.layout.json", stem));
 
-    let mermaid_content = std::fs::read_to_string(&mermaid_path)
-        .map_err(|e| format!("Failed to read {}: {}", mermaid_path.display(), e))?;
-    let meta_content = std::fs::read_to_string(&meta_path)
-        .map_err(|e| format!("Failed to read {}: {}", meta_path.display(), e))?;
+    let mermaid_content = std::fs::read_to_string(&mermaid_path).map_err(|e| {
+        let msg = format!("Failed to read {}: {}", mermaid_path.display(), e);
+        log::error!("load_pipeline: {}", msg);
+        msg
+    })?;
+    let meta_content = std::fs::read_to_string(&meta_path).map_err(|e| {
+        let msg = format!("Failed to read {}: {}", meta_path.display(), e);
+        log::error!("load_pipeline: {}", msg);
+        msg
+    })?;
 
-    let mermaid_graph = parser::mermaid::parse(&mermaid_content)
-        .map_err(|e| format!("Failed to parse Mermaid: {}", e))?;
-    let metadata =
-        parser::meta::parse(&meta_content).map_err(|e| format!("Failed to parse meta: {}", e))?;
+    let mermaid_graph = parser::mermaid::parse(&mermaid_content).map_err(|e| {
+        let msg = format!("Failed to parse Mermaid: {}", e);
+        log::error!("load_pipeline: {}", msg);
+        msg
+    })?;
+    let metadata = parser::meta::parse(&meta_content).map_err(|e| {
+        let msg = format!("Failed to parse meta: {}", e);
+        log::error!("load_pipeline: {}", msg);
+        msg
+    })?;
     let layout = if layout_path.is_file() {
-        let parsed = parser::layout::parse(
-            &std::fs::read_to_string(&layout_path)
-                .map_err(|e| format!("Failed to read {}: {}", layout_path.display(), e))?,
-        )?;
+        let parsed =
+            parser::layout::parse(&std::fs::read_to_string(&layout_path).map_err(|e| {
+                let msg = format!("Failed to read {}: {}", layout_path.display(), e);
+                log::error!("load_pipeline: {}", msg);
+                msg
+            })?)?;
         if let Some(node_id) = parsed
             .nodes
             .keys()
             .find(|node_id| !metadata.nodes.contains_key(*node_id))
         {
-            return Err(format!(
+            let msg = format!(
                 "Invalid pipeline layout: node '{}' is not present in metadata",
                 node_id
-            ));
+            );
+            log::error!("load_pipeline: {}", msg);
+            return Err(msg);
         }
         Some(parsed)
     } else {
@@ -129,10 +171,12 @@ pub fn load_pipeline(path: String) -> Result<LoadResult, String> {
     let mut validation = validate_pipeline_sources(&mermaid_graph, &metadata);
     validation.extend(validate_pipeline_graph(&graph));
     if !validation.is_empty() {
-        return Err(format!(
+        let msg = format!(
             "Invalid pipeline: {}",
             format_validation_errors(&validation)
-        ));
+        );
+        log::error!("load_pipeline: {}", msg);
+        return Err(msg);
     }
 
     let layout_writable = mermaid_path
@@ -141,6 +185,7 @@ pub fn load_pipeline(path: String) -> Result<LoadResult, String> {
         .zip(paths::user_pipelines_dir().canonicalize().ok())
         .is_some_and(|(pipeline, custom_root)| pipeline.starts_with(custom_root));
 
+    log::info!("Successfully loaded pipeline: {}", path);
     Ok(LoadResult {
         graph,
         mermaid: mermaid_content,
@@ -242,24 +287,12 @@ pub fn save_pipeline(graph: PipelineGraph, path: String) -> Result<bool, String>
         meta_nodes.insert(node.id.clone(), node.config.clone());
     }
 
-    let meta_edges = graph
-        .edges
-        .iter()
-        .map(|edge| {
-            (
-                format!("{}->{}", edge.from, edge.to),
-                parser::meta::EdgeConfig {
-                    edge_type: edge.edge_type.clone(),
-                },
-            )
-        })
-        .collect();
-
     let metadata = parser::meta::MetadataFile {
         schema: None,
         target: graph.target.clone(),
+        launch: None,
         nodes: meta_nodes,
-        edges: meta_edges,
+        instances: None,
     };
 
     let meta_content =
@@ -278,6 +311,33 @@ pub fn validate_pipeline(graph: PipelineGraph) -> Result<Vec<ValidationError>, S
 
 pub fn validate_pipeline_graph(graph: &PipelineGraph) -> Vec<ValidationError> {
     let mut errors = Vec::new();
+
+    if let Some(launch) = &graph.launch {
+        match (&launch.exe, &launch.cmd) {
+            (Some(exe), None) if !exe.trim().is_empty() => {}
+            (None, Some(cmd)) if !cmd.trim().is_empty() => {}
+            (Some(_), Some(_)) => errors.push(ValidationError {
+                error_type: "invalid_launch".to_string(),
+                message: "launch must specify exactly one of exe or cmd, not both".to_string(),
+            }),
+            _ => errors.push(ValidationError {
+                error_type: "invalid_launch".to_string(),
+                message: "launch must specify a non-empty exe or cmd".to_string(),
+            }),
+        }
+        if let Some(PipelineTarget::Window { .. }) = graph.target.as_ref() {
+            if !graph
+                .target
+                .as_ref()
+                .is_some_and(PipelineTarget::has_window_filters)
+            {
+                errors.push(ValidationError {
+                    error_type: "launch_requires_window_filter".to_string(),
+                    message: "launch with a window target requires process, class, or title so an existing target can be reused and a launched target can be verified".to_string(),
+                });
+            }
+        }
+    }
 
     if let Some(size) = graph
         .target
@@ -332,6 +392,21 @@ pub fn validate_pipeline_graph(graph: &PipelineGraph) -> Vec<ValidationError> {
 
     let node_ids: std::collections::HashSet<&str> =
         graph.nodes.iter().map(|n| n.id.as_str()).collect();
+    for node in &graph.nodes {
+        if let Some(crate::modules::pipeline::models::recognizer::RecognitionRoi::Node(id)) =
+            node.recognition.roi.as_ref()
+        {
+            if id == &node.id || !node_ids.contains(id.as_str()) {
+                errors.push(ValidationError {
+                    error_type: "invalid_roi_reference".to_string(),
+                    message: format!(
+                        "Node '{}' ROI must reference a different existing node; received '{}'",
+                        node.id, id
+                    ),
+                });
+            }
+        }
+    }
     for edge in &graph.edges {
         if !node_ids.contains(edge.from.as_str()) {
             errors.push(ValidationError {
@@ -348,41 +423,67 @@ pub fn validate_pipeline_graph(graph: &PipelineGraph) -> Vec<ValidationError> {
     }
 
     for node in &graph.nodes {
-        for edge_type in [EdgeType::Next, EdgeType::Error] {
-            let count = graph
-                .edges
-                .iter()
-                .filter(|edge| edge.from == node.id && edge.edge_type == edge_type)
-                .count();
-            if count > 1 {
-                errors.push(ValidationError {
-                    error_type: "ambiguous_transition".to_string(),
-                    message: format!(
-                        "Node '{}' has {} {:?} edges; only one is supported",
-                        node.id, count, edge_type
-                    ),
-                });
-            }
+        let error_count = graph
+            .edges
+            .iter()
+            .filter(|edge| edge.from == node.id && edge.edge_type == EdgeType::Error)
+            .count();
+        if error_count > 1 {
+            errors.push(ValidationError {
+                error_type: "ambiguous_transition".to_string(),
+                message: format!(
+                    "Node '{}' has {} error edges; only one is supported",
+                    node.id, error_count
+                ),
+            });
+        }
+        // Entry nodes carry no recognition or actions: the engine skips
+        // straight to their children. Declared actions would never run.
+        if node.kind == crate::modules::pipeline::models::node::NodeKind::Entry
+            && !node.actions.is_empty()
+        {
+            errors.push(ValidationError {
+                error_type: "entry_node_has_actions".to_string(),
+                message: format!(
+                    "Entry node '{}' must not declare actions; they never execute",
+                    node.id
+                ),
+            });
         }
     }
 
-    let incoming: std::collections::HashSet<&str> =
-        graph.edges.iter().map(|edge| edge.to.as_str()).collect();
-    let entries: Vec<&str> = graph
+    // Exactly one explicit Entry-kind node is required, mirroring plan
+    // entry resolution. Missing marker and duplicate markers are distinct
+    // error codes.
+    let explicit_entries: Vec<&str> = graph
         .nodes
         .iter()
+        .filter(|node| {
+            node.kind == crate::modules::pipeline::models::node::NodeKind::Entry
+        })
         .map(|node| node.id.as_str())
-        .filter(|id| !incoming.contains(id))
         .collect();
-    if !graph.nodes.is_empty() && entries.len() != 1 {
-        errors.push(ValidationError {
-            error_type: "invalid_entry_count".to_string(),
-            message: format!(
-                "Pipeline must have exactly one entry node; found {}",
-                entries.len()
-            ),
-        });
-    }
+    let entries: Vec<&str> = if explicit_entries.is_empty() {
+        if !graph.nodes.is_empty() {
+            errors.push(ValidationError {
+                error_type: "missing_entry_node".to_string(),
+                message: "Pipeline must declare exactly one Entry node (node kind \"Entry\"); found none"
+                    .to_string(),
+            });
+        }
+        Vec::new()
+    } else {
+        if explicit_entries.len() != 1 {
+            errors.push(ValidationError {
+                error_type: "invalid_entry_count".to_string(),
+                message: format!(
+                    "Pipeline must have exactly one Entry node; found {}",
+                    explicit_entries.len()
+                ),
+            });
+        }
+        explicit_entries
+    };
 
     if let Some(entry) = entries.first() {
         let mut reachable = std::collections::HashSet::new();
@@ -466,9 +567,19 @@ fn has_cycle(graph: &PipelineGraph) -> bool {
 
 fn scan_pipelines_dir(dir: &std::path::Path, source: &str, out: &mut Vec<PipelineInfo>) {
     if !dir.exists() {
+        log::warn!(
+            "Pipeline directory does not exist: {} ({})",
+            dir.display(),
+            source
+        );
         return;
     }
     let Ok(read_dir) = std::fs::read_dir(dir) else {
+        log::warn!(
+            "Failed to read pipeline directory: {} ({})",
+            dir.display(),
+            source
+        );
         return;
     };
     for entry in read_dir.flatten() {
@@ -496,6 +607,7 @@ fn scan_pipelines_dir(dir: &std::path::Path, source: &str, out: &mut Vec<Pipelin
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
+            log::info!("Found pipeline '{}' at {}", name, pipeline_path.display());
             out.push(PipelineInfo {
                 name,
                 path: pipeline_path.to_string_lossy().to_string(),
@@ -524,7 +636,7 @@ mod validation_tests {
     }
 
     #[test]
-    fn rejects_missing_and_orphan_node_metadata() {
+    fn rejects_missing_node_metadata() {
         let (flow, metadata, _) = parse_graph(
             "flowchart TD\nA[\"A\"]",
             r#"{"nodes":{"B":{"recognition":{"type":"DirectHit"}}}}"#,
@@ -533,16 +645,40 @@ mod validation_tests {
         assert!(errors
             .iter()
             .any(|error| error.error_type == "missing_node_metadata"));
-        assert!(errors
+        assert!(!errors
             .iter()
             .any(|error| error.error_type == "orphan_node_metadata"));
+    }
+
+    #[test]
+    fn rejects_missing_entry_node() {
+        let (_, _, graph) = parse_graph(
+            "flowchart TD\nA[\"A\"]\nB[\"B\"]\nA --> B",
+            r#"{"nodes":{"A":{"recognition":{"type":"DirectHit"}},"B":{"recognition":{"type":"DirectHit"}}}}"#,
+        );
+        let errors = validate_pipeline_graph(&graph);
+        assert!(errors
+            .iter()
+            .any(|error| error.error_type == "missing_entry_node"));
+    }
+
+    #[test]
+    fn rejects_actions_on_entry_node() {
+        let (_, _, graph) = parse_graph(
+            "flowchart TD\nA[\"A\"]\nB[\"B\"]\nA --> B",
+            r#"{"nodes":{"A":{"kind":"Entry","actions":[{"type":"DoNothing"}]},"B":{"recognition":{"type":"DirectHit"}}}}"#,
+        );
+        let errors = validate_pipeline_graph(&graph);
+        assert!(errors
+            .iter()
+            .any(|error| error.error_type == "entry_node_has_actions"));
     }
 
     #[test]
     fn rejects_multiple_entries_and_unreachable_nodes() {
         let (_, _, graph) = parse_graph(
             "flowchart TD\nA[\"A\"]\nB[\"B\"]",
-            r#"{"nodes":{"A":{"recognition":{"type":"DirectHit"}},"B":{"recognition":{"type":"DirectHit"}}}}"#,
+            r#"{"nodes":{"A":{"kind":"Entry"},"B":{"kind":"Entry"}}}"#,
         );
         let errors = validate_pipeline_graph(&graph);
         assert!(errors
@@ -551,7 +687,7 @@ mod validation_tests {
     }
 
     #[test]
-    fn rejects_ambiguous_transitions_and_zero_repeat() {
+    fn rejects_zero_repeat() {
         let (_, _, graph) = parse_graph(
             "flowchart TD\nA[\"A\"]\nB[\"B\"]\nC[\"C\"]\nA --> B\nA --> C",
             r#"{"nodes":{"A":{"recognition":{"type":"DirectHit"},"repeat":0},"B":{"recognition":{"type":"DirectHit"}},"C":{"recognition":{"type":"DirectHit"}}}}"#,
@@ -559,10 +695,19 @@ mod validation_tests {
         let errors = validate_pipeline_graph(&graph);
         assert!(errors
             .iter()
-            .any(|error| error.error_type == "ambiguous_transition"));
+            .any(|error| error.error_type == "invalid_repeat"));
+    }
+
+    #[test]
+    fn rejects_ambiguous_error_edges() {
+        let (_, _, graph) = parse_graph(
+            "flowchart TD\nA[\"A\"]\nB[\"B\"]\nC[\"C\"]\nA --> B\nA -->|error| C\nA -->|error| B",
+            r#"{"nodes":{"A":{"recognition":{"type":"DirectHit"}},"B":{"recognition":{"type":"DirectHit"}},"C":{"recognition":{"type":"DirectHit"}}}}"#,
+        );
+        let errors = validate_pipeline_graph(&graph);
         assert!(errors
             .iter()
-            .any(|error| error.error_type == "invalid_repeat"));
+            .any(|error| error.error_type == "ambiguous_transition"));
     }
 
     #[test]
@@ -578,5 +723,58 @@ mod validation_tests {
         assert!(errors
             .iter()
             .any(|error| error.error_type == "node_window_size_not_supported"));
+    }
+
+    #[test]
+    fn validates_launch_command_and_window_identity() {
+        let (_, _, invalid_command) = parse_graph(
+            "flowchart TD\nA[\"A\"]",
+            r#"{"launch":{"exe":"a.exe","cmd":"a"},"nodes":{"A":{}}}"#,
+        );
+        assert!(validate_pipeline_graph(&invalid_command)
+            .iter()
+            .any(|error| error.error_type == "invalid_launch"));
+
+        let (_, _, filterless_window) = parse_graph(
+            "flowchart TD\nA[\"A\"]",
+            r#"{"target":{"type":"window","capture_area":"client"},"launch":{"exe":"a.exe"},"nodes":{"A":{}}}"#,
+        );
+        assert!(validate_pipeline_graph(&filterless_window)
+            .iter()
+            .any(|error| error.error_type == "launch_requires_window_filter"));
+
+        let (_, _, valid) = parse_graph(
+            "flowchart TD\nA[\"A\"]",
+            r#"{"target":{"type":"window","title":"^Target$"},"launch":{"exe":"a.exe","wait_for_window":true},"nodes":{"A":{}}}"#,
+        );
+        assert!(!validate_pipeline_graph(&valid)
+            .iter()
+            .any(|error| error.error_type.starts_with("invalid_launch")
+                || error.error_type == "launch_requires_window_filter"));
+    }
+
+    #[test]
+    fn allows_multiple_next_edges_for_children() {
+        let (_, _, graph) = parse_graph(
+            "flowchart TD\nA[\"A\"]\nB[\"B\"]\nC[\"C\"]\nA --> B\nA --> C",
+            r#"{"nodes":{"A":{"recognition":{"type":"DirectHit"}},"B":{"recognition":{"type":"DirectHit"}},"C":{"recognition":{"type":"DirectHit"}}}}"#,
+        );
+        let errors = validate_pipeline_graph(&graph);
+        assert!(!errors
+            .iter()
+            .any(|e| e.error_type == "ambiguous_transition"));
+    }
+
+    #[test]
+    fn allows_children_with_error_edge() {
+        let (_, _, graph) = parse_graph(
+            "flowchart TD\nA[\"A\"]\nB[\"B\"]\nC[\"C\"]\nD[\"D\"]\nA --> B\nA --> C\nA -->|error| D",
+            r#"{"nodes":{"A":{"recognition":{"type":"DirectHit"}},"B":{"recognition":{"type":"DirectHit"}},"C":{"recognition":{"type":"DirectHit"}},"D":{"recognition":{"type":"DirectHit"}}}}"#,
+        );
+        let errors = validate_pipeline_graph(&graph);
+        assert!(!errors
+            .iter()
+            .any(|e| e.error_type == "ambiguous_transition"));
+        assert_eq!(graph.edges.len(), 3);
     }
 }

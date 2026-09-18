@@ -924,46 +924,44 @@ html, body, #root {
   color: var(--tgt-text-muted);
 }
 
-/* ── ClickKey Test ── */
-.target-key-row {
+/* ── Keyboard detection ── */
+.target-key-detect-area {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.target-key-btn {
-  padding: 7px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  margin-top: 6px;
+  padding: 12px 16px;
   border: 1.5px solid var(--tgt-border);
-  border-radius: var(--tgt-radius-xs);
+  border-radius: var(--tgt-radius);
   background: var(--tgt-card);
-  color: var(--tgt-text-secondary);
-  font-size: 12px;
-  font-family: monospace;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--tgt-transition);
+  box-shadow: var(--tgt-card-shadow);
+  outline: none;
+  transition: border-color var(--tgt-transition), box-shadow var(--tgt-transition), background var(--tgt-transition);
 }
 
-.target-key-btn:hover {
+.target-key-detect-area:focus {
   border-color: var(--tgt-primary);
-  color: var(--tgt-primary);
+  box-shadow: 0 0 0 3px var(--tgt-primary-light);
 }
 
-.target-key-btn.active {
-  background: var(--tgt-primary);
+.target-key-detect-area.has-key {
   border-color: var(--tgt-primary);
-  color: #fff;
-  transform: scale(0.95);
-}
-
-.target-key-flash {
-  font-size: 11px;
-  font-family: monospace;
-  font-weight: 600;
-  color: var(--tgt-primary);
   background: var(--tgt-primary-light);
-  padding: 2px 8px;
-  border-radius: var(--tgt-radius-xs);
+}
+
+.target-key-detect-label {
+  color: var(--tgt-text-muted);
+  font-size: 12px;
+}
+
+.target-key-detect-value {
+  min-width: 72px;
+  color: var(--tgt-primary);
+  font-size: 18px;
+  font-family: monospace;
+  text-align: right;
   animation: tgt-fadein 0.2s ease;
 }
 

@@ -12,12 +12,13 @@ import {
 import { useLogStore } from "../../capture/stores/useLogStore";
 import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
+import { PipelineBatchController, type PipelineStatusEvent } from "../services/PipelineBatchController";
 
 export type PipelineExecutionStatus = "idle" | "running" | "paused" | "stopping" | "stopped" | "completed" | "failed" | "needs_resize";
 
 type PipelineBatchItem = {
   id: string;
-  userParams: Record<string, string | number | boolean>;
+  userParams: Record<string, Record<string, string | number | boolean>>;
 };
 
 export type PipelineResizeIssue = Extract<PipelineStartError, { code: "window_size_mismatch" }> & {
@@ -31,8 +32,8 @@ export interface PipelineEntry {
   graph: PipelineGraph | null;
   mermaid: string;
   meta: string;
-  collectedParams: ParamDef[];
-  userParams: Record<string, string | number | boolean>;
+  paramsByNode: Record<string, ParamDef[]>;
+  userParams: Record<string, Record<string, string | number | boolean>>;
   isChecked: boolean;
   status: PipelineExecutionStatus;
   runId: string | null;
@@ -40,6 +41,17 @@ export interface PipelineEntry {
   elapsedMs: number;
   layoutWritable?: boolean;
   error?: string | null;
+  attemptCount?: number;
+  hitCounts?: Record<string, number>;
+  lastStepResults?: StepResult[];
+  stepCount?: number;
+  nodeStartTime?: number;
+  nodeElapsedMs?: number;
+  childrenParentId?: string | null;
+  childrenStartTime?: number | null;
+  childrenChildId?: string | null;
+  childrenTimeoutMs?: number | null;
+  statusRevision?: number;
 }
 
 export interface PipelineState {
@@ -54,13 +66,14 @@ export interface PipelineState {
   removePipeline: (id: string) => void;
   selectPipeline: (id: string) => void;
   toggleCheck: (id: string) => void;
-  updateParams: (id: string, key: string, value: string | number | boolean) => void;
+  updateParams: (id: string, nodeId: string, key: string, value: string | number | boolean) => void;
   startExecution: () => Promise<void>;
   stopExecution: () => Promise<void>;
   pauseExecution: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   retryWindowSize: () => Promise<void>;
   cancelWindowSize: () => void;
+  applyStatusEvent: (event: PipelineStatusEvent) => void;
 }
 
 let idCounter = 0;
@@ -70,6 +83,7 @@ let pendingBatch: PipelineBatchItem[] | null = null;
 const stepCountById: Record<string, number> = {};
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const genId = () => `pipeline-${++idCounter}`;
+const batchController = new PipelineBatchController();
 
 function appendStepLog(pipelineName: string, step: StepResult) {
   const timingGranularity = usePreferencesStore.getState().timingGranularity;
@@ -92,26 +106,26 @@ function appendStepLog(pipelineName: string, step: StepResult) {
   }
 }
 
-function collectParams(graph: PipelineGraph): ParamDef[] {
-  const params: ParamDef[] = [];
-  const seenKeys = new Set<string>();
+function collectParamsByNode(graph: PipelineGraph): Record<string, ParamDef[]> {
+  const result: Record<string, ParamDef[]> = {};
   for (const node of graph.nodes) {
-    for (const param of node.params ?? []) {
-      if (!seenKeys.has(param.key)) {
-        seenKeys.add(param.key);
-        params.push(param);
-      }
+    if (node.params?.length) {
+      result[node.id] = node.params;
     }
   }
-  return params;
+  return result;
 }
 
-function makeDefaultParams(params: ParamDef[]) {
-  return Object.fromEntries(
-    params
-      .filter((param) => param.default !== undefined && param.default !== null)
-      .map((param) => [param.key, param.default]),
-  ) as Record<string, string | number | boolean>;
+function makeDefaultParamsByNode(paramsByNode: Record<string, ParamDef[]>): Record<string, Record<string, string | number | boolean>> {
+  const result: Record<string, Record<string, string | number | boolean>> = {};
+  for (const [nodeId, params] of Object.entries(paramsByNode)) {
+    result[nodeId] = Object.fromEntries(
+      params
+        .filter((param) => param.default !== undefined && param.default !== null)
+        .map((param) => [param.key, param.default]),
+    ) as Record<string, string | number | boolean>;
+  }
+  return result;
 }
 
 function updateEntry(
@@ -136,7 +150,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   addPipeline: async (path) => {
     const result = await loadPipeline(path);
     useGraphLayoutStore.getState().replaceLayout(path, result.layout?.nodes ?? {});
-    const params = collectParams(result.graph);
+    const paramsByNode = collectParamsByNode(result.graph);
     const id = genId();
     const name = path.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, "") || "Unknown";
     const entry: PipelineEntry = {
@@ -146,8 +160,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       graph: result.graph,
       mermaid: result.mermaid,
       meta: result.meta,
-      collectedParams: params,
-      userParams: makeDefaultParams(params),
+      paramsByNode,
+      userParams: makeDefaultParamsByNode(paramsByNode),
       isChecked: true,
       status: "idle",
       runId: null,
@@ -180,13 +194,47 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     ...entry,
     isChecked: !entry.isChecked,
   }))),
-  updateParams: (id, key, value) => set((state) => state.batchIds.includes(id) ? state : updateEntry(state, id, (entry) => ({
+  updateParams: (id, nodeId, key, value) => set((state) => state.batchIds.includes(id) ? state : updateEntry(state, id, (entry) => ({
     ...entry,
-    userParams: { ...entry.userParams, [key]: value },
+    userParams: {
+      ...entry.userParams,
+      [nodeId]: { ...entry.userParams[nodeId], [key]: value },
+    },
   }))),
+
+  applyStatusEvent: (event) => set((state) => {
+    const id = state.pipelineIds.find((pipelineId) => state.pipelinesById[pipelineId]?.runId === event.run_id);
+    if (!id) return state;
+    const entry = state.pipelinesById[id];
+    if ((entry.statusRevision ?? -1) >= event.revision) return state;
+    const executionStatus = event.state.toLowerCase() as PipelineExecutionStatus;
+    const terminal = ["completed", "failed", "stopped"].includes(executionStatus);
+    const priorSteps = stepCountById[id] ?? entry.stepCount ?? 0;
+    const currentSteps = event.step_count;
+    stepCountById[id] = Math.max(priorSteps, currentSteps);
+    if (event.appended_step && currentSteps > priorSteps) appendStepLog(entry.name, event.appended_step);
+    return updateEntry(state, id, (current) => ({
+      ...current,
+      status: executionStatus,
+      runId: terminal ? null : current.runId,
+      currentNodeId: terminal ? null : event.current_node_id,
+      elapsedMs: event.elapsed_ms,
+      error: event.error ?? null,
+      attemptCount: event.attempt_count,
+      hitCounts: event.hit_counts ?? {},
+      lastStepResults: event.appended_step ? [...(current.lastStepResults ?? []), event.appended_step].slice(-10) : current.lastStepResults,
+      stepCount: currentSteps,
+      childrenParentId: terminal ? null : (event.children_parent_id ?? null),
+      childrenStartTime: terminal ? null : (event.children_start_time_ms != null ? Date.now() - event.children_start_time_ms : null),
+      childrenChildId: terminal ? null : (event.children_child_id ?? null),
+      childrenTimeoutMs: terminal ? null : (event.children_timeout_ms ?? null),
+      statusRevision: event.revision,
+    }));
+  }),
 
   startExecution: async () => {
     if (get().isExecuting) return;
+    const hasStatusEvents = await batchController.start((event) => get().applyStatusEvent(event));
     stopRequested = false;
     const generation = ++executionGeneration;
     const snapshot = get();
@@ -228,6 +276,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             currentNodeId: null,
             elapsedMs: 0,
             error: null,
+            childrenParentId: null,
+            childrenStartTime: null,
+            childrenChildId: null,
+            childrenTimeoutMs: null,
+            statusRevision: undefined,
           })),
         }));
         stepCountById[id] = 0;
@@ -242,7 +295,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         let statusFailures = 0;
         let statusStopSent = false;
         while (generation === executionGeneration) {
-          await delay(300);
+          // Events normally deliver progress first. The command status path is
+          // a low-frequency recovery mechanism; tests/browser mode retain the
+          // legacy cadence because no native event bridge exists there.
+          await delay(hasStatusEvents ? 1_000 : 300);
           if (generation !== executionGeneration) break;
           let status: Awaited<ReturnType<typeof getPipelineStatus>>;
           try {
@@ -270,14 +326,61 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           const newSteps = status.step_results.slice(prevCount);
           stepCountById[id] = status.step_results.length;
           for (const step of newSteps) appendStepLog(entry.name, step);
-          set((state) => updateEntry(state, id, (current) => ({
-            ...current,
-            status: executionStatus,
-            runId: terminal ? null : current.runId,
-            currentNodeId: terminal ? null : status.current_node_id,
-            elapsedMs: status.elapsed_ms,
-            error: status.error ?? null,
-          })));
+          const isRunning = executionStatus === "running";
+          set((state) => updateEntry(state, id, (current) => {
+            const polledRevision = status.revision ?? 0;
+            const revisionStale = polledRevision <= (current.statusRevision ?? -1);
+
+            const nodeId = terminal ? null : status.current_node_id;
+            const nodeChanged = nodeId && nodeId !== current.currentNodeId;
+
+            let nodeStartTime = current.nodeStartTime;
+            let nodeElapsedMs = current.nodeElapsedMs ?? 0;
+
+            // Use backend-provided children state instead of heuristic
+            const childrenStartTimeMs = status.children_start_time_ms ?? null;
+            const childrenParentId = revisionStale
+              ? current.childrenParentId ?? null
+              : (status.children_parent_id ?? null);
+            // Convert backend start time (ms since children trying started) to absolute timestamp
+            const childrenStartTime = revisionStale
+              ? current.childrenStartTime ?? null
+              : (childrenStartTimeMs !== null ? Date.now() - childrenStartTimeMs : null);
+
+            if (nodeChanged) {
+              nodeStartTime = Date.now();
+              nodeElapsedMs = 0;
+            } else if (isRunning && !childrenParentId && nodeStartTime) {
+              nodeElapsedMs += 300;
+            } else if (isRunning && childrenParentId && childrenStartTimeMs !== null) {
+              // While children are tried, use backend-provided elapsed time
+              nodeElapsedMs = childrenStartTimeMs;
+            }
+
+            return {
+              ...current,
+              status: executionStatus,
+              runId: terminal ? null : current.runId,
+              currentNodeId: nodeId,
+              elapsedMs: status.elapsed_ms,
+              error: status.error ?? null,
+              hitCounts: status.hit_counts ?? {},
+              attemptCount: status.attempt_count,
+              lastStepResults: status.step_results.slice(-10),
+              stepCount: status.step_results.length,
+              nodeStartTime,
+              nodeElapsedMs,
+              childrenParentId,
+              childrenStartTime,
+              childrenChildId: revisionStale
+                ? current.childrenChildId ?? null
+                : (status.children_child_id ?? null),
+              childrenTimeoutMs: revisionStale
+                ? current.childrenTimeoutMs ?? null
+                : (status.children_timeout_ms ?? null),
+              statusRevision: status.revision,
+            };
+          }));
           if (terminal) break;
         }
 
@@ -319,6 +422,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         }
         const errorMessage = startError.code === "generic" ? startError.message : startError.diagnostic;
         console.error(`Pipeline ${entry.name} failed:`, errorMessage);
+        useLogStore.getState().appendLog({
+          source: "pipeline",
+          label: entry.name,
+          detail: `Pipeline failed before execution · ${errorMessage}`,
+          result: "error",
+        });
         if (generation === executionGeneration) {
           set((state) => updateEntry(state, id, (current) => ({
             ...current,
@@ -372,6 +481,16 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           currentNodeId: status.current_node_id,
           elapsedMs: status.elapsed_ms,
           error: status.error ?? null,
+          hitCounts: status.hit_counts ?? {},
+          attemptCount: status.attempt_count,
+          lastStepResults: status.step_results.slice(-10),
+          stepCount: status.step_results.length,
+          childrenParentId: status.children_parent_id ?? null,
+          childrenStartTime: status.children_start_time_ms !== null && status.children_start_time_ms !== undefined
+            ? Date.now() - status.children_start_time_ms
+            : null,
+          childrenChildId: status.children_child_id ?? null,
+          childrenTimeoutMs: status.children_timeout_ms ?? null,
         })));
       } catch (error) {
         console.error("Failed to toggle pipeline pause:", error);
@@ -392,14 +511,38 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         const newSteps = status.step_results.slice(prevCount);
         stepCountById[entry.id] = status.step_results.length;
         for (const step of newSteps) appendStepLog(entry.name, step);
-        set((state) => updateEntry(state, entry.id, (current) => ({
-          ...current,
-          status: executionStatus,
-          runId: terminal ? null : current.runId,
-          currentNodeId: terminal ? null : status.current_node_id,
-          elapsedMs: status.elapsed_ms,
-          error: status.error ?? null,
-        })));
+        set((state) => updateEntry(state, entry.id, (current) => {
+          const polledRevision = status.revision ?? 0;
+          const revisionStale = polledRevision <= (current.statusRevision ?? -1);
+
+          return {
+            ...current,
+            status: executionStatus,
+            runId: terminal ? null : current.runId,
+            currentNodeId: terminal ? null : status.current_node_id,
+            elapsedMs: status.elapsed_ms,
+            error: status.error ?? null,
+            attemptCount: status.attempt_count,
+            hitCounts: status.hit_counts ?? {},
+            lastStepResults: status.step_results.slice(-10),
+            stepCount: status.step_results.length,
+            childrenParentId: revisionStale
+              ? current.childrenParentId ?? null
+              : (status.children_parent_id ?? null),
+            childrenStartTime: revisionStale
+              ? current.childrenStartTime ?? null
+              : (status.children_start_time_ms !== null && status.children_start_time_ms !== undefined
+                ? Date.now() - status.children_start_time_ms
+                : null),
+            childrenChildId: revisionStale
+              ? current.childrenChildId ?? null
+              : (status.children_child_id ?? null),
+            childrenTimeoutMs: revisionStale
+              ? current.childrenTimeoutMs ?? null
+              : (status.children_timeout_ms ?? null),
+            statusRevision: status.revision,
+          };
+        }));
       } catch {
         // Retry transient status failures on the next refresh.
       }

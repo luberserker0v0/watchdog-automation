@@ -2,6 +2,7 @@ use crate::modules::pipeline::commands::runner::create_registry;
 use crate::modules::pipeline::engine::debug_image;
 use crate::modules::pipeline::models::graph::{CaptureArea, PipelineTarget};
 use crate::modules::pipeline::models::node::NodeConfig;
+use crate::modules::pipeline::models::params::ParamDef;
 use crate::services::stream::{CaptureEngine, StreamStatus, StreamTarget};
 use crate::utils::paths;
 use tauri::Emitter;
@@ -13,6 +14,8 @@ pub struct NodeMetaInfo {
     pub source: String,
     #[serde(flatten)]
     pub config: NodeConfig,
+    #[serde(default)]
+    pub params: Vec<ParamDef>,
 }
 
 impl std::ops::Deref for NodeMetaInfo {
@@ -28,7 +31,14 @@ pub struct NodeTestResult {
     pub success: bool,
     pub matched: bool,
     pub confidence: f64,
+    /// Physical virtual-screen region used by actions and click diagnostics.
     pub box_region: Option<crate::modules::pipeline::models::recognizer::Region>,
+    /// Recognition region in encoded capture-frame pixels, used by Preview overlays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture_box_region: Option<crate::modules::pipeline::models::recognizer::Region>,
+    /// Effective, offset-adjusted, frame-clipped ROI used for recognition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capture_roi: Option<crate::modules::pipeline::models::recognizer::Region>,
     pub actions_fired: u32,
     pub duration_ms: u64,
     pub error: Option<String>,
@@ -156,6 +166,7 @@ fn append_node_metas(
                 file_name: file_name.clone(),
                 source: source.to_string(),
                 config,
+                params: Vec::new(),
             }
         }));
     }
@@ -464,6 +475,8 @@ pub async fn test_node(
             matched: false,
             confidence: 0.0,
             box_region: None,
+            capture_box_region: None,
+            capture_roi: None,
             actions_fired: 0,
             duration_ms: start.elapsed().as_millis() as u64,
             error: Some(format!("Node '{}' is disabled", node.id)),
@@ -612,6 +625,8 @@ pub async fn test_node(
             matched: false,
             confidence: 0.0,
             box_region: None,
+            capture_box_region: None,
+            capture_roi: None,
             actions_fired: 0,
             duration_ms: start.elapsed().as_millis() as u64,
             error: Some(msg),
@@ -651,6 +666,8 @@ pub async fn test_node(
                     matched: false,
                     confidence: 0.0,
                     box_region: None,
+                    capture_box_region: None,
+                    capture_roi: None,
                     actions_fired: 0,
                     duration_ms: start.elapsed().as_millis() as u64,
                     error: Some(msg),
@@ -670,6 +687,8 @@ pub async fn test_node(
                     matched: false,
                     confidence: 0.0,
                     box_region: None,
+                    capture_box_region: None,
+                    capture_roi: None,
                     actions_fired: 0,
                     duration_ms: start.elapsed().as_millis() as u64,
                     error: Some(msg),
@@ -724,18 +743,28 @@ pub async fn test_node(
     // Run recognition
     let phase_start = std::time::Instant::now();
     let registry = create_registry();
+    let fixed_roi = match node.recognition.roi.as_ref() {
+        None => None,
+        Some(crate::modules::pipeline::models::recognizer::RecognitionRoi::Fixed(rect)) => {
+            Some(rect)
+        }
+        Some(crate::modules::pipeline::models::recognizer::RecognitionRoi::Node(id)) => {
+            return Err(format!("Single-node testing cannot resolve ROI node '{id}' without an earlier pipeline result"));
+        }
+    };
     let effective_roi =
         crate::modules::pipeline::plugins::shared::resolve_recognition_roi_with_offset(
-            node.recognition.roi.as_ref(),
+            fixed_roi,
             node.recognition.roi_offset.as_ref(),
             img.width(),
             img.height(),
         )
         .map_err(|error| error.to_string())?;
+    let substituted_kind = node.recognition.kind.substitute(&resolved_params);
     let mut match_result = registry
         .evaluate_recognition_with_selection(
             &img,
-            &node.recognition.kind,
+            &substituted_kind,
             Some(&effective_roi),
             node.recognition.candidate_selection.as_ref(),
         )
@@ -813,6 +842,13 @@ pub async fn test_node(
         crate::modules::pipeline::models::recognizer::effective_match(&match_result, node.inverse);
     let confidence = match_result.confidence;
     let box_region = match_result.box_region.clone();
+    let capture_box_region = debug_match_result.box_region.clone();
+    let capture_roi = Some(crate::modules::pipeline::models::recognizer::Region {
+        x: effective_roi[0],
+        y: effective_roi[1],
+        width: effective_roi[2] as u32,
+        height: effective_roi[3] as u32,
+    });
 
     if matched {
         log::info!(
@@ -985,6 +1021,8 @@ pub async fn test_node(
         matched,
         confidence,
         box_region,
+        capture_box_region,
+        capture_roi,
         actions_fired,
         duration_ms,
         error: action_error,
@@ -1156,6 +1194,7 @@ mod fixture_tests {
                 file_name,
                 source: "built-in".to_string(),
                 config,
+                params: Vec::new(),
             };
 
             recognitions.insert(match &node.recognition.kind {

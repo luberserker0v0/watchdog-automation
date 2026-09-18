@@ -3,6 +3,7 @@ import type { ParamDef, ParamType } from "../../../api/pipeline";
 
 type ParamValue = string | number | boolean;
 interface ParamsFormProps {
+  title?: string;
   params: ParamDef[];
   values: Record<string, ParamValue>;
   onChange: (key: string, value: ParamValue) => void;
@@ -65,11 +66,11 @@ const ParamField = memo(function ParamField({
   return <div className="params-field"><label className="params-label">{param.label}</label><div className="params-input-wrap">{control}</div></div>;
 });
 
-export default function ParamsForm({ params, values, onChange, disabled }: ParamsFormProps) {
+export default function ParamsForm({ title, params, values, onChange, disabled }: ParamsFormProps) {
   if (!params.length) return null;
   return (
     <div className="params-form">
-      <div className="params-form-title">Parameters</div>
+      <div className="params-form-title">{title ?? "Parameters"}</div>
       <fieldset className="params-form-fields" disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
         {params.map((param) => <ParamField key={param.key} param={param} value={values[param.key] ?? param.default ?? ""} onChange={onChange} />)}
       </fieldset>

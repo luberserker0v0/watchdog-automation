@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { listPipelines, type PipelineInfo } from "../../../api/pipeline";
 import MermaidGraph from "../components/MermaidGraph";
+import NodeDetailModal from "../components/NodeDetailModal";
 import PipelineCard from "../components/PipelineCard";
 import PipelinePreviewModal from "../components/PipelinePreviewModal";
 import {
@@ -55,6 +56,8 @@ function PipelineExecutionHeader() {
 
 function PipelinePicker() {
   const [available, setAvailable] = useState<PipelineInfo[]>([]);
+  const [listError, setListError] = useState<string | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
   const paths = usePipelineStore(useShallow((state) =>
     state.pipelineIds.map((id) => state.pipelinesById[id].path),
   ));
@@ -63,19 +66,30 @@ function PipelinePicker() {
   useEffect(() => {
     let active = true;
     listPipelines().then((items) => {
-      if (active) setAvailable(items);
-    }).catch(() => undefined);
+      if (active) { setAvailable(items); setListError(null); }
+    }).catch((error) => {
+      if (active) setListError(String(error));
+    });
     return () => { active = false; };
   }, []);
 
   return (
     <div className="pipeline-add-row">
+      {listError && (
+        <div className="pipeline-error-banner">{listError}</div>
+      )}
+      {addError && (
+        <div className="pipeline-error-banner">{addError}</div>
+      )}
       <select
         className="pipeline-add-select"
         value=""
         onChange={(event) => {
           const path = event.target.value;
-          if (path) void addPipeline(path).catch((error) => console.error("Failed to add pipeline:", error));
+          if (path) {
+            setAddError(null);
+            void addPipeline(path).catch((error) => setAddError(String(error)));
+          }
         }}
       >
         <option value="">+ Add pipeline...</option>
@@ -99,8 +113,12 @@ function PipelineList({ onPreview }: { onPreview: (id: string) => void }) {
   );
 }
 
+const EMPTY_HIT_COUNTS: Record<string, number> = {};
+
 function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
   const [focusMode, setFocusMode] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
   const displayedId = usePipelineStore(selectDisplayedPipelineId);
   const graph = usePipelineStore(useShallow((state) => {
     const entry = displayedId ? state.pipelinesById[displayedId] : undefined;
@@ -111,7 +129,24 @@ function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
       flow: entry?.graph ?? null,
       currentNodeId: entry?.currentNodeId ?? null,
       layoutWritable: entry?.layoutWritable ?? false,
+      hitCounts: entry?.hitCounts ?? EMPTY_HIT_COUNTS,
+      nodeElapsedMs: entry?.nodeElapsedMs ?? 0,
+      childrenParentId: entry?.childrenParentId ?? null,
+      childrenStartTime: entry?.childrenStartTime ?? null,
+      childrenChildId: entry?.childrenChildId ?? null,
+      childrenTimeoutMs: entry?.childrenTimeoutMs ?? null,
     };
+  }));
+  const detailNode = detailNodeId ? graph.flow?.nodes.find((n) => n.id === detailNodeId) : undefined;
+  const detailLastStep = usePipelineStore(useShallow((state) => {
+    if (!displayedId || !detailNodeId) return undefined;
+    const entry = state.pipelinesById[displayedId];
+    const results = entry?.lastStepResults;
+    if (!results) return undefined;
+    for (let i = results.length - 1; i >= 0; i--) {
+      if (results[i].node_id === detailNodeId) return results[i];
+    }
+    return undefined;
   }));
   return (
     <section className="pipeline-graph-pane" aria-label="Pipeline graph">
@@ -142,15 +177,40 @@ function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
           mermaid={graph.mermaid}
           flow={graph.flow}
           currentNodeId={graph.currentNodeId}
-          selectedNodeId={null}
-          onNodeClick={() => undefined}
+          selectedNodeId={selectedNodeId}
+          onNodeClick={setSelectedNodeId}
+          onNodeDoubleClick={setDetailNodeId}
           focusCurrentNode={focusMode}
           layoutKey={graph.path}
           allowNodeLayout
           layoutWritable={graph.layoutWritable}
+          hitCounts={graph.hitCounts}
+          nodeTimeoutProgress={graph.currentNodeId ? (() => {
+            const parentId = graph.childrenParentId;
+            if (parentId) {
+              // Active quota comes from the backend (parent timeout for
+              // normal children, parent error_timeout for error targets).
+              const timeout = graph.childrenTimeoutMs ?? 20000;
+              const elapsed = graph.childrenStartTime ? Date.now() - graph.childrenStartTime : 0;
+              return Math.min(elapsed / timeout, 1);
+            }
+            const nodeDef = graph.flow?.nodes.find((n) => n.id === graph.currentNodeId);
+            const timeout = nodeDef?.timeout ?? 20000;
+            return Math.min(graph.nodeElapsedMs / timeout, 1);
+          })() : undefined}
+          childrenParentId={graph.childrenParentId}
+          childrenChildId={graph.childrenChildId}
         />
         ) : (
           <div className="pipeline-graph-empty">Select or add a pipeline to view its graph.</div>
+        )}
+        {detailNode && (
+          <NodeDetailModal
+            node={detailNode}
+            hitCount={graph.hitCounts[detailNode.id] ?? 0}
+            lastStep={detailLastStep}
+            onClose={() => setDetailNodeId(null)}
+          />
         )}
       </div>
     </section>

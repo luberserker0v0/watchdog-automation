@@ -12,7 +12,7 @@ const entry = (id: string): PipelineEntry => ({
   graph: null,
   mermaid: id,
   meta: "",
-  collectedParams: [],
+  paramsByNode: {},
   userParams: {},
   isChecked: true,
   status: "idle",
@@ -46,7 +46,7 @@ describe("PipelineCard render isolation", () => {
     commits.a = 0;
     commits.b = 0;
 
-    act(() => usePipelineStore.getState().updateParams("a", "value", "new"));
+    act(() => usePipelineStore.getState().updateParams("a", "node-1", "value", "new"));
 
     expect(commits.a).toBe(1);
     expect(commits.b).toBe(0);
@@ -91,7 +91,8 @@ describe("PipelineCard render isolation", () => {
         ...state.pipelinesById,
         b: {
           ...state.pipelinesById.b,
-          collectedParams: [{ type: "text", key: "name", label: "Name" }],
+          paramsByNode: { "node-1": [{ type: "text", key: "name", label: "Name" }] },
+          userParams: { "node-1": {} },
         },
       },
     }));
@@ -100,7 +101,7 @@ describe("PipelineCard render isolation", () => {
     expect(preview).toHaveBeenCalledWith("b");
     await user.click(getByRole("button", { name: "▾" }));
     await user.type(getByRole("textbox"), "Alice");
-    expect(usePipelineStore.getState().pipelinesById.b.userParams.name).toBe("Alice");
+    expect(usePipelineStore.getState().pipelinesById.b.userParams["node-1"].name).toBe("Alice");
     await user.click(getByRole("checkbox"));
     expect(usePipelineStore.getState().pipelinesById.b.isChecked).toBe(false);
   });

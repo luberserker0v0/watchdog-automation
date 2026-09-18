@@ -150,6 +150,23 @@ describe("WatchDog metadata schema", () => {
     expect(windowTarget.anyOf).toBeUndefined();
   });
 
+  it("documents both fixed and Mermaid-node ROIs in every recognizer", () => {
+    const schema = metadataSchema as unknown as JsonSchema;
+    const roi = schema.$defs!.roi;
+    const variants = roi.oneOf!;
+    expect(variants).toHaveLength(2);
+    expect(variants[0].type).toBe("array");
+    expect(variants[1].type).toBe("string");
+    const pattern = new RegExp((variants[1] as JsonSchema & { pattern: string }).pattern);
+    expect(pattern.test("Find-Panel")).toBe(true);
+    expect(pattern.test("9Panel")).toBe(false);
+    expect(roi.markdownDescription).toMatch(/earlier matched Mermaid node/i);
+    for (const recognizer of schema.$defs!.recognition.oneOf!) {
+      expect(recognizer.properties!.roi.description).toMatch(/earlier Mermaid node ID/i);
+      expect(recognizer.properties!.roi_offset.description).toMatch(/mapped earlier-node box/i);
+    }
+  });
+
   it("documents top-level client window sizing and excludes it from node overrides", () => {
     const schema = metadataSchema as unknown as JsonSchema;
     const windowTarget = schema.$defs!.captureTarget.oneOf![1];
@@ -169,7 +186,6 @@ describe("WatchDog metadata schema", () => {
     const zeroRegion = [0, 0, 0, 0];
     expect(schema.properties!.target.default).toBeNull();
     expect(schema.properties!.nodes.default).toEqual({});
-    expect(schema.properties!.edges.default).toEqual({});
     expect(defs.captureTarget.oneOf![0].properties!.index.default).toBe(0);
     expect(defs.captureTarget.oneOf![1].properties!.capture_area.default).toBe("frame");
 
@@ -214,8 +230,9 @@ describe("WatchDog metadata schema", () => {
     expect(defs.nodeFields.properties!.params.default).toEqual([]);
     expect(defs.nodeFields.properties!.target.default).toBeNull();
     expect(defs.nodeFields.properties!.timeout.default).toBe(20000);
+    expect(defs.nodeFields.properties!.error_timeout.default).toBe(20000);
+    expect(defs.nodeFields.properties!.kind.default).toBe("Normal");
     expect(defs.nodeFields.properties!.attach.default).toBeNull();
-    expect(defs.edgeMetadata.properties!.edge_type.default).toBe("next");
   });
 
   it("allows node recognition to use its DirectHit engine default", () => {

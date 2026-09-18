@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDebugStore } from "../../stores/useDebugStore";
+import { useOverlayStore } from "../../stores/useOverlayStore";
 import { createNodeEmulatorDraft } from "./nodeEmulatorModel";
 
 const api = vi.hoisted(() => ({ testNode: vi.fn() }));
@@ -16,6 +17,7 @@ describe("NodeEmulatorTool", () => {
     vi.clearAllMocks();
     api.testNode.mockResolvedValue(result);
     useDebugStore.setState({ nodeEmulatorDraft: createNodeEmulatorDraft({ type: "screen", index: 0 }), nodeEmulatorInitialized: true });
+    useOverlayStore.setState({ roi: null, resultRoi: null, imageDimensions: { width: 500, height: 400 } });
   });
 
   it("uses explicit recognition-only and full execution modes", async () => {
@@ -46,5 +48,51 @@ describe("NodeEmulatorTool", () => {
     await user.type(id, "EditedNode");
     expect(frameRenders).toBe(1);
     expect(useDebugStore.getState().nodeEmulatorDraft.id).toBe("EditedNode");
+  });
+
+  it("publishes the effective recognition ROI and matched result to Preview", async () => {
+    const draft = createNodeEmulatorDraft({ type: "screen", index: 0 });
+    draft.recognition = {
+      ...draft.recognition,
+      roi: "10,20,100,50",
+      roiOffset: "5,6,7,8",
+    };
+    useDebugStore.setState({ nodeEmulatorDraft: draft, nodeEmulatorInitialized: true });
+    api.testNode.mockResolvedValue({
+      ...result,
+      box_region: { x: 830, y: 440, width: 50, height: 20 },
+      capture_box_region: { x: 30, y: 40, width: 50, height: 20 },
+      capture_roi: { x: 15, y: 26, width: 107, height: 58 },
+    });
+    const user = userEvent.setup();
+    const view = render(<NodeEmulatorTool currentTarget={{ type: "screen", index: 0 }} />);
+
+    await user.click(screen.getByRole("button", { name: "Recognize Only" }));
+
+    expect(useOverlayStore.getState().roi).toEqual({ x: 15, y: 26, w: 107, h: 58 });
+    expect(useOverlayStore.getState().resultRoi).toEqual({ x: 30, y: 40, w: 50, h: 20 });
+
+    view.unmount();
+    expect(useOverlayStore.getState().roi).toBeNull();
+    expect(useOverlayStore.getState().resultRoi).toBeNull();
+  });
+
+  it("restores the backend ROI after Node Test replaces the stream session", async () => {
+    let finish!: (value: typeof result & { capture_roi: { x: number; y: number; width: number; height: number } }) => void;
+    api.testNode.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<NodeEmulatorTool currentTarget={{ type: "screen", index: 0 }} />);
+
+    await user.click(screen.getByRole("button", { name: "Recognize Only" }));
+    await waitFor(() => expect(api.testNode).toHaveBeenCalled());
+    act(() => useOverlayStore.getState().clearRecognition());
+    expect(useOverlayStore.getState().roi).toBeNull();
+
+    act(() => finish({
+      ...result,
+      capture_roi: { x: 20, y: 30, width: 200, height: 100 },
+    }));
+
+    await waitFor(() => expect(useOverlayStore.getState().roi).toEqual({ x: 20, y: 30, w: 200, h: 100 }));
   });
 });

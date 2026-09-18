@@ -5,18 +5,30 @@ use super::params::ParamDef;
 use super::recognizer::RecognitionConfig;
 use serde::{Deserialize, Serialize};
 
+/// Structural node type. `Entry` marks the pipeline entry node: it carries
+/// no recognition or actions and transitions straight to its children.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NodeKind {
+    #[default]
+    Normal,
+    Entry,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
+    #[serde(default)]
+    pub kind: NodeKind,
     #[serde(default = "default_recognition")]
     pub recognition: RecognitionConfig,
     #[serde(default)]
     pub actions: Vec<Action>,
-    #[serde(default)]
-    pub params: Vec<ParamDef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<PipelineTarget>,
     #[serde(default = "default_timeout")]
     pub timeout: u64,
+    /// Quota for executing the error target after the children quota expires.
+    #[serde(default = "default_timeout")]
+    pub error_timeout: u64,
     #[serde(default = "default_rate_limit")]
     pub rate_limit: u64,
     #[serde(default = "default_pre_delay")]
@@ -40,11 +52,12 @@ pub struct NodeConfig {
 impl Default for NodeConfig {
     fn default() -> Self {
         Self {
+            kind: NodeKind::Normal,
             recognition: default_recognition(),
             actions: Vec::new(),
-            params: Vec::new(),
             target: None,
             timeout: default_timeout(),
+            error_timeout: default_timeout(),
             rate_limit: default_rate_limit(),
             pre_delay: default_pre_delay(),
             post_delay: default_post_delay(),
@@ -65,6 +78,8 @@ pub struct Node {
     pub label: String,
     #[serde(flatten)]
     pub config: NodeConfig,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<ParamDef>,
 }
 
 impl std::ops::Deref for Node {

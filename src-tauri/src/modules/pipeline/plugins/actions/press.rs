@@ -18,7 +18,7 @@ impl ActionPlugin for ClickKeyAction {
         _box_region: Option<&Region>,
         _prev_regions: &HashMap<String, Region>,
     ) -> Result<(), PluginError> {
-        let keys = match action {
+        let key_values = match action {
             Action::ClickKey { key } => key,
             _ => {
                 return Err(PluginError::ActionFailed(
@@ -27,13 +27,22 @@ impl ActionPlugin for ClickKeyAction {
             }
         };
 
+        let keys: Vec<u32> = key_values
+            .iter()
+            .map(|v| match v {
+                serde_json::Value::Number(n) => n.as_u64().unwrap_or(0) as u32,
+                serde_json::Value::String(s) => s.parse::<u32>().unwrap_or(0),
+                _ => 0,
+            })
+            .collect();
+
         log::debug!("[action:ClickKey] pressing keys {:?}", keys);
 
         let mut enigo = enigo::Enigo::new(&enigo::Settings::default())
             .map_err(|e| PluginError::ActionFailed(format!("Failed to create enigo: {}", e)))?;
 
         use enigo::Keyboard;
-        for key_code in keys {
+        for key_code in &keys {
             let key = map_key(*key_code).ok_or_else(|| {
                 PluginError::ActionFailed(format!("Unknown key code: {}", key_code))
             })?;

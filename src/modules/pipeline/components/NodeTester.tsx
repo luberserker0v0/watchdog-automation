@@ -279,7 +279,7 @@ export default function NodeTester() {
             {selectedNode.recognition.roi && (
               <div className="tester-row">
                 <span className="tester-label">ROI</span>
-                <code className="tester-value">[{selectedNode.recognition.roi.join(", ")}]</code>
+                <code className="tester-value">{typeof selectedNode.recognition.roi === "string" ? selectedNode.recognition.roi : `[${selectedNode.recognition.roi.join(", ")}]`}</code>
               </div>
             )}
             {selectedNode.recognition.roi_offset && (

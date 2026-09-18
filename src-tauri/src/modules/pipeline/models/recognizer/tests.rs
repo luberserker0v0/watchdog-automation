@@ -229,3 +229,41 @@ fn debug_candidate_limit_preserves_a_selected_candidate_outside_the_prefix() {
         .iter()
         .any(|candidate| candidate.rank == 120 && candidate.selected));
 }
+
+#[test]
+fn test_recognition_substitute_ocr_expected() {
+    let recognition = Recognition::Ocr {
+        expected: Some("{{key}}".to_string()),
+        threshold: None,
+    };
+    let mut params = std::collections::HashMap::new();
+    params.insert("key".to_string(), serde_json::Value::Number(19.into()));
+    let substituted = recognition.substitute(&params);
+    match substituted {
+        Recognition::Ocr { expected, .. } => assert_eq!(expected.as_deref(), Some("19")),
+        _ => panic!("Expected Ocr variant"),
+    }
+}
+
+#[test]
+fn test_recognition_substitute_no_params_returns_clone() {
+    let recognition = Recognition::Ocr {
+        expected: Some("{{key}}".to_string()),
+        threshold: None,
+    };
+    let params = std::collections::HashMap::new();
+    let substituted = recognition.substitute(&params);
+    match substituted {
+        Recognition::Ocr { expected, .. } => assert_eq!(expected.as_deref(), Some("{{key}}")),
+        _ => panic!("Expected Ocr variant"),
+    }
+}
+
+#[test]
+fn test_recognition_substitute_direct_hit_unchanged() {
+    let recognition = Recognition::DirectHit;
+    let mut params = std::collections::HashMap::new();
+    params.insert("key".to_string(), serde_json::Value::Number(19.into()));
+    let substituted = recognition.substitute(&params);
+    assert!(matches!(substituted, Recognition::DirectHit));
+}

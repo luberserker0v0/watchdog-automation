@@ -20,7 +20,7 @@ const pipeline: PipelineEntry = {
   graph: null,
   mermaid: "flowchart TD\nA --> B",
   meta: "",
-  collectedParams: [],
+  paramsByNode: {},
   userParams: {},
   isChecked: true,
   status: "idle",

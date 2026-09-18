@@ -23,10 +23,15 @@ export interface MermaidGraphProps {
   currentNodeId: string | null;
   selectedNodeId: string | null;
   onNodeClick: (id: string | null) => void;
+  onNodeDoubleClick?: (id: string) => void;
   focusCurrentNode?: boolean;
   layoutKey?: string;
   allowNodeLayout?: boolean;
   layoutWritable?: boolean;
+  hitCounts?: Record<string, number>;
+  nodeTimeoutProgress?: number;
+  childrenParentId?: string | null;
+  childrenChildId?: string | null;
 }
 
 export default function MermaidGraph({
@@ -35,10 +40,15 @@ export default function MermaidGraph({
   currentNodeId,
   selectedNodeId,
   onNodeClick,
+  onNodeDoubleClick,
   focusCurrentNode = false,
   layoutKey,
   allowNodeLayout = false,
   layoutWritable = true,
+  hitCounts = {},
+  nodeTimeoutProgress,
+  childrenParentId,
+  childrenChildId,
 }: MermaidGraphProps) {
   const [zoom, setZoom] = useState(1.0);
   const [panX, setPanX] = useState(0);
@@ -92,11 +102,12 @@ export default function MermaidGraph({
 
   useEffect(() => {
     if (!focusCurrentNode || !currentNodeId || nodeDragRef.current) return;
-    const current = nodes.find((node) => node.id === currentNodeId);
+    const focusId = childrenChildId ?? currentNodeId;
+    const current = nodes.find((node) => node.id === focusId);
     if (!current) return;
     setPanX(containerSize.w / 2 - (current.x + NODE_W / 2) * zoom);
     setPanY(containerSize.h / 2 - (current.y + NODE_H / 2) * zoom);
-  }, [containerSize.h, containerSize.w, currentNodeId, focusCurrentNode, nodes, zoom]);
+  }, [containerSize.h, containerSize.w, currentNodeId, childrenChildId, focusCurrentNode, nodes, zoom]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -394,13 +405,19 @@ export default function MermaidGraph({
   const staticNodesSvg = useMemo(() => (
     <>
       {nodes.map((node) => {
-        const isCurrent = node.id === currentNodeId;
+        const isCurrent = node.id === (childrenChildId ?? currentNodeId);
         const isSelected = node.id === selectedNodeId;
         const isLayoutSelected = selectedLayoutNodeIds.includes(node.id);
-        const fill = isCurrent ? "#dbeafe" : isLayoutSelected ? "#f3e8ff" : isSelected ? "#f0f9ff" : "#fff";
-        const stroke = isCurrent ? "#3b82f6" : isLayoutSelected ? "#a855f7" : isSelected ? "#60a5fa" : "#e0e0e0";
-        const strokeW = isCurrent || isSelected || isLayoutSelected ? 2 : 1;
-        const textColor = isCurrent ? "#1d4ed8" : "#333";
+        const nodeDef = flow?.nodes.find((n) => n.id === node.id);
+        const isEntry = nodeDef?.kind === "Entry";
+        const fill = isCurrent ? "#dbeafe" : isLayoutSelected ? "#f3e8ff" : isSelected ? "#f0f9ff" : isEntry ? "#dcfce7" : "#fff";
+        const stroke = isCurrent ? "#3b82f6" : isLayoutSelected ? "#a855f7" : isSelected ? "#60a5fa" : isEntry ? "#16a34a" : "#e0e0e0";
+        const strokeW = isCurrent || isSelected || isLayoutSelected || isEntry ? 2 : 1;
+        const textColor = isCurrent ? "#1d4ed8" : isEntry ? "#15803d" : "#333";
+        const hitCount = hitCounts[node.id] ?? 0;
+        const maxHit = nodeDef?.max_hit;
+        const showBadge = hitCount > 0 && maxHit !== undefined && maxHit < 2147483647;
+        const showProgress = node.id === (childrenParentId ?? currentNodeId) && nodeTimeoutProgress !== undefined;
         return (
           <g
             key={node.id}
@@ -414,16 +431,62 @@ export default function MermaidGraph({
               }
               onNodeClick(isSelected ? null : node.id);
             }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              onNodeDoubleClick?.(node.id);
+            }}
           >
             <rect x={node.x} y={node.y} width={NODE_W} height={NODE_H} rx={6} fill={fill} stroke={stroke} strokeWidth={strokeW} />
             <text x={node.x + NODE_W / 2} y={node.y + NODE_H / 2 + 4} textAnchor="middle" fill={textColor} fontSize={13} fontWeight={isCurrent || isSelected ? 600 : 400}>
               {node.label}
             </text>
+            {showBadge && (
+              <g>
+                <rect
+                  x={node.x + NODE_W - 28}
+                  y={node.y - 8}
+                  width={26}
+                  height={14}
+                  rx={7}
+                  fill={hitCount >= maxHit ? "#ef4444" : "#3b82f6"}
+                />
+                <text
+                  x={node.x + NODE_W - 15}
+                  y={node.y + 2}
+                  textAnchor="middle"
+                  fill="#fff"
+                  fontSize={9}
+                  fontWeight={600}
+                >
+                  {hitCount}/{maxHit}
+                </text>
+              </g>
+            )}
+            {showProgress && (
+              <g>
+                <rect
+                  x={node.x}
+                  y={node.y + NODE_H}
+                  width={NODE_W}
+                  height={3}
+                  rx={1.5}
+                  fill="#e5e7eb"
+                />
+                <rect
+                  x={node.x}
+                  y={node.y + NODE_H}
+                  width={NODE_W * Math.min(nodeTimeoutProgress, 1)}
+                  height={3}
+                  rx={1.5}
+                  fill={nodeTimeoutProgress >= 0.8 ? "#ef4444" : nodeTimeoutProgress >= 0.5 ? "#f59e0b" : "#3b82f6"}
+                />
+              </g>
+            )}
           </g>
         );
       })}
     </>
-  ), [nodes, currentNodeId, selectedNodeId, selectedLayoutNodeIds, onNodeClick, onNodeMouseDown]);
+  ), [nodes, currentNodeId, selectedNodeId, selectedLayoutNodeIds, onNodeClick, onNodeDoubleClick, onNodeMouseDown, hitCounts, flow, nodeTimeoutProgress, childrenParentId]);
 
   const showMinimap = nodes.length > 0 && minimapVisible;
   const minimapScale = 0.12;

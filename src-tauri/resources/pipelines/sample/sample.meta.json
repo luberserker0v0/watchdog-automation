@@ -7,7 +7,16 @@
       500, 600
     ]
   },
+  "launch": {
+    "exe": "watch-dog-target.exe",
+    "wait_for_window": true,
+    "wait_timeout_ms": 10000
+  },
   "nodes": {
+    "Start": {
+      "kind": "Entry",
+      "timeout": 20000
+    },
     "RecognizeTitle": {
       "recognition": {
         "type": "OCR",
@@ -51,14 +60,6 @@
           "input_text": "{{account}}"
         }
       ],
-      "params": [
-        {
-          "type": "text",
-          "key": "account",
-          "label": "Account",
-          "default": "admin"
-        }
-      ],
       "timeout": 10000,
       "rate_limit": 500,
       "pre_delay": 100,
@@ -86,14 +87,6 @@
         {
           "type": "InputText",
           "input_text": "{{password}}"
-        }
-      ],
-      "params": [
-        {
-          "type": "password",
-          "key": "password",
-          "label": "Password",
-          "default": "123456"
         }
       ],
       "timeout": 10000,
@@ -296,6 +289,27 @@
       "post_delay": 200,
       "max_hit": 1
     },
+    "ClickKeyboard": {
+      "actions": [
+        { "type": "ClickKey", "key": ["{{key}}"] }
+      ]
+    },
+    "FindKeyDetectPanel": {
+      "recognition": {
+        "type": "OCR",
+        "expected": "KEY DETECT AREA"
+      }
+    },
+    "VerifyKeyboard": {
+      "recognition": {
+        "type": "OCR",
+        "roi": "FindKeyDetectPanel",
+        "roi_offset": [
+          200, 30, 130, 50
+        ],
+        "expected": "{{key}}"
+      }
+    },
     "Done": {
       "recognition": {
         "type": "DirectHit"
@@ -308,19 +322,104 @@
       "max_hit": 1
     }
   },
-  "edges": {
-    "RecognizeTitle->InputAccount": { "edge_type": "next" },
-    "InputAccount->InputPassword": { "edge_type": "next" },
-    "InputPassword->ClickLogin": { "edge_type": "next" },
-    "ClickLogin->VerifySuccess": { "edge_type": "next" },
-    "ClickLogin->LoginError": { "edge_type": "error" },
-    "LoginError->VerifySuccess": { "edge_type": "next" },
-    "VerifySuccess->ClickNotification": { "edge_type": "next" },
-    "ClickNotification->SwipeCards": { "edge_type": "next" },
-    "SwipeCards->ScrollList": { "edge_type": "next" },
-    "ScrollList->ScrollPage": { "edge_type": "next" },
-    "ScrollPage->PressDelete": { "edge_type": "next" },
-    "PressDelete->ClickRefresh": { "edge_type": "next" },
-    "ClickRefresh->Done": { "edge_type": "next" }
+  "instances": {
+    "Start": {
+      "node": "Start"
+    },
+    "RecognizeTitle": {
+      "node": "RecognizeTitle"
+    },
+    "InputAccount": {
+      "node": "InputAccount",
+      "params": [
+        {
+          "type": "text",
+          "key": "account",
+          "label": "Account",
+          "default": "admin"
+        }
+      ],
+      "param_values": {
+        "account": "admin"
+      }
+    },
+    "InputPassword": {
+      "node": "InputPassword",
+      "params": [
+        {
+          "type": "password",
+          "key": "password",
+          "label": "Password",
+          "default": "123456"
+        }
+      ],
+      "param_values": {
+        "password": "password123"
+      }
+    },
+    "ClickLogin": {
+      "node": "ClickLogin"
+    },
+    "LoginError": {
+      "node": "LoginError"
+    },
+    "VerifySuccess": {
+      "node": "VerifySuccess"
+    },
+    "ClickNotification": {
+      "node": "ClickNotification"
+    },
+    "SwipeCards": {
+      "node": "SwipeCards"
+    },
+    "ScrollList": {
+      "node": "ScrollList"
+    },
+    "ScrollPage": {
+      "node": "ScrollPage"
+    },
+    "PressDelete": {
+      "node": "PressDelete"
+    },
+    "ClickRefresh": {
+      "node": "ClickRefresh"
+    },
+    "ScrollPage2": {
+      "node": "ScrollPage"
+    },
+    "ClickKeyboard": {
+      "node": "ClickKeyboard",
+      "params": [
+        {
+          "type": "number",
+          "key": "key",
+          "label": "Key",
+          "default": 19
+        }
+      ],
+      "param_values": {
+        "key": 19
+      }
+    },
+    "FindKeyDetectPanel": {
+      "node": "FindKeyDetectPanel"
+    },
+    "VerifyKeyboard": {
+      "node": "VerifyKeyboard",
+      "params": [
+        {
+          "type": "text",
+          "key": "key",
+          "label": "Key",
+          "default": "pause"
+        }
+      ],
+      "param_values": {
+        "key": "pause"
+      }
+    },
+    "Done": {
+      "node": "Done"
+    }
   }
 }

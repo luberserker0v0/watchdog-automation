@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DashboardContent } from "./CombinedPage";
 
@@ -32,5 +32,30 @@ describe("Dashboard carousel", () => {
     fireEvent.mouseMove(window, { clientX: 160 });
     expect(carousel.scrollLeft).toBe(40);
     fireEvent.mouseUp(window);
+  });
+});
+
+describe("Dashboard key detection", () => {
+  it("replaces shortcut buttons with a persistent normalized key result", () => {
+    render(<DashboardContent />);
+
+    expect(screen.queryByText("Key Shortcuts")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Escape" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Key detect area" })).toHaveTextContent("Press any keyboard key");
+
+    fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
+
+    expect(screen.getByRole("status", { name: "Key detect area" })).toHaveTextContent("Detected key");
+    expect(screen.getByText("esc")).toHaveAttribute("data-target", "key:esc");
+  });
+
+  it("normalizes printable and special key names", () => {
+    render(<DashboardContent />);
+
+    fireEvent.keyDown(window, { key: "A", code: "KeyA" });
+    expect(screen.getByText("a")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+    expect(screen.getByText("space")).toBeInTheDocument();
   });
 });

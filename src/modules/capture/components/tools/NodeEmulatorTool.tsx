@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { testNode, type NodeExecutionMode, type NodeTestResult } from "../../../../api/nodeTest";
 import type { Action, CandidateOrder, ParamType, PipelineTarget, Recognition } from "../../../../api/pipeline";
 import { usePreferencesStore } from "../../../core/stores/usePreferencesStore";
 import { useDebugStore } from "../../stores/useDebugStore";
 import { useLogStore } from "../../stores/useLogStore";
+import { useOverlayStore } from "../../stores/useOverlayStore";
+import { resolveRecognitionOverlayRoi } from "../../utils/recognitionOverlay";
 import {
   buildNodeEmulator,
   defaultActionDraft,
@@ -127,13 +129,49 @@ export default function NodeEmulatorTool({ currentTarget }: { currentTarget?: Pi
   const initializeTarget = useDebugStore((state) => state.initializeNodeEmulatorTarget);
   const useTarget = useDebugStore((state) => state.useNodeEmulatorTarget);
   const appendLog = useLogStore((state) => state.appendLog);
+  const setRoi = useOverlayStore((state) => state.setRoi);
+  const setResultRoi = useOverlayStore((state) => state.setResultRoi);
+  const clearRecognition = useOverlayStore((state) => state.clearRecognition);
+  const imageDimensions = useOverlayStore((state) => state.imageDimensions);
   const built = useMemo(() => buildNodeEmulator(draft), [draft]);
   const [loading, setLoading] = useState<NodeExecutionMode | null>(null);
   const [result, setResult] = useState<NodeTestResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const executionGeneration = useRef(0);
+  const resultGeneration = useRef(0);
 
   useEffect(() => { if (currentTarget) initializeTarget(currentTarget); }, [currentTarget, initializeTarget]);
+  useEffect(() => () => {
+    executionGeneration.current += 1;
+    clearRecognition();
+  }, [clearRecognition]);
+  useEffect(() => {
+    executionGeneration.current += 1;
+    setResult(null);
+    setRunError(null);
+    setLoading(null);
+    clearRecognition();
+  }, [clearRecognition, draft.recognition, draft.target]);
+  useEffect(() => {
+    if (!result || !built.value || resultGeneration.current !== executionGeneration.current) return;
+    const effectiveRoi = result.capture_roi;
+    setRoi(effectiveRoi ? {
+      x: effectiveRoi.x,
+      y: effectiveRoi.y,
+      w: effectiveRoi.width,
+      h: effectiveRoi.height,
+    } : resolveRecognitionOverlayRoi(built.value.node.recognition, imageDimensions));
+    const captureResult = result.capture_box_region
+      ?? result.candidates.find((candidate) => candidate.selected)?.region
+      ?? null;
+    setResultRoi(captureResult ? {
+      x: captureResult.x,
+      y: captureResult.y,
+      w: captureResult.width,
+      h: captureResult.height,
+    } : null);
+  }, [built.value, imageDimensions, result, setResultRoi, setRoi]);
   const update = (patch: Partial<NodeEmulatorDraft>) => setDraft({ ...draft, ...patch });
   const updateRecognition = (patch: Partial<NodeEmulatorDraft["recognition"]>) => update({ recognition: { ...draft.recognition, ...patch } });
   const updateAction = (index: number, patch: Partial<EmulatorActionDraft>) => update({ actions: draft.actions.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) });
@@ -142,26 +180,37 @@ export default function NodeEmulatorTool({ currentTarget }: { currentTarget?: Pi
 
   const execute = async (mode: NodeExecutionMode) => {
     if (!built.value || !draft.enabled) return;
+    const generation = ++executionGeneration.current;
+    setRoi(resolveRecognitionOverlayRoi(built.value.node.recognition, imageDimensions));
+    setResultRoi(null);
     setLoading(mode); setResult(null); setRunError(null);
     try {
       const preferences = usePreferencesStore.getState();
       const next = await testNode(built.value.node, preferences.saveDebugImages, built.value.paramValues, preferences.timingGranularity === "detailed", mode);
+      if (generation !== executionGeneration.current) return;
+      resultGeneration.current = generation;
       setResult(next);
       appendLog({ source: "debug", label: mode === "recognize_only" ? "Node recognize" : "Node run", detail: `${draft.id}: ${next.success ? "success" : next.error ?? "failed"}`, result: next.success ? "success" : "error" });
     } catch (error) {
+      if (generation !== executionGeneration.current) return;
       setRunError(String(error));
       appendLog({ source: "debug", label: "Node emulator", detail: String(error), result: "error" });
-    } finally { setLoading(null); }
+    } finally {
+      if (generation === executionGeneration.current) setLoading(null);
+    }
   };
 
   const metadataJson = built.value ? JSON.stringify(built.value.metadata, null, 2) : "Fix validation errors to generate canonical metadata.";
+  const needsPriorNode = built.value && typeof built.value.node.recognition.roi === "string";
   const screenTarget = draft.target.type === "screen" ? draft.target : null;
   const windowTarget = draft.target.type === "window" ? draft.target : null;
   return <div className="node-emulator-tool">
-    <div className="node-emulator-actions"><button disabled={!currentTarget} onClick={() => currentTarget && useTarget(currentTarget)}>Use Current Target</button><button disabled={!built.value || !draft.enabled || !!loading} onClick={() => void execute("recognize_only")}>{loading === "recognize_only" ? "Recognizing…" : "Recognize Only"}</button><button className="action-execute-btn" disabled={!built.value || !draft.enabled || !!loading} onClick={() => void execute("full")}>{loading === "full" ? "Running…" : "Run Full Node"}</button></div>
+    <div className="node-emulator-actions"><button disabled={!currentTarget} onClick={() => currentTarget && useTarget(currentTarget)}>Use Current Target</button><button disabled={!built.value || !draft.enabled || !!loading || !!needsPriorNode} onClick={() => void execute("recognize_only")}>{loading === "recognize_only" ? "Recognizing…" : "Recognize Only"}</button><button className="action-execute-btn" disabled={!built.value || !draft.enabled || !!loading || !!needsPriorNode} onClick={() => void execute("full")}>{loading === "full" ? "Running…" : "Run Full Node"}</button></div>
+    {needsPriorNode && <div className="node-emulator-error">A node-referenced ROI needs an earlier successful pipeline node. Copy this metadata into a flow to test it; independent emulation cannot resolve the reference.</div>}
     {!draft.enabled && <div className="node-emulator-error">Disabled nodes cannot be executed.</div>}
     <details open><summary>Node</summary><div className="node-emulator-grid">
       <label>ID<input value={draft.id} onChange={(event) => update({ id: event.target.value })} /><ErrorText errors={built.errors} path="id" /></label>
+      <label>Kind<select value={draft.kind} onChange={(event) => update({ kind: event.target.value as NodeEmulatorDraft["kind"] })}><option>Normal</option><option>Entry</option></select></label>
       <label className="node-emulator-check"><input type="checkbox" checked={draft.enabled} onChange={(event) => update({ enabled: event.target.checked })} /> Enabled</label>
       <label className="node-emulator-check"><input type="checkbox" checked={draft.inverse} onChange={(event) => update({ inverse: event.target.checked })} /> Inverse result</label>
     </div></details>
@@ -182,7 +231,7 @@ export default function NodeEmulatorTool({ currentTarget }: { currentTarget?: Pi
       {(draft.recognition.type === "OCR" || draft.recognition.type === "TemplateMatch") && <label>Threshold (0–1)<input type="number" min="0" max="1" step="0.01" value={draft.recognition.threshold} onChange={(event) => updateRecognition({ threshold: event.target.value })} /><ErrorText errors={built.errors} path="recognition.threshold" /></label>}
       {draft.recognition.type === "ColorMatch" && <><label>Lower RGB<input value={draft.recognition.lower} onChange={(event) => updateRecognition({ lower: event.target.value })} /><ErrorText errors={built.errors} path="recognition.lower" /></label><label>Upper RGB<input value={draft.recognition.upper} onChange={(event) => updateRecognition({ upper: event.target.value })} /><ErrorText errors={built.errors} path="recognition.upper" /></label></>}
       {draft.recognition.type === "Custom" && <><label>Recognizer name<input value={draft.recognition.customName} onChange={(event) => updateRecognition({ customName: event.target.value })} /><ErrorText errors={built.errors} path="recognition.recognition" /></label><label>Custom JSON<textarea value={draft.recognition.customParam} onChange={(event) => updateRecognition({ customParam: event.target.value })} /><ErrorText errors={built.errors} path="recognition.param" /></label></>}
-      <label>ROI (x,y,w,h)<input value={draft.recognition.roi} onChange={(event) => updateRecognition({ roi: event.target.value })} /><ErrorText errors={built.errors} path="recognition.roi" /></label>
+      <label>ROI (x,y,w,h or earlier NodeId)<input value={draft.recognition.roi} onChange={(event) => updateRecognition({ roi: event.target.value })} /><ErrorText errors={built.errors} path="recognition.roi" /></label>
       <label>ROI offset<input value={draft.recognition.roiOffset} onChange={(event) => updateRecognition({ roiOffset: event.target.value })} /><ErrorText errors={built.errors} path="recognition.roi_offset" /></label>
       <label>Candidate order<select value={draft.recognition.candidateOrder} onChange={(event) => updateRecognition({ candidateOrder: event.target.value as CandidateOrder })}>{CANDIDATE_ORDERS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       <label>Candidate index<input type="number" min="0" value={draft.recognition.candidateIndex} onChange={(event) => updateRecognition({ candidateIndex: event.target.value })} /><ErrorText errors={built.errors} path="recognition.candidate_selection.index" /></label>
@@ -191,6 +240,7 @@ export default function NodeEmulatorTool({ currentTarget }: { currentTarget?: Pi
     <details><summary>Parameters ({draft.params.length})</summary>{draft.params.map((param, index) => <ParamEditor key={index} param={param} index={index} errors={built.errors} onChange={(patch) => updateParam(index, patch)} onCommand={(operation) => update({ params: command(draft.params, index, operation) })} />)}<button onClick={() => update({ params: [...draft.params, defaultParamDraft()] })}>Add parameter</button></details>
     <details><summary>Timing, repeat, and attach</summary><div className="node-emulator-grid">
       <label>Timeout (ms)<small>Reserved in this single-run emulator</small><input type="number" min="0" value={draft.timeout} onChange={(event) => update({ timeout: event.target.value })} /><ErrorText errors={built.errors} path="timeout" /></label>
+      <label>Error timeout (ms)<small>Reserved in this single-run emulator</small><input type="number" min="0" value={draft.errorTimeout} onChange={(event) => update({ errorTimeout: event.target.value })} /><ErrorText errors={built.errors} path="error_timeout" /></label>
       <label>Rate limit (ms)<small>Reserved in this single-run emulator</small><input type="number" min="0" value={draft.rateLimit} onChange={(event) => update({ rateLimit: event.target.value })} /><ErrorText errors={built.errors} path="rate_limit" /></label>
       <label>Pre-delay (ms)<input type="number" min="0" value={draft.preDelay} onChange={(event) => update({ preDelay: event.target.value })} /><ErrorText errors={built.errors} path="pre_delay" /></label>
       <label>Post-delay (ms)<input type="number" min="0" value={draft.postDelay} onChange={(event) => update({ postDelay: event.target.value })} /><ErrorText errors={built.errors} path="post_delay" /></label>

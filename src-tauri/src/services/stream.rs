@@ -540,6 +540,30 @@ impl StreamService {
         self.sender.subscribe()
     }
 
+    /// Return the newest cached frame for one capture session/target. Pipeline
+    /// runners use this before awaiting the broadcast channel so recognition
+    /// retries do not consume a backlog of frames produced before their fresh
+    /// frame boundary.
+    pub fn latest_frame_after(
+        &self,
+        session_id: u64,
+        target: &StreamTarget,
+        min_sequence: Option<u64>,
+        not_before: Option<Instant>,
+    ) -> Option<StreamFrame> {
+        FRAME_CACHE
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+            .filter(|frame| {
+                frame.session_id == session_id
+                    && &frame.target == target
+                    && min_sequence.map_or(true, |sequence| frame.sequence > sequence)
+                    && not_before.map_or(true, |boundary| frame.captured_at >= boundary)
+            })
+            .cloned()
+    }
+
     pub fn is_streaming(&self) -> bool {
         self.is_streaming.load(Ordering::Relaxed)
     }

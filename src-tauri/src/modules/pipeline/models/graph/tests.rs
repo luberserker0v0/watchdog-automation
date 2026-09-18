@@ -7,6 +7,7 @@ fn node(id: &str) -> Node {
         id: id.to_string(),
         label: id.to_string(),
         config: NodeConfig::default(),
+        params: Vec::new(),
     }
 }
 
@@ -16,6 +17,7 @@ fn test_graph_creation() {
         version: "1.0".to_string(),
         desktop: None,
         target: None,
+        launch: None,
         nodes: vec![node("A")],
         edges: vec![Edge {
             from: "A".to_string(),
@@ -33,6 +35,7 @@ fn test_graph_serde() {
         version: "1.0".to_string(),
         desktop: None,
         target: None,
+        launch: None,
         nodes: vec![],
         edges: vec![],
     };
@@ -48,6 +51,7 @@ fn test_graph_find_node() {
         version: "1.0".to_string(),
         desktop: None,
         target: None,
+        launch: None,
         nodes: vec![node("A")],
         edges: vec![],
     };
@@ -61,6 +65,7 @@ fn test_graph_next_edges() {
         version: "1.0".to_string(),
         desktop: None,
         target: None,
+        launch: None,
         nodes: vec![node("A"), node("B")],
         edges: vec![
             Edge {
@@ -89,6 +94,7 @@ fn test_graph_entry_node() {
         version: "1.0".to_string(),
         desktop: None,
         target: None,
+        launch: None,
         nodes: vec![node("A"), node("B")],
         edges: vec![Edge {
             from: "A".to_string(),

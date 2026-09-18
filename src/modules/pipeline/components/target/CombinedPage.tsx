@@ -91,6 +91,14 @@ const ITEMS = Array.from({ length: 25 }, (_, i) => ({
   color: AVATAR_COLORS[i % AVATAR_COLORS.length],
 }));
 
+function normalizeDetectedKey(key: string): string {
+  if (key === "Escape" || key === "Esc") return "esc";
+  if (key === " ") return "space";
+  if (key === "Control") return "ctrl";
+  if (key === "OS") return "meta";
+  return key.toLowerCase();
+}
+
 // ─── Dashboard Content ───
 export function DashboardContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -115,13 +123,7 @@ export function DashboardContent() {
   }, []);
 
   useEffect(() => {
-    if (!lastKey) return;
-    const t = setTimeout(() => setLastKey(null), 1200);
-    return () => clearTimeout(t);
-  }, [lastKey]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => setLastKey(event.key);
+    const handleKeyDown = (event: KeyboardEvent) => setLastKey(normalizeDetectedKey(event.key));
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
@@ -365,20 +367,22 @@ export function DashboardContent() {
 
       <div>
         <div className="target-section-header">
-          <span className="target-settings-label" data-target="text:Key Shortcuts">Key Shortcuts</span>
-          {lastKey && <span className="target-key-flash">{lastKey}</span>}
+          <span className="target-settings-label" data-target="text:Key Detect Area">Key Detect Area</span>
         </div>
-        <div className="target-key-row">
-          {(["Enter", "Space", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"] as const).map((k) => (
-            <button
-              key={k}
-              className={`target-key-btn ${lastKey === k ? "active" : ""}`}
-              data-target={`key:${k}`}
-              onClick={() => setLastKey(k)}
-            >
-              {k}
-            </button>
-          ))}
+        <div
+          className={`target-key-detect-area ${lastKey ? "has-key" : ""}`}
+          data-target="key-detect-area"
+          tabIndex={0}
+          role="status"
+          aria-live="polite"
+          aria-label="Key detect area"
+        >
+          <span className="target-key-detect-label">
+            {lastKey ? "Detected key" : "Press any keyboard key"}
+          </span>
+          <strong className="target-key-detect-value" data-target={lastKey ? `key:${lastKey}` : "key:none"}>
+            {lastKey ?? "—"}
+          </strong>
         </div>
       </div>
 

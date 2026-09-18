@@ -17,6 +17,7 @@ fn test_node_creation() {
             actions: vec![Action::DoNothing],
             ..NodeConfig::default()
         },
+        params: Vec::new(),
     };
     assert_eq!(node.id, "Start");
     assert!(node.enabled);
@@ -34,7 +35,11 @@ fn test_node_serde_keeps_recognition_owned_fields_nested() {
                     expected: Some("hello".to_string()),
                     threshold: None,
                 },
-                roi: Some([10, 20, 100, 50]),
+                roi: Some(
+                    crate::modules::pipeline::models::recognizer::RecognitionRoi::Fixed([
+                        10, 20, 100, 50,
+                    ]),
+                ),
                 roi_offset: Some([1, 2, 3, 4]),
                 candidate_selection: None,
             },
@@ -47,6 +52,7 @@ fn test_node_serde_keeps_recognition_owned_fields_nested() {
             repeat_delay: 50,
             ..NodeConfig::default()
         },
+        params: Vec::new(),
     };
     let value = serde_json::to_value(&node).unwrap();
     assert_eq!(
@@ -75,6 +81,7 @@ fn test_node_defaults() {
     assert!(node.recognition.roi_offset.is_none());
     assert!(node.recognition.candidate_selection.is_none());
     assert_eq!(node.timeout, 20000);
+    assert_eq!(node.error_timeout, 20000);
     assert_eq!(node.rate_limit, 1000);
     assert_eq!(node.pre_delay, 200);
     assert_eq!(node.post_delay, 200);

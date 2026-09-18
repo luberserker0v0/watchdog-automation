@@ -97,7 +97,7 @@ fn test_input_text_serde() {
 #[test]
 fn test_click_key_serde() {
     let action = Action::ClickKey {
-        key: vec![0x0D, 0x09],
+        key: vec![serde_json::json!(0x0D), serde_json::json!(0x09)],
     };
 
     let json = serde_json::to_string(&action).unwrap();
@@ -106,7 +106,31 @@ fn test_click_key_serde() {
     let deserialized: Action = serde_json::from_str(&json).unwrap();
     match deserialized {
         Action::ClickKey { key } => {
-            assert_eq!(key, vec![0x0D, 0x09]);
+            assert_eq!(key, vec![serde_json::json!(0x0D), serde_json::json!(0x09)]);
+        }
+        _ => panic!("Expected ClickKey action"),
+    }
+}
+
+#[test]
+fn test_click_key_from_string_numeric() {
+    let json = r#"{"type":"ClickKey","key":["27"]}"#;
+    let deserialized: Action = serde_json::from_str(json).unwrap();
+    match deserialized {
+        Action::ClickKey { key } => {
+            assert_eq!(key, vec![serde_json::json!("27")]);
+        }
+        _ => panic!("Expected ClickKey action"),
+    }
+}
+
+#[test]
+fn test_click_key_from_template_placeholder() {
+    let json = r#"{"type":"ClickKey","key":["{{key}}"]}"#;
+    let deserialized: Action = serde_json::from_str(json).unwrap();
+    match deserialized {
+        Action::ClickKey { key } => {
+            assert_eq!(key, vec![serde_json::json!("{{key}}")]);
         }
         _ => panic!("Expected ClickKey action"),
     }

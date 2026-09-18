@@ -12,7 +12,7 @@ type RecognitionKind =
   | { type: "Custom"; recognition: string; param?: unknown };
 
 export type Recognition = RecognitionKind & {
-  roi?: [number, number, number, number];
+  roi?: [number, number, number, number] | string;
   roi_offset?: [number, number, number, number];
   candidate_selection?: CandidateSelection;
 };
@@ -149,11 +149,13 @@ export interface MatchCandidate {
 export interface Node {
   id: string;
   label?: string;
+  kind?: "Normal" | "Entry";
   recognition: Recognition;
   actions?: Action[];
   params?: ParamDef[];
   target?: PipelineTarget;
   timeout?: number;
+  error_timeout?: number;
   rate_limit?: number;
   pre_delay?: number;
   post_delay?: number;
@@ -163,6 +165,34 @@ export interface Node {
   repeat?: number;
   repeat_delay?: number;
   attach?: unknown;
+}
+
+export interface InstanceConfig {
+  node: string;
+  params?: ParamDef[];
+  param_values?: Record<string, unknown>;
+  kind?: "Normal" | "Entry";
+  timeout?: number;
+  error_timeout?: number;
+  rate_limit?: number;
+  pre_delay?: number;
+  post_delay?: number;
+  enabled?: boolean;
+  inverse?: boolean;
+  max_hit?: number;
+  repeat?: number;
+  repeat_delay?: number;
+}
+
+export interface LaunchConfig {
+  exe?: string;
+  cmd?: string;
+  args?: string[];
+  shell?: boolean;
+  cwd?: string;
+  env?: Record<string, string>;
+  wait_for_window?: boolean;
+  wait_timeout_ms?: number;
 }
 
 export type EdgeType = "next" | "error";
@@ -177,6 +207,7 @@ export interface PipelineGraph {
   version: string;
   desktop?: string;
   target?: PipelineTarget;
+  launch?: LaunchConfig;
   nodes: Node[];
   edges: Edge[];
   subroutines?: Record<string, PipelineGraph>;
@@ -234,6 +265,30 @@ export interface PipelineStatus {
   error?: string | null;
   attempt_count?: number;
   effective_target?: PipelineTarget | null;
+  hit_counts?: Record<string, number>;
+  children_parent_id?: string | null;
+  children_start_time_ms?: number | null;
+  children_child_id?: string | null;
+  children_timeout_ms?: number | null;
+  revision?: number;
+}
+
+export interface PipelineStatusEvent {
+  run_id: string;
+  revision: number;
+  state: string;
+  current_node_id: string | null;
+  step_count: number;
+  elapsed_ms: number;
+  error?: string | null;
+  attempt_count?: number;
+  effective_target?: PipelineTarget | null;
+  hit_counts?: Record<string, number>;
+  children_parent_id?: string | null;
+  children_start_time_ms?: number | null;
+  children_child_id?: string | null;
+  children_timeout_ms?: number | null;
+  appended_step?: StepResult;
 }
 
 export interface PipelineInfo {
@@ -272,7 +327,7 @@ export async function listPipelines(): Promise<PipelineInfo[]> {
   return invoke<PipelineInfo[]>("list_pipelines");
 }
 
-export async function startPipeline(path: string, userParams?: Record<string, unknown>, saveDebugImages?: boolean, detailedTimings?: boolean): Promise<string> {
+export async function startPipeline(path: string, userParams?: Record<string, Record<string, unknown>>, saveDebugImages?: boolean, detailedTimings?: boolean): Promise<string> {
   return invoke<string>("start_pipeline", { path, userParams, saveDebugImages, detailedTimings });
 }
 

@@ -29,6 +29,24 @@
       ],
       "markdownDescription": "**Supported values**\n\nnull | screen target object | window target object.\n\nThis target is inherited by nodes that do not define their own target. A filterless window target inherits the active window stream.\n\n**Default:** null, which requires an already-active stream for pipeline execution."
     },
+    "launch": {
+      "title": "External process launch configuration",
+      "description": "Supported values: launch configuration object or null. Specifies an external process to start before pipeline execution. Default: null (no process launched).",
+      "default": null,
+      "oneOf": [
+        {
+          "$ref": "#/$defs/launchConfig",
+          "description": "Supported value: launch configuration object specifying an external process to start.",
+          "markdownDescription": "**Launch configuration object**\n\nSpecifies an external process to start before pipeline execution."
+        },
+        {
+          "type": "null",
+          "description": "Supported values: launch configuration object or null. Selected null: do not launch any process. Default: null.",
+          "markdownDescription": "**Supported values**\n\nlaunch configuration object or null.\n\n**Selected null:** do not launch any process.\n\n**Default:** null."
+        }
+      ],
+      "markdownDescription": "**Supported values**\n\nlaunch configuration object or null.\n\nSpecifies an external process to start before pipeline execution.\n\n**Default:** null (no process launched)."
+    },
     "nodes": {
       "type": "object",
       "description": "Supported value: object whose keys are Mermaid node IDs and whose values are node metadata objects. Default: an empty object; this schema requires nodes to be declared explicitly.",
@@ -39,42 +57,76 @@
       "default": {},
       "markdownDescription": "**Supported value**\n\nobject whose keys are Mermaid node IDs and whose values are node metadata objects.\n\n**Default:** an empty object; this schema requires nodes to be declared explicitly."
     },
-    "edges": {
+    "instances": {
       "type": "object",
-      "description": "Supported value: object keyed as FromNode->ToNode with edge metadata object values. Each key must match an edge in the adjacent Mermaid file. Default: an empty object; unlisted edges use the next transition type.",
-      "markdownDescription": "**Supported value**\n\nAn object keyed as `FromNode->ToNode`, matching edges in the adjacent Mermaid file.\n\n- Omit `edge_type` or use `next` for the normal path.\n- Use `error` for the failure path.\n\n**Default:** `{}`",
+      "description": "Supported value: object whose keys are Mermaid node IDs and whose values are instance configuration objects. Maps nodes to templates defined in the nodes section, with optional per-instance overrides. Default: empty object.",
       "additionalProperties": {
-        "$ref": "#/$defs/edgeMetadata",
-        "description": "Configuration for the Mermaid edge named by this FromNode->ToNode key."
-      },
-      "propertyNames": {
-        "pattern": "^[A-Za-z_][A-Za-z0-9_-]*->[A-Za-z_][A-Za-z0-9_-]*$",
-        "description": "An exact Mermaid edge key in FromNode->ToNode form. Node IDs may contain letters, digits, underscores, and hyphens, but must start with a letter or underscore."
+        "$ref": "#/$defs/instanceConfig",
+        "description": "Instance configuration for the Mermaid node named by this object key."
       },
       "default": {},
-      "examples": [
-        {
-          "RecognizeLogin->ClickLogin": { "edge_type": "next" },
-          "ClickLogin->LoginError": { "edge_type": "error" }
-        }
-      ],
-      "defaultSnippets": [
-        {
-          "label": "Configure Mermaid edge",
-          "description": "Configure an edge whose endpoints exist in the adjacent Mermaid file.",
-          "body": {
-            "${1:FromNode}->${2:ToNode}": {
-              "edge_type": "${3:next}"
-            }
-          }
-        }
-      ]
+      "markdownDescription": "**Supported value**\n\nobject whose keys are Mermaid node IDs and whose values are instance configuration objects.\n\nMaps nodes to templates defined in the `nodes` section, with optional per-instance overrides.\n\n**Default:** empty object."
     }
   },
   "required": ["nodes"],
   "$defs": {
     "signedInteger": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647, "description": "A signed 32-bit integer from -2147483648 through 2147483647." },
     "unsignedInteger": { "type": "integer", "minimum": 0, "maximum": 4294967295, "description": "An unsigned 32-bit integer from 0 through 4294967295." },
+    "launchConfig": {
+      "title": "External process launch configuration",
+      "description": "Supported value: launch configuration object specifying an external process to start before pipeline execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exe": {
+          "type": "string",
+          "description": "Supported value: string path to executable. Mutually exclusive with cmd.",
+          "markdownDescription": "**Supported value**\n\nstring path to executable.\n\nMutually exclusive with `cmd`."
+        },
+        "cmd": {
+          "type": "string",
+          "description": "Supported value: string command to run. Mutually exclusive with exe.",
+          "markdownDescription": "**Supported value**\n\nstring command to run.\n\nMutually exclusive with `exe`."
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string", "description": "Supported value: string argument passed unchanged to the launched executable or command.", "markdownDescription": "**Supported value**\n\nstring argument passed unchanged to the launched executable or command." },
+          "default": [],
+          "description": "Supported value: array of string arguments for the executable or command. Default: empty array.",
+          "markdownDescription": "**Supported value**\n\narray of string arguments for the executable or command.\n\n**Default:** empty array."
+        },
+        "shell": {
+          "type": "boolean",
+          "default": false,
+          "description": "Supported values: true | false. If true, run command in shell (cmd.exe /C on Windows). Only applies when using cmd. Default: false.",
+          "markdownDescription": "**Supported values**\n\ntrue | false.\n\nIf true, run command in shell (`cmd.exe /C` on Windows). Only applies when using `cmd`.\n\n**Default:** false."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Supported value: string working directory for the process. Default: omitted (inherits current directory).",
+          "markdownDescription": "**Supported value**\n\nstring working directory for the process.\n\n**Default:** omitted (inherits current directory)."
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {},
+          "description": "Supported value: object whose keys are environment variable names and whose values are strings. These variables are added to the process environment. Default: empty object.",
+          "markdownDescription": "**Supported value**\n\nobject whose keys are environment variable names and whose values are strings.\n\nThese variables are added to the process environment.\n\n**Default:** empty object."
+        },
+        "wait_for_window": {
+          "type": "boolean",
+          "default": false,
+          "description": "Supported values: true | false. If true, wait for a window matching the pipeline target to appear after launching. Default: false.",
+          "markdownDescription": "**Supported values**\n\ntrue | false.\n\nIf true, wait for a window matching the pipeline target to appear after launching.\n\n**Default:** false."
+        },
+        "wait_timeout_ms": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds to wait for window. Default: 10000.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds to wait for window.\n\n**Default:** 10000."
+        }
+      },
+      "markdownDescription": "**Supported value**\n\nlaunch configuration object specifying an external process to start before pipeline execution."
+    },
     "milliseconds": {
       "type": "integer",
       "minimum": 0,
@@ -108,19 +160,19 @@
       "maxItems": 4
     },
     "roi": {
-      "type": "array",
-      "description": "Supported value: [integer, integer, integer, integer] in [x, y, width, height] capture-local pixels. Default: [0, 0, 0, 0], meaning the complete captured image. A partially overlapping ROI is clipped to the encoded frame; a non-overlapping or empty ROI is an immediate recognition geometry error.",
+      "description": "Supported types and values: array of four integers [x, y, width, height] in capture-local pixels; or string Mermaid node ID such as \"Find-Panel\". Default: [0, 0, 0, 0] (whole frame). Other arrays need positive width and height. A string requires an earlier matched node with a box on the same window/monitor; its box is mapped into this frame before roi_offset. Independent single-node tests cannot resolve it.",
       "default": [0, 0, 0, 0],
-      "prefixItems": [
-        { "$ref": "#/$defs/signedInteger", "title": "x", "description": "Horizontal start of the recognition area in captured-image pixels." },
-        { "$ref": "#/$defs/signedInteger", "title": "y", "description": "Vertical start of the recognition area in captured-image pixels." },
-        { "$ref": "#/$defs/signedInteger", "title": "width", "description": "Recognition-area width in captured-image pixels. Use 0 with an all-zero ROI to select the full image." },
-        { "$ref": "#/$defs/signedInteger", "title": "height", "description": "Recognition-area height in captured-image pixels. Use 0 with an all-zero ROI to select the full image." }
+      "examples": [[0, 0, 0, 0], [20, 30, 300, 180], "Find-Panel"],
+      "oneOf": [
+        { "type": "array", "description": "Supported types and values for roi: array of four integers [x,y,width,height] in capture-local pixels OR string Mermaid node ID such as \"Find-Panel\". Selected type: array. Default: [0,0,0,0] (whole frame); other arrays need positive width and height.", "markdownDescription": "**All supported ROI types**\n\n- **Array of four integers:** `[x,y,width,height]` in capture-local pixels (**selected type**).\n- **String:** `\"Find-Panel\"` — earlier matched Mermaid node's box on the same target.\n\n**Default:** `[0,0,0,0]` means the full frame. Other arrays need positive width and height.", "prefixItems": [
+          { "$ref": "#/$defs/signedInteger", "title": "x", "description": "Horizontal start of the recognition area in captured-image pixels." },
+          { "$ref": "#/$defs/signedInteger", "title": "y", "description": "Vertical start of the recognition area in captured-image pixels." },
+          { "type": "integer", "minimum": 0, "maximum": 2147483647, "title": "width", "description": "Recognition-area width in captured-image pixels. Must be positive unless all four ROI values are zero." },
+          { "type": "integer", "minimum": 0, "maximum": 2147483647, "title": "height", "description": "Recognition-area height in captured-image pixels. Must be positive unless all four ROI values are zero." }
+        ], "items": false, "minItems": 4, "maxItems": 4 },
+        { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$", "description": "Supported types and values for roi: array of four integers [x,y,width,height] in capture-local pixels OR string Mermaid node ID such as \"Find-Panel\". Selected type: string. The node must have matched earlier on the same target, exist, and not reference itself. Default: [0,0,0,0] (whole frame).", "markdownDescription": "**All supported ROI types**\n\n- **Array of four integers:** `[x,y,width,height]` in capture-local pixels.\n- **String:** `\"Find-Panel\"` — earlier matched Mermaid node's box on the same target (**selected type**).\n\nThe box is mapped into the current frame before `roi_offset`. Self-references and unknown IDs are invalid. **Default:** `[0,0,0,0]`." }
       ],
-      "items": false,
-      "minItems": 4,
-      "maxItems": 4,
-      "markdownDescription": "**Supported value**\n\n`[x, y, width, height]` in capture-local pixels.\n\n**Default:** `[0, 0, 0, 0]`, meaning the complete encoded frame.\n\nA partially overlapping ROI is clipped to the frame. An empty or non-overlapping ROI fails immediately."
+      "markdownDescription": "**All supported ROI types**\n\n- **Array of four integers:** `[x,y,width,height]` in capture-local pixels. Width/height must be positive except for `[0,0,0,0]`.\n- **String Mermaid node ID:** `\"Find-Panel\"` — an earlier matched Mermaid node's box on the same window or monitor, mapped into this frame.\n\n**Default:** `[0,0,0,0]` — complete encoded frame.\n\n`roi_offset` adds to x, y, width, and height **after** either source resolves. Partially overlapping ROIs are clipped; missing boxes, other targets, and empty or non-overlapping ROIs fail immediately. Independent single-node tests cannot resolve earlier-node references."
     },
     "regionOffset": {
       "type": "array",
@@ -344,8 +396,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] in [x,y,width,height] form. DirectHit returns this area as its recognized box. Default: [0,0,0,0], which uses the whole image.",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] in [x,y,width,height] form.\n\nDirectHit returns this area as its recognized box.\n\n**Default:** [0,0,0,0], which uses the whole image."
+              "description": "Supported values: [x,y,width,height] in capture-local pixels OR an earlier Mermaid node ID (e.g. \"Find-Panel\"). The earlier node must have a matched box on the same target. roi_offset applies after resolving either form. DirectHit returns the effective ROI as its box. Default: [0,0,0,0], the whole frame.",
+              "markdownDescription": "**Supported values**\n\n- `[x,y,width,height]` in captured-image pixels\n- `\"Find-Panel\"` for an earlier successful recognition box on the same target\n\n`roi_offset` applies after resolution. DirectHit returns the effective ROI as its box. **Default:** `[0,0,0,0]`, the whole frame."
             },
             "roi_offset": {
               "$ref": "#/$defs/regionOffset",
@@ -355,8 +407,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] offset applied to roi. Default: [0,0,0,0].",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] offset applied to roi.\n\n**Default:** [0,0,0,0]."
+              "description": "Supported value: [x_offset,y_offset,width_offset,height_offset] signed pixels, added to the fixed ROI or mapped earlier-node box before clipping. Default: [0,0,0,0].",
+              "markdownDescription": "**Supported value**\n\n`[dx,dy,dwidth,dheight]` signed captured-image pixels. Add each component to the fixed ROI or mapped earlier-node box **before clipping**.\n\n**Default:** `[0,0,0,0]`."
             },
             "candidate_selection": {
               "$ref": "#/$defs/candidateSelection",
@@ -406,8 +458,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] in [x,y,width,height] form, local to the captured image. Default: [0,0,0,0], which searches the whole image.",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] in [x,y,width,height] form, local to the captured image.\n\n**Default:** [0,0,0,0], which searches the whole image."
+              "description": "Supported values: [x,y,width,height] in capture-local pixels OR an earlier Mermaid node ID (e.g. \"Find-Panel\") with a matched box on the same target. roi_offset applies after resolution. Default: [0,0,0,0], search the whole frame.",
+              "markdownDescription": "**Supported values**\n\n- `[x,y,width,height]` in captured-image pixels\n- `\"Find-Panel\"` for an earlier successful recognition box on the same target\n\n`roi_offset` applies after resolution. **Default:** `[0,0,0,0]`, search the whole frame."
             },
             "roi_offset": {
               "$ref": "#/$defs/regionOffset",
@@ -417,8 +469,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] offset applied to roi. Default: [0,0,0,0].",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] offset applied to roi.\n\n**Default:** [0,0,0,0]."
+              "description": "Supported value: [x_offset,y_offset,width_offset,height_offset] signed pixels, added to the fixed ROI or mapped earlier-node box before clipping. Default: [0,0,0,0].",
+              "markdownDescription": "**Supported value**\n\n`[dx,dy,dwidth,dheight]` signed captured-image pixels. Add each component to the fixed ROI or mapped earlier-node box **before clipping**.\n\n**Default:** `[0,0,0,0]`."
             },
             "candidate_selection": {
               "$ref": "#/$defs/candidateSelection",
@@ -468,8 +520,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] in [x,y,width,height] form, local to the captured image. Default: [0,0,0,0], which submits the whole image to OCR.",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] in [x,y,width,height] form, local to the captured image.\n\n**Default:** [0,0,0,0], which submits the whole image to OCR."
+              "description": "Supported values: [x,y,width,height] in capture-local pixels OR an earlier Mermaid node ID (e.g. \"Find-Panel\") with a matched box on the same target. roi_offset applies after resolution. Default: [0,0,0,0], submit the whole frame to OCR.",
+              "markdownDescription": "**Supported values**\n\n- `[x,y,width,height]` in captured-image pixels\n- `\"Find-Panel\"` for an earlier successful recognition box on the same target\n\n`roi_offset` applies after resolution. **Default:** `[0,0,0,0]`, submit the whole frame to OCR."
             },
             "roi_offset": {
               "$ref": "#/$defs/regionOffset",
@@ -479,8 +531,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] offset applied to roi. Default: [0,0,0,0].",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] offset applied to roi.\n\n**Default:** [0,0,0,0]."
+              "description": "Supported value: [x_offset,y_offset,width_offset,height_offset] signed pixels, added to the fixed ROI or mapped earlier-node box before clipping. Default: [0,0,0,0].",
+              "markdownDescription": "**Supported value**\n\n`[dx,dy,dwidth,dheight]` signed captured-image pixels. Add each component to the fixed ROI or mapped earlier-node box **before clipping**.\n\n**Default:** `[0,0,0,0]`."
             },
             "candidate_selection": {
               "$ref": "#/$defs/candidateSelection",
@@ -526,8 +578,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] in [x,y,width,height] form. Default: [0,0,0,0], which checks the whole image.",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] in [x,y,width,height] form.\n\n**Default:** [0,0,0,0], which checks the whole image."
+              "description": "Supported values: [x,y,width,height] in capture-local pixels OR an earlier Mermaid node ID (e.g. \"Find-Panel\") with a matched box on the same target. roi_offset applies after resolution. Default: [0,0,0,0], check the whole frame.",
+              "markdownDescription": "**Supported values**\n\n- `[x,y,width,height]` in captured-image pixels\n- `\"Find-Panel\"` for an earlier successful recognition box on the same target\n\n`roi_offset` applies after resolution. **Default:** `[0,0,0,0]`, check the whole frame."
             },
             "roi_offset": {
               "$ref": "#/$defs/regionOffset",
@@ -537,8 +589,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] offset applied to roi. Default: [0,0,0,0].",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] offset applied to roi.\n\n**Default:** [0,0,0,0]."
+              "description": "Supported value: [x_offset,y_offset,width_offset,height_offset] signed pixels, added to the fixed ROI or mapped earlier-node box before clipping. Default: [0,0,0,0].",
+              "markdownDescription": "**Supported value**\n\n`[dx,dy,dwidth,dheight]` signed captured-image pixels. Add each component to the fixed ROI or mapped earlier-node box **before clipping**.\n\n**Default:** `[0,0,0,0]`."
             },
             "candidate_selection": {
               "$ref": "#/$defs/candidateSelection",
@@ -587,8 +639,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] in [x,y,width,height] form. Default: [0,0,0,0], which passes the whole image to the custom recognizer.",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] in [x,y,width,height] form.\n\n**Default:** [0,0,0,0], which passes the whole image to the custom recognizer."
+              "description": "Supported values: [x,y,width,height] in capture-local pixels OR an earlier Mermaid node ID (e.g. \"Find-Panel\") with a matched box on the same target. roi_offset applies after resolution. Default: [0,0,0,0], pass the whole frame to the custom recognizer.",
+              "markdownDescription": "**Supported values**\n\n- `[x,y,width,height]` in captured-image pixels\n- `\"Find-Panel\"` for an earlier successful recognition box on the same target\n\n`roi_offset` applies after resolution. **Default:** `[0,0,0,0]`, pass the whole frame to the custom recognizer."
             },
             "roi_offset": {
               "$ref": "#/$defs/regionOffset",
@@ -598,8 +650,8 @@
                 0,
                 0
               ],
-              "description": "Supported value: [integer, integer, integer, integer] offset applied to roi. Default: [0,0,0,0].",
-              "markdownDescription": "**Supported value**\n\n[integer, integer, integer, integer] offset applied to roi.\n\n**Default:** [0,0,0,0]."
+              "description": "Supported value: [x_offset,y_offset,width_offset,height_offset] signed pixels, added to the fixed ROI or mapped earlier-node box before clipping. Default: [0,0,0,0].",
+              "markdownDescription": "**Supported value**\n\n`[dx,dy,dwidth,dheight]` signed captured-image pixels. Add each component to the fixed ROI or mapped earlier-node box **before clipping**.\n\n**Default:** `[0,0,0,0]`."
             },
             "candidate_selection": {
               "$ref": "#/$defs/candidateSelection",
@@ -822,14 +874,17 @@
             },
             "key": {
               "type": "array",
-              "items": {
-                "$ref": "#/$defs/unsignedInteger",
-                "description": "Supported value: unsigned 32-bit integer native platform key code.",
-                "markdownDescription": "**Supported value**\n\nunsigned 32-bit integer native platform key code."
+            "items": {
+                "description": "Supported values: unsigned 32-bit native key code OR string parameter placeholder such as \"{{key}}\".",
+                "markdownDescription": "**Supported values**\n\n- unsigned 32-bit native key code\n- string parameter placeholder such as `\"{{key}}\"`",
+                "oneOf": [
+                  { "$ref": "#/$defs/unsignedInteger", "description": "Supported value: unsigned 32-bit native key code.", "markdownDescription": "**Supported value**\n\nunsigned 32-bit native key code." },
+                  { "type": "string", "description": "Supported value: string parameter placeholder such as \"{{key}}\".", "markdownDescription": "**Supported value**\n\nstring parameter placeholder such as `\"{{key}}\"`." }
+                ]
               },
               "minItems": 1,
-              "description": "Supported value: non-empty array of unsigned 32-bit integer native platform key codes, pressed in array order. Required; no default.",
-              "markdownDescription": "**Supported value**\n\nnon-empty array of unsigned 32-bit integer native platform key codes, pressed in array order.\n\n**Required:** yes  \n**Default:** none."
+              "description": "Supported value: non-empty array of unsigned 32-bit integer key codes or template placeholder strings (e.g. \"{{key}}\"), pressed in array order. Required; no default.",
+              "markdownDescription": "**Supported value**\n\nnon-empty array of unsigned 32-bit integer key codes or template placeholder strings (e.g. `\"{{key}}\"`), pressed in array order.\n\n**Required:** yes  \n**Default:** none."
             }
           },
           "required": [
@@ -995,10 +1050,107 @@
       ],
       "markdownDescription": "**Supported value**\n\nobject with type, key, label, and optional placeholder/default/options fields.\n\nDeclares one Node Test input; its value is available through {{key}} placeholders."
     },
+    "instanceConfig": {
+      "title": "Node instance configuration",
+      "description": "Supported value: instance configuration object mapping a Mermaid node to a template with optional overrides.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "description": "Supported value: required non-empty string reference to a node template defined in the nodes section. The template provides default recognition, actions, and timing settings.",
+          "markdownDescription": "**Supported value**\n\nrequired non-empty string reference to a node template defined in the `nodes` section.\n\nThe template provides default recognition, actions, and timing settings."
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/parameter",
+            "description": "Supported value: Node Test parameter object.",
+            "markdownDescription": "**Supported value**\n\nNode Test parameter object."
+          },
+          "default": [],
+          "description": "Supported value: array of Node Test parameter objects. Replaces the template's params. Default: empty array.",
+          "markdownDescription": "**Supported value**\n\narray of Node Test parameter objects.\n\nReplaces the template's params.\n\n**Default:** empty array."
+        },
+        "param_values": {
+          "type": "object",
+          "description": "Supported value: object whose keys are parameter names and whose values are default parameter values. These values override the template's parameter defaults. Default: empty object.",
+          "default": {},
+          "markdownDescription": "**Supported value**\n\nobject whose keys are parameter names and whose values are default parameter values.\n\nThese values override the template's parameter defaults.\n\n**Default:** empty object."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["Normal", "Entry"],
+          "description": "Supported values: Normal | Entry. Override the template's structural node kind. Default: inherit from template.",
+          "markdownDescription": "**Supported values**\n\n- `Normal` — regular node\n- `Entry` — pipeline entry marker\n\nOverride the template's structural node kind.\n\n**Default:** inherit from template."
+        },
+        "timeout": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds. Override the template's timeout. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's timeout.\n\n**Default:** inherit from template."
+        },
+        "error_timeout": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds. Override the template's error_timeout. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's error_timeout.\n\n**Default:** inherit from template."
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds. Override the template's rate_limit. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's rate_limit.\n\n**Default:** inherit from template."
+        },
+        "pre_delay": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds. Override the template's pre_delay. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's pre_delay.\n\n**Default:** inherit from template."
+        },
+        "post_delay": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds. Override the template's post_delay. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's post_delay.\n\n**Default:** inherit from template."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Supported values: true | false. Override the template's enabled state. Default: inherit from template.",
+          "markdownDescription": "**Supported values**\n\ntrue | false.\n\nOverride the template's enabled state.\n\n**Default:** inherit from template."
+        },
+        "inverse": {
+          "type": "boolean",
+          "description": "Supported values: true | false. Override the template's inverse state. Default: inherit from template.",
+          "markdownDescription": "**Supported values**\n\ntrue | false.\n\nOverride the template's inverse state.\n\n**Default:** inherit from template."
+        },
+        "max_hit": {
+          "$ref": "#/$defs/unsignedInteger",
+          "description": "Supported value: integer from 0 through 4294967295. Override the template's max_hit. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\ninteger from 0 through 4294967295.\n\nOverride the template's max_hit.\n\n**Default:** inherit from template."
+        },
+        "repeat": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "Supported value: integer from 1 through 4294967295. Override the template's repeat count. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\ninteger from 1 through 4294967295.\n\nOverride the template's repeat count.\n\n**Default:** inherit from template."
+        },
+        "repeat_delay": {
+          "$ref": "#/$defs/milliseconds",
+          "description": "Supported value: non-negative integer milliseconds. Override the template's repeat_delay. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's repeat_delay.\n\n**Default:** inherit from template."
+        }
+      },
+      "required": ["node"],
+      "markdownDescription": "**Supported value**\n\ninstance configuration object mapping a Mermaid node to a template with optional overrides.\n\n**Required field:** `node` (reference to template in `nodes` section)"
+    },
     "nodeFields": {
       "type": "object",
-      "description": "Supported value: node metadata object containing recognition, actions, parameters, target override, timing, repetition, and attachment fields.",
+      "description": "Supported value: node metadata object containing kind, recognition, actions, parameters, target override, timing, repetition, and attachment fields.",
       "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["Normal", "Entry"],
+          "default": "Normal",
+          "description": "Supported values: Normal | Entry. Structural node kind. Selected Entry: marks the pipeline entry node; entry nodes carry no recognition or actions and transition straight to their children. Exactly one Entry node is required per pipeline. Default: Normal.",
+          "markdownDescription": "**Supported values**\n\n- `Normal` — regular node\n- `Entry` — pipeline entry marker; carries no recognition or actions\n\nExactly one `Entry` node is required per pipeline.\n\n**Default:** `Normal`"
+        },
         "recognition": {
           "$ref": "#/$defs/recognition",
           "default": {
@@ -1026,8 +1178,8 @@
             "markdownDescription": "**Supported value**\n\nNode Test parameter object."
           },
           "default": [],
-          "description": "Supported value: array of Node Test parameter objects. Values can be substituted into supported action strings with {{key}}. Default: empty array.",
-          "markdownDescription": "**Supported value**\n\narray of Node Test parameter objects.\n\nValues can be substituted into supported action strings with {{key}}.\n\n**Default:** empty array."
+          "description": "Supported value: array of Node Test parameter objects used by {{key}} substitutions. Default: empty array.",
+          "markdownDescription": "**Supported value**\n\narray of Node Test parameter objects used by `{{key}}` substitutions.\n\n**Default:** empty array."
         },
         "target": {
           "description": "Supported values: null | screen target object | window target object without window_size. Used only while this node runs. Default: null, which inherits the top-level target or reuses an active stream. It does not overwrite manual capture preferences.",
@@ -1058,8 +1210,14 @@
         "timeout": {
           "$ref": "#/$defs/milliseconds",
           "default": 20000,
-          "description": "Supported value: non-negative integer milliseconds. Maximum active recognition retry time before the error edge; paused time is excluded. Default: 20000 ms.",
-          "markdownDescription": "**Supported value**\n\nNon-negative integer in milliseconds.\n\nMaximum active recognition retry time before the error edge; paused time is excluded.\n\n**Default:** `20000 ms`"
+          "description": "Supported value: non-negative integer milliseconds. Quota shared by this node's children (n>=1): candidates are tried round-robin until this quota is exhausted, then the error edge fires. The timeout defined in a child node is the quota for its own children. Default: 20000 ms.",
+          "markdownDescription": "**Supported value**\n\nNon-negative integer in milliseconds.\n\nQuota shared by this node's children (`n>=1`): candidates are tried round-robin until this quota is exhausted, then the error edge fires.\n\n**Default:** `20000 ms`"
+        },
+        "error_timeout": {
+          "$ref": "#/$defs/milliseconds",
+          "default": 20000,
+          "description": "Supported value: non-negative integer milliseconds. Quota for executing this node's error target after the children quota expires; progress keeps showing on this (parent) node. Default: 20000 ms.",
+          "markdownDescription": "**Supported value**\n\nNon-negative integer in milliseconds.\n\nQuota for executing this node's error target after the children quota expires; progress keeps showing on this (parent) node.\n\n**Default:** `20000 ms`"
         },
         "rate_limit": {
           "$ref": "#/$defs/milliseconds",
@@ -1117,7 +1275,7 @@
           "markdownDescription": "**Supported value**\n\nany JSON value retained for application-specific use; the pipeline engine does not interpret it.\n\n**Default:** null."
         }
       },
-      "markdownDescription": "**Supported value**\n\nnode metadata object containing recognition, actions, parameters, target override, timing, repetition, and attachment fields."
+      "markdownDescription": "**Supported value**\n\nnode metadata object containing recognition, actions, target override, timing, repetition, and attachment fields."
     },
     "nodeMetadata": {
       "title": "Pipeline node metadata",
@@ -1125,33 +1283,6 @@
       "allOf": [{ "$ref": "#/$defs/nodeFields" }],
       "unevaluatedProperties": false,
       "markdownDescription": "**Supported value**\n\nnode metadata object.\n\nIts map key must exactly match a node ID in the adjacent Mermaid flow file."
-    },
-    "edgeMetadata": {
-      "title": "Mermaid edge metadata",
-      "description": "Supported value: object with optional edge_type. Configures one edge declared in the adjacent Mermaid flow file. Default: empty object, equivalent to edge_type \"next\".",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "edge_type": {
-          "type": "string",
-          "oneOf": [
-            {
-              "const": "next",
-              "description": "Supported values: next | error. Selected next: follow after success, or when disabled/max_hit skips the node. Default: next.",
-              "markdownDescription": "**Supported values**\n\nnext | error.\n\n**Selected next:** follow after success, or when disabled/max_hit skips the node.\n\n**Default:** next."
-            },
-            {
-              "const": "error",
-              "description": "Supported values: next | error. Selected error: follow when capture, recognition, selection, or action execution fails. Default: next.",
-              "markdownDescription": "**Supported values**\n\nnext | error.\n\n**Selected error:** follow when capture, recognition, selection, or action execution fails.\n\n**Default:** next."
-            }
-          ],
-          "default": "next",
-          "description": "Supported values: \"next\" | \"error\". next is the normal/success transition; error is used when recognition or an action fails. Default: \"next\".",
-          "markdownDescription": "**Supported values**\n\n\"next\" | \"error\". next is the normal/success transition; error is used when recognition or an action fails.\n\n**Default:** \"next\"."
-        }
-      },
-      "markdownDescription": "**Supported value**\n\nobject with optional edge_type.\n\nConfigures one edge declared in the adjacent Mermaid flow file.\n\n**Default:** empty object, equivalent to edge_type \"next\"."
     }
   }
 }

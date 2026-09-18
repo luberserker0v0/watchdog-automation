@@ -13,7 +13,12 @@ export interface NodeTestResult {
   success: boolean;
   matched: boolean;
   confidence: number;
+  /** Physical virtual-screen region used for actions and screen-position diagnostics. */
   box_region: Region | null;
+  /** Recognition region in encoded capture-frame pixels, for Preview overlays. */
+  capture_box_region?: Region | null;
+  /** Effective ROI after roi_offset and clipping, in encoded capture-frame pixels. */
+  capture_roi?: Region | null;
   actions_fired: number;
   duration_ms: number;
   error: string | null;

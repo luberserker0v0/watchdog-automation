@@ -1,5 +1,7 @@
 ```mermaid
+
 flowchart TD
+    Start["Start"]
     RecognizeTitle["RecognizeTitle"]
     InputAccount["InputAccount"]
     InputPassword["InputPassword"]
@@ -12,8 +14,13 @@ flowchart TD
     ScrollPage["ScrollPage"]
     PressDelete["PressDelete"]
     ClickRefresh["ClickRefresh"]
+    ScrollPage2["ScrollPage2"]
+    ClickKeyboard["ClickKeyboard"]
+    FindKeyDetectPanel["FindKeyDetectPanel"]
+    VerifyKeyboard["VerifyKeyboard"]
     Done["Done"]
 
+    Start --> RecognizeTitle
     RecognizeTitle --> InputAccount
     InputAccount --> InputPassword
     InputPassword --> ClickLogin
@@ -26,5 +33,9 @@ flowchart TD
     ScrollList --> ScrollPage
     ScrollPage --> PressDelete
     PressDelete --> ClickRefresh
-    ClickRefresh --> Done
+    ClickRefresh --> ScrollPage2
+    ScrollPage2 --> ClickKeyboard
+    ClickKeyboard --> FindKeyDetectPanel
+    FindKeyDetectPanel --> VerifyKeyboard
+    VerifyKeyboard --> Done
 ```

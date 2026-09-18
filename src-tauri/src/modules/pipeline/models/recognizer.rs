@@ -6,11 +6,19 @@ pub struct RecognitionConfig {
     #[serde(flatten)]
     pub kind: Recognition,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub roi: Option<[i32; 4]>,
+    pub roi: Option<RecognitionRoi>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub roi_offset: Option<[i32; 4]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub candidate_selection: Option<CandidateSelection>,
+}
+
+/// A fixed capture-local rectangle or the recognized box of an earlier node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RecognitionRoi {
+    Fixed([i32; 4]),
+    Node(String),
 }
 
 impl Default for RecognitionConfig {
@@ -85,6 +93,68 @@ pub enum Recognition {
         #[serde(default)]
         param: serde_json::Value,
     },
+}
+
+impl Recognition {
+    pub fn substitute(
+        &self,
+        params: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> Self {
+        if params.is_empty() {
+            return self.clone();
+        }
+        match self.clone() {
+            Recognition::Ocr {
+                expected,
+                threshold,
+            } => Recognition::Ocr {
+                expected: expected.map(|e| substitute_string(&e, params)),
+                threshold,
+            },
+            Recognition::Custom { recognition, param } => Recognition::Custom {
+                recognition,
+                param: substitute_json(&param, params),
+            },
+            other => other,
+        }
+    }
+}
+
+fn substitute_string(
+    s: &str,
+    params: &std::collections::HashMap<String, serde_json::Value>,
+) -> String {
+    let mut result = s.to_string();
+    for (key, value) in params {
+        let placeholder = format!("{{{{{}}}}}", key);
+        let replacement = match value {
+            serde_json::Value::String(v) => v.clone(),
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::Number(n) => n.to_string(),
+            serde_json::Value::Null => "null".to_string(),
+            _ => value.to_string(),
+        };
+        result = result.replace(&placeholder, &replacement);
+    }
+    result
+}
+
+fn substitute_json(
+    value: &serde_json::Value,
+    params: &std::collections::HashMap<String, serde_json::Value>,
+) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => serde_json::Value::String(substitute_string(s, params)),
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(|v| substitute_json(v, params)).collect())
+        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), substitute_json(v, params)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1,7 +1,10 @@
-use super::{EngineResult, ExecutionContext, PipelineState, RunHandle, StepResult};
+use super::{ChildrenKind, EngineResult, ExecutionContext, PipelineState, RunHandle, StepResult};
+use super::frame;
+use super::routing;
+use super::step;
 use crate::modules::pipeline::models::action::Action;
-use crate::modules::pipeline::models::edge::EdgeType;
-use crate::modules::pipeline::models::graph::PipelineGraph;
+use crate::modules::pipeline::models::node::Node;
+use crate::modules::pipeline::plan::ExecutionPlan;
 use crate::modules::pipeline::plugins::PluginRegistry;
 use crate::services::stream::{CaptureEngine, StreamFrame, StreamService, StreamTarget};
 use std::collections::HashMap;
@@ -10,55 +13,19 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast;
 
-async fn receive_frame_after(
-    rx: &mut broadcast::Receiver<StreamFrame>,
-    not_before: Option<Instant>,
-    timeout: Duration,
-    expected_session: Option<u64>,
-    expected_target: Option<&StreamTarget>,
-    handle: Option<&RunHandle>,
-) -> Result<(StreamFrame, usize, Duration), (String, Duration)> {
-    let mut stale_frames_skipped = 0;
-    let mut active_elapsed = Duration::ZERO;
-    let mut paused_elapsed = Duration::ZERO;
-    while active_elapsed < timeout {
-        if let Some(handle) = handle {
-            if stop_requested(handle) {
-                return Err((
-                    "pipeline stopped while waiting for a frame".to_string(),
-                    paused_elapsed,
-                ));
-            }
-            if matches!(handle.get_state(), PipelineState::Paused) {
-                let pause_started = Instant::now();
-                tokio::time::sleep(Duration::from_millis(25)).await;
-                paused_elapsed += pause_started.elapsed();
-                continue;
-            }
-        }
-        let slice = (timeout - active_elapsed).min(Duration::from_millis(50));
-        let started = Instant::now();
-        match tokio::time::timeout(slice, rx.recv()).await {
-            Ok(Ok(frame))
-                if not_before.map_or(true, |boundary| frame.captured_at >= boundary)
-                    && expected_session.map_or(true, |session| frame.session_id == session)
-                    && expected_target.map_or(true, |target| &frame.target == target) =>
-            {
-                return Ok((frame, stale_frames_skipped, paused_elapsed));
-            }
-            Ok(Ok(_)) => stale_frames_skipped += 1,
-            Ok(Err(broadcast::error::RecvError::Lagged(skipped))) => {
-                stale_frames_skipped += skipped as usize;
-            }
-            Ok(Err(error)) => {
-                return Err((format!("stream receive failed: {error}"), paused_elapsed))
-            }
-            Err(_) => {}
-        }
-        active_elapsed += started.elapsed();
-    }
-    Err(("fresh stream frame timed out".to_string(), paused_elapsed))
+#[derive(Clone)]
+struct ActiveCapture {
+    configured_key: String,
+    stream_target: StreamTarget,
+    session_id: u64,
 }
+
+fn publish_status(app: &AppHandle, handle: &RunHandle, appended_step: Option<StepResult>) {
+    // Delivery is best-effort: `get_pipeline_status` remains the recovery path
+    // when a window was not listening while an event was emitted.
+    let _ = app.emit("pipeline-status", handle.event(appended_step));
+}
+
 
 async fn ensure_effective_target(
     graph_target: Option<&crate::modules::pipeline::models::graph::PipelineTarget>,
@@ -66,9 +33,20 @@ async fn ensure_effective_target(
     stream_service: &StreamService,
     app: &AppHandle,
     handle: &RunHandle,
+    active_capture: &mut Option<ActiveCapture>,
 ) -> Result<(StreamTarget, u64), String> {
     use crate::modules::pipeline::models::graph::PipelineTarget;
     let configured = node_target.or(graph_target);
+    let configured_key = format!("{configured:?}");
+    if let Some(active) = active_capture.as_ref()
+        .filter(|active| active.configured_key == configured_key && stream_service.is_streaming())
+    {
+        // The node still uses the same declared target and live capture
+        // session. Avoid repeated window enumeration/foreground calls on each
+        // recognition retry; action execution performs its own foreground
+        // safety check immediately before input is sent.
+        return Ok((active.stream_target.clone(), active.session_id));
+    }
     let inherited_window_size = node_target
         .and_then(PipelineTarget::window_size)
         .or_else(|| graph_target.and_then(PipelineTarget::window_size));
@@ -193,6 +171,11 @@ async fn ensure_effective_target(
         *target = Some(effective_target);
     }
     let session_id = stream_service.status().await.session_id;
+    *active_capture = Some(ActiveCapture {
+        configured_key,
+        stream_target: stream_target.clone(),
+        session_id,
+    });
     Ok((stream_target, session_id))
 }
 
@@ -202,6 +185,43 @@ fn stop_requested(handle: &RunHandle) -> bool {
         .lock()
         .map(|value| *value)
         .unwrap_or(true)
+}
+
+/// Single-level timeout: while a children state is active the parent's quota
+/// (`timeout` for normal children, `error_timeout` for the error target)
+/// bounds every attempt. Only parent-less execution (the entry node) falls
+/// back to the node's own timeout.
+fn quota_exceeded(
+    ctx: &ExecutionContext,
+    current_node: &Node,
+    solo_start: &Instant,
+) -> bool {
+    if let Some(children) = ctx.children.as_ref() {
+        children.start_time.elapsed().as_millis() as u64 >= children.timeout_ms
+    } else {
+        solo_start.elapsed().as_millis() as u64 >= current_node.timeout
+    }
+}
+
+/// Active quota in milliseconds, for timeout diagnostics and progress.
+fn quota_ms(ctx: &ExecutionContext, current_node: &Node) -> u64 {
+    ctx.children
+        .as_ref()
+        .map(|children| children.timeout_ms)
+        .unwrap_or(current_node.timeout)
+}
+
+/// Owner of the active quota: the parent while normal children are tried,
+/// otherwise the current node itself (entry execution, or an error target
+/// whose own error edge chains next). Quota expiry routes this node's
+/// error edge.
+fn quota_owner(ctx: &ExecutionContext, current_node: &Node) -> String {
+    match ctx.children.as_ref() {
+        Some(children) if children.kind == ChildrenKind::Next => {
+            children.parent_node_id.clone()
+        }
+        _ => current_node.id.clone(),
+    }
 }
 
 fn debug_image_context(
@@ -259,53 +279,83 @@ async fn wait_until_running(handle: &RunHandle) -> bool {
     }
 }
 
-pub async fn run_pipeline(
-    graph: PipelineGraph,
-    registry: PluginRegistry,
+/// One exclusively-owned pipeline execution. This is the aggregate root for a
+/// run: mutable execution state cannot leak into command handlers or another
+/// concurrent run.
+struct PipelineRunSession {
+    ctx: ExecutionContext,
     handle: Arc<RunHandle>,
     stream_service: Arc<StreamService>,
-    user_params: HashMap<String, serde_json::Value>,
-    save_debug_images: bool,
+    app: AppHandle,
+    rx: broadcast::Receiver<StreamFrame>,
     detailed_timings: bool,
     pipeline_startup_ms: Option<u64>,
-    app: AppHandle,
-) -> EngineResult {
-    let mut ctx = ExecutionContext::new(graph, registry, user_params);
-    ctx.save_debug_images = save_debug_images;
+    steps: Vec<StepResult>,
+    next_frame_not_before: Option<Instant>,
+    last_frame_sequence: Option<u64>,
+    active_capture: Option<ActiveCapture>,
+    was_stopped: bool,
+    attempt_node: Option<String>,
+    /// Quota tracking for parent-less execution (the entry node). While a
+    /// children state is active the parent's quota governs; otherwise the
+    /// node's own timeout bounds its attempts.
+    solo_node: String,
+    solo_start: Instant,
+}
 
-    // Resolve hwnd for window targets (used for coordinate conversion)
-    if let Some(crate::modules::pipeline::models::graph::PipelineTarget::Window { .. }) =
-        &ctx.graph.target
-    {
-        if let Ok(hwnd) =
-            crate::repositories::window::find_window_by_target(&ctx.graph.target.as_ref().unwrap())
-        {
-            ctx.hwnd = Some(hwnd);
-            log::info!(
-                "[pipeline] resolved window target hwnd={} for coordinate conversion",
-                hwnd
-            );
+impl PipelineRunSession {
+    fn new(
+        plan: ExecutionPlan,
+        registry: PluginRegistry,
+        handle: Arc<RunHandle>,
+        stream_service: Arc<StreamService>,
+        user_params: HashMap<String, HashMap<String, serde_json::Value>>,
+        save_debug_images: bool,
+        detailed_timings: bool,
+        pipeline_startup_ms: Option<u64>,
+        app: AppHandle,
+    ) -> Self {
+        let mut ctx = ExecutionContext::new(plan, registry, user_params);
+        ctx.save_debug_images = save_debug_images;
+        let rx = stream_service.subscribe();
+        Self {
+            ctx, handle, stream_service, app, rx, detailed_timings, pipeline_startup_ms,
+            steps: Vec::new(), next_frame_not_before: None, last_frame_sequence: None,
+            active_capture: None, was_stopped: false,
+            attempt_node: None, solo_node: String::new(), solo_start: Instant::now(),
         }
     }
 
-    let mut rx = stream_service.subscribe();
+    async fn run(self) -> EngineResult {
+        // Move all run-scoped state out of the aggregate root once. No command
+        // handler can access it while this state machine is executing.
+        let mut ctx = self.ctx;
+        let handle = self.handle;
+        let stream_service = self.stream_service;
+        let app = self.app;
+        let mut rx = self.rx;
+        let detailed_timings = self.detailed_timings;
+        let pipeline_startup_ms = self.pipeline_startup_ms;
+        let mut steps = self.steps;
+        let mut next_frame_not_before = self.next_frame_not_before;
+        let mut last_frame_sequence = self.last_frame_sequence;
+        let mut active_capture = self.active_capture;
+        let mut was_stopped = self.was_stopped;
+        let mut attempt_node = self.attempt_node;
+        let mut solo_node = self.solo_node;
+        let mut solo_start = self.solo_start;
 
     {
         if let Ok(mut state) = handle.state.lock() {
             *state = PipelineState::Running;
         }
     }
+    publish_status(&app, &handle, None);
 
     log::info!("[pipeline] started, entry node='{}'", ctx.current_node_id);
 
-    let mut steps = Vec::new();
     // A broadcast receiver yields its oldest unread frame. After an action changes the
     // target UI, require the next node to skip frames captured before that action finished.
-    let mut next_frame_not_before: Option<Instant> = None;
-    let mut was_stopped = false;
-    let mut recognition_elapsed_ms: HashMap<String, u64> = HashMap::new();
-    let mut attempt_node: Option<String> = None;
-
     'pipeline: loop {
         if let Ok(stop) = handle.should_stop.lock() {
             if *stop {
@@ -333,12 +383,35 @@ pub async fn run_pipeline(
             }
         };
 
+        if let Some(children) = ctx.children.as_ref() {
+            if children.start_time.elapsed().as_millis() as u64 >= children.timeout_ms {
+                let failed_id = match children.kind {
+                    ChildrenKind::Next => children.parent_node_id.clone(),
+                    ChildrenKind::Error => ctx.current_node_id.clone(),
+                };
+                // Quota exhausted: route the failed node's error edge under
+                // the error budget with progress kept on the parent; without
+                // an error edge the run fails.
+                route_error(
+                    &mut ctx,
+                    &handle,
+                    &failed_id,
+                    "All children candidates timed out".to_string(),
+                );
+                if ctx.current_node_id.is_empty() {
+                    break;
+                }
+                continue;
+            }
+        }
+
         let (expected_stream_target, expected_session) = match ensure_effective_target(
             ctx.graph.target.as_ref(),
             current_node.target.as_ref(),
             &stream_service,
             &app,
             &handle,
+            &mut active_capture,
         )
         .await
         {
@@ -353,10 +426,19 @@ pub async fn run_pipeline(
         if let Ok(mut node_id) = handle.current_node_id.lock() {
             *node_id = Some(current_node.id.clone());
         }
+        if ctx.children.is_some() {
+            if let Ok(mut child_id) = handle.children_child_id.lock() {
+                *child_id = Some(current_node.id.clone());
+            }
+        }
+        if solo_node != current_node.id {
+            solo_node = current_node.id.clone();
+            solo_start = Instant::now();
+        }
+        publish_status(&app, &handle, None);
 
         if !current_node.enabled {
-            follow_edge(&mut ctx, EdgeType::Next);
-            if ctx.current_node_id.is_empty() {
+            if step::skip(&mut ctx, &handle, &app, &mut steps, &current_node.id, false) {
                 break;
             }
             continue;
@@ -364,37 +446,13 @@ pub async fn run_pipeline(
 
         let hit_count = ctx.hit_counts.get(&current_node.id).copied().unwrap_or(0);
         if hit_count >= current_node.max_hit {
-            if let Ok(mut count) = handle.step_count.lock() {
-                *count += 1;
-            }
-            let step = StepResult {
-                node_id: current_node.id.clone(),
-                matched: true,
-                confidence: 0.0,
-                box_region: None,
-                actions_fired: 0,
-                skipped: true,
-                duration_ms: 0,
-                error: None,
-                timings_ms: None,
-            };
-            steps.push(step.clone());
-            ctx.step_results.push(step.clone());
-            if let Ok(mut results) = handle.step_results.lock() {
-                results.push(step);
-            }
-            follow_edge(&mut ctx, EdgeType::Next);
-            if ctx.current_node_id.is_empty() {
+            if step::skip(&mut ctx, &handle, &app, &mut steps, &current_node.id, true) {
                 break;
             }
             continue;
         }
 
         let step_start = std::time::Instant::now();
-        let prior_attempt_ms = recognition_elapsed_ms
-            .get(&current_node.id)
-            .copied()
-            .unwrap_or(0);
         if attempt_node.as_deref() != Some(&current_node.id) {
             attempt_node = Some(current_node.id.clone());
             if let Ok(mut attempts) = handle.attempt_count.lock() {
@@ -419,12 +477,41 @@ pub async fn run_pipeline(
             current_node.id
         );
 
+        if current_node.kind
+            == crate::modules::pipeline::models::node::NodeKind::Entry
+        {
+            // Entry nodes carry no recognition or actions: the status
+            // published above makes the handoff visible, then execution
+            // moves straight to the entry's children.
+            log::info!("[pipeline] node='{}' entry, transitioning", current_node.id);
+            let step = StepResult {
+                node_id: current_node.id.clone(),
+                matched: true,
+                confidence: 1.0,
+                box_region: None,
+                actions_fired: 0,
+                skipped: false,
+                duration_ms: step_start.elapsed().as_millis() as u64,
+                error: None,
+                timings_ms: detailed_timings.then_some(timings),
+            };
+            step::record(&mut ctx, &handle, &app, &mut steps, step);
+
+            let transition = routing::next(&ctx);
+            routing::apply(&mut ctx, &handle, transition);
+            if ctx.current_node_id.is_empty() {
+                break;
+            }
+            continue;
+        }
+
         let phase_start = std::time::Instant::now();
-        let mut attempt_excluded = Duration::ZERO;
         let captured_frame = if stream_service.is_streaming() {
-            match receive_frame_after(
+            match frame::receive_after(
+                &stream_service,
                 &mut rx,
                 next_frame_not_before,
+                last_frame_sequence,
                 Duration::from_secs(3),
                 Some(expected_session),
                 Some(&expected_stream_target),
@@ -432,9 +519,9 @@ pub async fn run_pipeline(
             )
             .await
             {
-                Ok((frame, stale_frames_skipped, paused)) => {
-                    attempt_excluded = paused;
+                Ok((frame, stale_frames_skipped, _paused)) => {
                     next_frame_not_before = None;
+                    last_frame_sequence = Some(frame.sequence);
                     if stale_frames_skipped > 0 {
                         log::debug!(
                             "[pipeline] node='{}' skipped {} frame(s) captured before the previous actions completed",
@@ -446,8 +533,7 @@ pub async fn run_pipeline(
                         .ok()
                         .map(|image| (image, frame.bounds, frame.sequence))
                 }
-                Err((e, paused)) => {
-                    attempt_excluded = paused;
+                Err((e, _paused)) => {
                     log::warn!(
                         "[pipeline] node='{}' stream recv error: {}",
                         current_node.id,
@@ -470,14 +556,7 @@ pub async fn run_pipeline(
         let (screenshot, frame_bounds, frame_sequence) = match captured_frame {
             Some(frame) => frame,
             None => {
-                let elapsed = recognition_elapsed_ms
-                    .entry(current_node.id.clone())
-                    .or_default();
-                *elapsed += step_start
-                    .elapsed()
-                    .saturating_sub(attempt_excluded)
-                    .as_millis() as u64;
-                if *elapsed < current_node.timeout {
+                if !quota_exceeded(&ctx, &current_node, &solo_start) {
                     let wait_ms = current_node
                         .rate_limit
                         .saturating_sub(step_start.elapsed().as_millis() as u64);
@@ -485,7 +564,6 @@ pub async fn run_pipeline(
                         was_stopped = true;
                         break 'pipeline;
                     }
-                    *elapsed += wait_ms;
                     next_frame_not_before = Some(Instant::now());
                     continue;
                 }
@@ -500,18 +578,17 @@ pub async fn run_pipeline(
                     box_region: None,
                     actions_fired: 0,
                     skipped: false,
-                    duration_ms: prior_attempt_ms + step_start.elapsed().as_millis() as u64,
+                    duration_ms: step_start.elapsed().as_millis() as u64,
                     error: Some("Failed to capture screen".to_string()),
                     timings_ms: detailed_timings.then_some(timings),
                 };
-                steps.push(step.clone());
-                ctx.step_results.push(step);
-                if let Ok(mut sr) = handle.step_results.lock() {
-                    sr.push(steps.last().unwrap().clone());
-                }
+                step::record(&mut ctx, &handle, &app, &mut steps, step);
 
-                handle_error(
+                let failed_id = quota_owner(&ctx, &current_node);
+                route_error(
                     &mut ctx,
+                    &handle,
+                    &failed_id,
                     "Failed to capture a fresh stream frame".to_string(),
                 );
                 if ctx.current_node_id.is_empty() {
@@ -540,17 +617,26 @@ pub async fn run_pipeline(
         });
 
         let phase_start = std::time::Instant::now();
-        let effective_roi =
-            crate::modules::pipeline::plugins::shared::resolve_recognition_roi_with_offset(
-                current_node.recognition.roi.as_ref(),
-                current_node.recognition.roi_offset.as_ref(),
-                screenshot.width(),
-                screenshot.height(),
-            );
+        let node_params = ctx
+            .user_params
+            .get(&current_node.id)
+            .cloned()
+            .unwrap_or_default();
+        let effective_roi = crate::modules::pipeline::plugins::shared::resolve_node_recognition_roi(
+            current_node.recognition.roi.as_ref(),
+            current_node.recognition.roi_offset.as_ref(),
+            screenshot.width(),
+            screenshot.height(),
+            resolved_frame_bounds,
+            &expected_stream_target,
+            &ctx.recognized_regions,
+            &ctx.recognized_region_targets,
+        );
+        let substituted_recognition_kind = current_node.recognition.kind.substitute(&node_params);
         let match_result = match effective_roi.as_ref() {
             Ok(roi) => ctx.registry.evaluate_recognition_with_selection(
                 &screenshot,
-                &current_node.recognition.kind,
+                &substituted_recognition_kind,
                 Some(roi),
                 current_node.recognition.candidate_selection.as_ref(),
             ),
@@ -612,7 +698,7 @@ pub async fn run_pipeline(
                     box_region: None,
                     actions_fired: 0,
                     skipped: false,
-                    duration_ms: prior_attempt_ms + step_start.elapsed().as_millis() as u64,
+                    duration_ms: step_start.elapsed().as_millis() as u64,
                     error: Some(format!("Recognition error: {}", e)),
                     timings_ms: detailed_timings.then_some({
                         timings.insert(
@@ -622,13 +708,10 @@ pub async fn run_pipeline(
                         timings
                     }),
                 };
-                steps.push(step.clone());
-                ctx.step_results.push(step);
-                if let Ok(mut sr) = handle.step_results.lock() {
-                    sr.push(steps.last().unwrap().clone());
-                }
+                step::record(&mut ctx, &handle, &app, &mut steps, step);
 
-                handle_error(&mut ctx, format!("Recognition error: {}", e));
+                let failed_id = current_node.id.clone();
+                route_error(&mut ctx, &handle, &failed_id, format!("Recognition error: {}", e));
                 if ctx.current_node_id.is_empty() {
                     break;
                 }
@@ -645,6 +728,7 @@ pub async fn run_pipeline(
 
         // Convert capture-relative recognition pixels to physical virtual-screen pixels.
         let phase_start = std::time::Instant::now();
+        let mut box_mapped_to_screen = true;
         if let Some(region) = match_result.box_region.as_mut() {
             let local = region.clone();
             let converted = if let Some(bounds) = resolved_frame_bounds {
@@ -693,11 +777,14 @@ pub async fn run_pipeline(
                     );
                     *region = screen_region;
                 }
-                Err(error) => log::warn!(
-                    "[pipeline] node='{}' coordinate conversion failed: {}",
-                    current_node.id,
-                    error
-                ),
+                Err(error) => {
+                    box_mapped_to_screen = false;
+                    log::warn!(
+                        "[pipeline] node='{}' coordinate conversion failed: {}",
+                        current_node.id,
+                        error
+                    );
+                }
             }
         }
         if detailed_timings {
@@ -748,8 +835,7 @@ pub async fn run_pipeline(
                     );
                 }
                 let debug_image_elapsed = phase_start.elapsed();
-                // Diagnostic I/O must not consume the node's recognition timeout.
-                attempt_excluded += debug_image_elapsed;
+                // Wall-clock parent quota includes diagnostic I/O.
                 if detailed_timings {
                     timings.insert(
                         "debug_image".to_string(),
@@ -758,14 +844,10 @@ pub async fn run_pipeline(
                 }
             }
 
-            let elapsed = recognition_elapsed_ms
-                .entry(current_node.id.clone())
-                .or_default();
-            *elapsed += step_start
-                .elapsed()
-                .saturating_sub(attempt_excluded)
-                .as_millis() as u64;
-            if *elapsed < current_node.timeout {
+            // Single-level quota: each miss rotates to the next candidate
+            // (`n == 1` re-selects the only child) until the parent quota
+            // is exhausted.
+            if !quota_exceeded(&ctx, &current_node, &solo_start) {
                 let wait_ms = current_node
                     .rate_limit
                     .saturating_sub(step_start.elapsed().as_millis() as u64);
@@ -773,8 +855,12 @@ pub async fn run_pipeline(
                     was_stopped = true;
                     break 'pipeline;
                 }
-                *elapsed += wait_ms;
                 next_frame_not_before = Some(Instant::now());
+                if let Some(children) = ctx.children.as_mut() {
+                    children.current_index =
+                        (children.current_index + 1) % children.candidates.len();
+                    ctx.current_node_id = children.candidates[children.current_index].clone();
+                }
                 continue;
             }
             log::info!(
@@ -783,6 +869,7 @@ pub async fn run_pipeline(
                 match_result.confidence
             );
 
+            let quota = quota_ms(&ctx, &current_node);
             let step = StepResult {
                 node_id: current_node.id.clone(),
                 matched: false,
@@ -790,20 +877,19 @@ pub async fn run_pipeline(
                 box_region: None,
                 actions_fired: 0,
                 skipped: false,
-                duration_ms: prior_attempt_ms + step_start.elapsed().as_millis() as u64,
+                duration_ms: step_start.elapsed().as_millis() as u64,
                 error: Some(match_result.selection_error.clone().unwrap_or_else(|| {
-                    format!("Recognition timed out after {}ms", current_node.timeout)
+                    format!("Recognition timed out after {}ms", quota)
                 })),
                 timings_ms: detailed_timings.then_some(timings),
             };
-            steps.push(step.clone());
-            ctx.step_results.push(step);
-            if let Ok(mut sr) = handle.step_results.lock() {
-                sr.push(steps.last().unwrap().clone());
-            }
+            step::record(&mut ctx, &handle, &app, &mut steps, step);
 
-            handle_error(
+            let failed_id = quota_owner(&ctx, &current_node);
+            route_error(
                 &mut ctx,
+                &handle,
+                &failed_id,
                 match_result
                     .selection_error
                     .clone()
@@ -815,17 +901,25 @@ pub async fn run_pipeline(
             continue;
         }
 
-        recognition_elapsed_ms.remove(&current_node.id);
 
-        if let Some(region) = &match_result.box_region {
+        if let Some(region) = match_result
+            .box_region
+            .as_ref()
+            .filter(|_| box_mapped_to_screen)
+        {
             ctx.recognized_regions
                 .insert(current_node.id.clone(), region.clone());
+            ctx.recognized_region_targets
+                .insert(current_node.id.clone(), expected_stream_target.clone());
         }
         if let Some(region) = &debug_match_result.box_region {
             ctx.debug_recognized_regions
                 .insert(current_node.id.clone(), region.clone());
         }
         *ctx.hit_counts.entry(current_node.id.clone()).or_insert(0) += 1;
+        if let Ok(mut hc) = handle.hit_counts.lock() {
+            *hc = ctx.hit_counts.clone();
+        }
 
         log::info!(
             "[pipeline] node='{}' matched, confidence={:.3}{}",
@@ -837,7 +931,7 @@ pub async fn run_pipeline(
             }
         );
 
-        let substituted_actions = substitute_actions(&current_node.actions, &ctx.user_params);
+        let substituted_actions = substitute_actions(&current_node.actions, &node_params);
         let mut actions_fired = 0;
         let mapped_actions = resolved_frame_bounds
             .ok_or_else(|| {
@@ -1009,19 +1103,18 @@ pub async fn run_pipeline(
             box_region: match_result.box_region,
             actions_fired,
             skipped: false,
-            duration_ms: prior_attempt_ms + step_start.elapsed().as_millis() as u64,
+            duration_ms: step_start.elapsed().as_millis() as u64,
             error: action_error.clone(),
             timings_ms: detailed_timings.then_some(timings),
         };
-        steps.push(step.clone());
-        ctx.step_results.push(step);
-        if let Ok(mut sr) = handle.step_results.lock() {
-            sr.push(steps.last().unwrap().clone());
-        }
+        step::record(&mut ctx, &handle, &app, &mut steps, step);
 
         if action_error.is_some() {
-            handle_error(
+            let failed_id = current_node.id.clone();
+            route_error(
                 &mut ctx,
+                &handle,
+                &failed_id,
                 action_error
                     .clone()
                     .unwrap_or_else(|| "Action failed".to_string()),
@@ -1032,7 +1125,8 @@ pub async fn run_pipeline(
             continue;
         }
 
-        follow_edge(&mut ctx, EdgeType::Next);
+        let transition = routing::next(&ctx);
+        routing::apply(&mut ctx, &handle, transition);
         if ctx.current_node_id.is_empty() {
             break;
         }
@@ -1060,12 +1154,32 @@ pub async fn run_pipeline(
     if let Ok(mut node_id) = handle.current_node_id.lock() {
         *node_id = None;
     }
+    publish_status(&app, &handle, None);
 
-    log::info!(
-        "[pipeline] finished: state={:?}, steps={}",
-        final_state,
-        steps.len()
-    );
+    match &final_state {
+        PipelineState::Failed(error) => log::error!(
+            "[pipeline] FAILED: error='{}', steps={}, last_node={}",
+            error,
+            steps.len(),
+            ctx.step_results
+                .last()
+                .map(|step| step.node_id.as_str())
+                .unwrap_or("<none>")
+        ),
+        PipelineState::Stopped => log::warn!(
+            "[pipeline] STOPPED: steps={}, last_node={}",
+            steps.len(),
+            ctx.step_results
+                .last()
+                .map(|step| step.node_id.as_str())
+                .unwrap_or("<none>")
+        ),
+        PipelineState::Completed => log::info!("[pipeline] completed: steps={}", steps.len()),
+        state => log::warn!(
+            "[pipeline] ended in unexpected state={state:?}, steps={}",
+            steps.len()
+        ),
+    }
 
     EngineResult {
         success: final_state == PipelineState::Completed,
@@ -1075,37 +1189,49 @@ pub async fn run_pipeline(
             _ => None,
         },
     }
-}
-
-fn follow_edge(ctx: &mut ExecutionContext, edge_type: EdgeType) {
-    let edges = match edge_type {
-        EdgeType::Next => ctx.graph.next_edges(&ctx.current_node_id),
-        EdgeType::Error => ctx.graph.error_edges(&ctx.current_node_id),
-    };
-
-    if let Some(edge) = edges.first() {
-        ctx.current_node_id = edge.to.clone();
-    } else {
-        ctx.current_node_id = String::new();
     }
+
 }
 
-fn handle_error(ctx: &mut ExecutionContext, reason: String) {
-    let error_edges = ctx.graph.error_edges(&ctx.current_node_id);
+/// Public command-facing entry point. Construction is deliberately separate
+/// from execution so callers cannot observe a partially initialized session.
+pub async fn run_pipeline(
+    plan: ExecutionPlan,
+    registry: PluginRegistry,
+    handle: Arc<RunHandle>,
+    stream_service: Arc<StreamService>,
+    user_params: HashMap<String, HashMap<String, serde_json::Value>>,
+    save_debug_images: bool,
+    detailed_timings: bool,
+    pipeline_startup_ms: Option<u64>,
+    app: AppHandle,
+) -> EngineResult {
+    PipelineRunSession::new(
+        plan, registry, handle, stream_service, user_params, save_debug_images,
+        detailed_timings, pipeline_startup_ms, app,
+    ).run().await
+}
 
-    if let Some(edge) = error_edges.first() {
-        ctx.current_node_id = edge.to.clone();
-    } else {
-        log::warn!(
-            "[pipeline] node '{}' has no error edge — failing pipeline",
-            ctx.current_node_id
-        );
-        ctx.failed = true;
-        ctx.failure_error = Some(format!(
-            "Node '{}': {} (no error edge defined)",
-            ctx.current_node_id, reason
-        ));
-        ctx.current_node_id = String::new();
+/// Route the failed node's error edge as a single-candidate children state
+/// (error budget, progress kept on the failed node). Without an error edge
+/// the run fails.
+fn route_error(
+    ctx: &mut ExecutionContext,
+    handle: &RunHandle,
+    failed_node_id: &str,
+    reason: String,
+) {
+    match routing::error(ctx, failed_node_id, reason) {
+        routing::AttemptOutcome::Transition(transition) => {
+            routing::apply(ctx, handle, transition);
+        }
+        routing::AttemptOutcome::Fail { reason } => {
+            log::warn!("[pipeline] {reason}");
+            ctx.failed = true;
+            ctx.failure_error = Some(reason);
+            ctx.current_node_id.clear();
+        }
+        _ => unreachable!("error routing only yields transition or fail"),
     }
 }
 
@@ -1126,6 +1252,9 @@ fn substitute_action(action: &Action, params: &HashMap<String, serde_json::Value
     match action {
         Action::InputText { input_text } => Action::InputText {
             input_text: substitute_string(input_text, params),
+        },
+        Action::ClickKey { key } => Action::ClickKey {
+            key: key.iter().map(|v| substitute_json(v, params)).collect(),
         },
         Action::Custom { action, param } => {
             let new_param = substitute_json(param, params);
@@ -1224,9 +1353,12 @@ mod parameter_tests {
         };
         sender.send(fresh).unwrap();
 
-        let (received, skipped, _) = receive_frame_after(
+        let stream = StreamService::new();
+        let (received, skipped, _) = frame::receive_after(
+            &stream,
             &mut receiver,
             Some(actions_completed_at),
+            None,
             Duration::from_millis(100),
             Some(1),
             Some(&StreamTarget::Screen { index: 0 }),

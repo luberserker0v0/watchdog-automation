@@ -2,7 +2,7 @@ use crate::commands::stream::StreamState;
 use crate::modules::pipeline::engine::runner::run_pipeline;
 use crate::modules::pipeline::engine::{PipelineStatus, RunHandle};
 use crate::modules::pipeline::models::action::Action;
-use crate::modules::pipeline::models::graph::CaptureArea;
+use crate::modules::pipeline::models::graph::{CaptureArea, LaunchConfig, PipelineTarget};
 use crate::modules::pipeline::models::recognizer::Recognition;
 use crate::modules::pipeline::plugins::actions::click::ClickAction;
 use crate::modules::pipeline::plugins::actions::input::InputTextAction;
@@ -40,6 +40,15 @@ pub enum PipelineStartError {
         resize_attempted: bool,
         diagnostic: String,
     },
+}
+
+impl PipelineStartError {
+    fn diagnostic(&self) -> &str {
+        match self {
+            Self::Generic { message } => message,
+            Self::WindowSizeMismatch { diagnostic, .. } => diagnostic,
+        }
+    }
 }
 
 impl From<String> for PipelineStartError {
@@ -82,6 +91,88 @@ pub fn create_registry() -> PluginRegistry {
     registry
 }
 
+/// Starts the declared process once startup has established that a matching
+/// target window does not already exist. Keeping this before capture ownership
+/// makes `launch + target` an atomic startup concern rather than an execution
+/// side effect.
+fn launch_process(config: &LaunchConfig) -> Result<(), String> {
+    let mut command = match (&config.exe, &config.cmd) {
+        (Some(_), Some(_)) => {
+            return Err("launch must specify exactly one of exe or cmd, not both".to_string())
+        }
+        (None, None) => return Err("launch must specify one of exe or cmd".to_string()),
+        (Some(exe), None) => std::process::Command::new(exe),
+        (None, Some(cmd)) if config.shell => {
+            let mut command = std::process::Command::new("cmd");
+            command.args(["/C", cmd]);
+            command
+        }
+        (None, Some(cmd)) => std::process::Command::new(cmd),
+    };
+    command.args(&config.args);
+    if let Some(cwd) = &config.cwd {
+        command.current_dir(cwd);
+    }
+    command.envs(&config.env);
+    command
+        .spawn()
+        .map(|child| {
+            log::info!("[pipeline] launched external process pid={}", child.id());
+        })
+        .map_err(|error| format!("Failed to launch configured process: {error}"))
+}
+
+async fn resolve_or_launch_window_target(
+    target: &PipelineTarget,
+    launch: Option<&LaunchConfig>,
+) -> Result<usize, String> {
+    if !target.has_window_filters() {
+        return Err("Filterless window target requires an active window stream; it cannot safely be paired with launch because no window identity is available to verify".to_string());
+    }
+
+    match crate::repositories::window::find_window_by_target(target) {
+        Ok(hwnd) => {
+            log::info!("[pipeline] reusing existing target window hwnd={hwnd}");
+            return Ok(hwnd);
+        }
+        Err(error) if launch.is_none() => {
+            return Err(format!("Failed to resolve window target: {error}"))
+        }
+        Err(error) => {
+            log::info!("[pipeline] target window not found ({error}); launching configured process")
+        }
+    }
+
+    let config = launch.expect("launch checked above").clone();
+    let launch_config = config.clone();
+    tokio::task::spawn_blocking(move || launch_process(&launch_config))
+        .await
+        .map_err(|error| format!("Launch worker failed: {error}"))??;
+
+    // An immediate lookup preserves the explicit `wait_for_window: false`
+    // contract. Waiting is opt-in because some applications intentionally
+    // launch without creating a top-level window.
+    let timeout_ms = config
+        .wait_for_window
+        .then(|| config.wait_timeout_ms.unwrap_or(10_000))
+        .unwrap_or(0);
+    let started = std::time::Instant::now();
+    loop {
+        if let Ok(hwnd) = crate::repositories::window::find_window_by_target(target) {
+            log::info!("[pipeline] launched target window resolved hwnd={hwnd}");
+            return Ok(hwnd);
+        }
+        if started.elapsed().as_millis() as u64 >= timeout_ms {
+            return Err(if timeout_ms == 0 {
+                "Configured process launched, but its target window is not ready. Set launch.wait_for_window to true and configure a window target filter.".to_string()
+            } else {
+                format!("Target window did not appear within {timeout_ms}ms after launch")
+            });
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
 #[tauri::command]
 pub async fn set_recognition_device(device: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
@@ -94,7 +185,38 @@ pub async fn set_recognition_device(device: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn start_pipeline(
     path: String,
-    user_params: Option<std::collections::HashMap<String, serde_json::Value>>,
+    user_params: Option<
+        std::collections::HashMap<String, std::collections::HashMap<String, serde_json::Value>>,
+    >,
+    save_debug_images: Option<bool>,
+    detailed_timings: Option<bool>,
+    stream_state: tauri::State<'_, StreamState>,
+    app: AppHandle,
+) -> Result<String, PipelineStartError> {
+    let result = start_pipeline_inner(
+        path.clone(),
+        user_params,
+        save_debug_images,
+        detailed_timings,
+        stream_state,
+        app,
+    )
+    .await;
+    if let Err(error) = &result {
+        log::error!(
+            "[pipeline] STARTUP FAILED: path='{}', reason='{}'",
+            path,
+            error.diagnostic()
+        );
+    }
+    result
+}
+
+async fn start_pipeline_inner(
+    path: String,
+    user_params: Option<
+        std::collections::HashMap<String, std::collections::HashMap<String, serde_json::Value>>,
+    >,
     save_debug_images: Option<bool>,
     detailed_timings: Option<bool>,
     stream_state: tauri::State<'_, StreamState>,
@@ -133,8 +255,18 @@ pub async fn start_pipeline(
         )
         .into());
     }
+    // Compile routes once before touching desktop, window, or capture state.
+    // The runner keeps the graph-shaped API for compatibility, while the
+    // immutable plan supplies ordered children/error routes to the engine.
+    let execution_plan = crate::modules::pipeline::plan::ExecutionPlan::compile(graph.clone())
+        .map_err(|errors| PipelineStartError::Generic {
+            message: format!("Invalid execution plan: {}", errors.join("; ")),
+        })?;
     let _start_guard = PIPELINE_START_LOCK.lock().await;
-    let stream_service = stream_state.0.clone();
+    // Do not rely on `tauri::State` field autoderef here: the background
+    // runner owns an Arc<StreamService>, not a borrowed StreamState.
+    let stream_service: Arc<crate::services::stream::StreamService> =
+        Arc::clone(&stream_state.inner().0);
     let user_params = user_params.unwrap_or_default();
     let save_debug_images = save_debug_images.unwrap_or(false);
     let detailed_timings = detailed_timings.unwrap_or(false);
@@ -189,24 +321,48 @@ pub async fn start_pipeline(
         .target
         .as_ref()
         .or_else(|| graph.entry_node().and_then(|node| node.target.as_ref()));
+
+    // A filtered window target is resolved by `resolve_or_launch_window_target`
+    // below so an existing app is reused. Screen/no-target pipelines have no
+    // window identity to probe, therefore their explicit launch remains an
+    // unconditional setup action. A filterless window cannot be verified after
+    // launch and must continue to use an already active manual stream.
+    if let Some(launch) = graph.launch.as_ref() {
+        match initial_target {
+            Some(target @ PipelineTarget::Window { .. }) if !target.has_window_filters() => {
+                restore_desktop(&original_desktop);
+                return Err("launch requires a window target with process, class, or title filters; a filterless window target can only reuse an active window stream".into());
+            }
+            Some(PipelineTarget::Window { .. }) => {}
+            _ => {
+                let launch = launch.clone();
+                if let Err(error) = tokio::task::spawn_blocking(move || launch_process(&launch))
+                    .await
+                    .map_err(|error| format!("Launch worker failed: {error}"))
+                    .and_then(|result| result)
+                {
+                    restore_desktop(&original_desktop);
+                    return Err(error.into());
+                }
+            }
+        }
+    }
     let resolved_stream_target = match initial_target {
         Some(pipeline_target) => {
             let target = match pipeline_target {
-                crate::modules::pipeline::models::graph::PipelineTarget::Screen { index } => {
-                    StreamTarget::Screen { index: *index }
-                }
-                crate::modules::pipeline::models::graph::PipelineTarget::Window {
-                    capture_area,
-                    ..
-                } => {
+                PipelineTarget::Screen { index } => StreamTarget::Screen { index: *index },
+                PipelineTarget::Window { capture_area, .. } => {
                     let hwnd = if pipeline_target.has_window_filters() {
-                        match crate::repositories::window::find_window_by_target(pipeline_target) {
+                        match resolve_or_launch_window_target(
+                            pipeline_target,
+                            graph.launch.as_ref(),
+                        )
+                        .await
+                        {
                             Ok(hwnd) => hwnd,
                             Err(error) => {
                                 restore_desktop(&original_desktop);
-                                return Err(
-                                    format!("Failed to resolve window target: {}", error).into()
-                                );
+                                return Err(error.into());
                             }
                         }
                     } else {
@@ -452,7 +608,7 @@ pub async fn start_pipeline(
         let execution_stream = stream_service.clone();
         let execution_app = app.clone();
         let result = match tokio::spawn(run_pipeline(
-            graph,
+            execution_plan,
             registry,
             execution_handle,
             execution_stream,
@@ -467,6 +623,7 @@ pub async fn start_pipeline(
             Ok(result) => result,
             Err(error) => {
                 let message = format!("Pipeline worker terminated unexpectedly: {error}");
+                log::error!("[pipeline] FAILED: {message}");
                 if let Ok(mut state) = handle.state.lock() {
                     *state =
                         crate::modules::pipeline::engine::PipelineState::Failed(message.clone());
@@ -482,15 +639,18 @@ pub async fn start_pipeline(
         stream_service
             .stop_and_emit(&app, "pipeline_finished")
             .await;
-        log::info!(
-            "[runner] released pipeline-owned stream after run {} ({})",
-            run_id_clone,
-            if result.success {
-                "completed"
-            } else {
-                "failed"
-            }
-        );
+        if result.success {
+            log::info!(
+                "[runner] completed run {}; pipeline-owned stream released",
+                run_id_clone
+            );
+        } else {
+            log::error!(
+                "[runner] FAILED run {}; pipeline-owned stream released: {}",
+                run_id_clone,
+                result.error.as_deref().unwrap_or("no failure diagnostic")
+            );
+        }
         stream_service
             .release_owner("pipeline", Some(&run_id_clone))
             .await;
@@ -521,12 +681,13 @@ pub async fn start_pipeline(
 }
 
 #[tauri::command]
-pub fn stop_pipeline(run_id: String) -> Result<bool, String> {
+pub fn stop_pipeline(run_id: String, app: AppHandle) -> Result<bool, String> {
     let handles = RUN_HANDLES
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
     if let Some(handle) = handles.get(&run_id) {
         handle.stop();
+        let _ = app.emit("pipeline-status", handle.event(None));
         Ok(true)
     } else {
         Err(format!("Pipeline run '{}' not found", run_id))
@@ -534,7 +695,7 @@ pub fn stop_pipeline(run_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn pause_pipeline(run_id: String) -> Result<bool, String> {
+pub fn pause_pipeline(run_id: String, app: AppHandle) -> Result<bool, String> {
     let handles = RUN_HANDLES
         .lock()
         .map_err(|e| format!("Lock error: {}", e))?;
@@ -551,6 +712,7 @@ pub fn pause_pipeline(run_id: String) -> Result<bool, String> {
                 *state = new_state;
             }
         }
+        let _ = app.emit("pipeline-status", handle.event(None));
         Ok(true)
     } else {
         Err(format!("Pipeline run '{}' not found", run_id))
@@ -651,7 +813,7 @@ pub async fn test_action(
     context: Option<ActionTestContext>,
     stream_state: tauri::State<'_, StreamState>,
 ) -> Result<String, String> {
-    stream_state.0.reject_if_pipeline_owned().await?;
+    stream_state.inner().0.reject_if_pipeline_owned().await?;
     let action = match context {
         Some(context) => map_test_action(action, context)?,
         None => action,

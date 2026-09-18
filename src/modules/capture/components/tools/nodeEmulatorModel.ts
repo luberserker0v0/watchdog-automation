@@ -55,6 +55,7 @@ export interface EmulatorParamDraft {
 
 export interface NodeEmulatorDraft {
   id: string;
+  kind: "Normal" | "Entry";
   enabled: boolean;
   inverse: boolean;
   target: PipelineTarget;
@@ -62,6 +63,7 @@ export interface NodeEmulatorDraft {
   actions: EmulatorActionDraft[];
   params: EmulatorParamDraft[];
   timeout: string;
+  errorTimeout: string;
   rateLimit: string;
   preDelay: string;
   postDelay: string;
@@ -73,7 +75,7 @@ export interface NodeEmulatorDraft {
 
 export interface BuiltNodeEmulator {
   node: NodeMetaInfo;
-  metadata: { target: PipelineTarget; nodes: Record<string, Omit<Node, "id">>; edges: Record<string, never> };
+  metadata: { target: PipelineTarget; nodes: Record<string, Omit<Node, "id">> };
   paramValues: Record<string, string | number | boolean>;
 }
 
@@ -121,6 +123,7 @@ export const defaultParamDraft = (): EmulatorParamDraft => ({
 export function createNodeEmulatorDraft(target?: PipelineTarget): NodeEmulatorDraft {
   return {
     id: "EmulatedNode",
+    kind: "Normal",
     enabled: true,
     inverse: false,
     target: target ?? { type: "screen", index: 0 },
@@ -128,6 +131,7 @@ export function createNodeEmulatorDraft(target?: PipelineTarget): NodeEmulatorDr
     actions: [defaultActionDraft()],
     params: [],
     timeout: "20000",
+    errorTimeout: "20000",
     rateLimit: "1000",
     preDelay: "200",
     postDelay: "200",
@@ -216,7 +220,12 @@ function optionalOffset(value: string, path: string, errors: Record<string, stri
 }
 
 function buildRecognition(draft: EmulatorRecognitionDraft, errors: Record<string, string>): Recognition {
-  const roi = regionTuple(draft.roi, "recognition.roi", errors) as [number, number, number, number];
+  const roi = draft.roi.includes(",")
+    ? regionTuple(draft.roi, "recognition.roi", errors) as [number, number, number, number]
+    : draft.roi.trim();
+  if (typeof roi === "string" && !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(roi)) {
+    errors["recognition.roi"] = "Enter x,y,w,h or a valid earlier node ID";
+  }
   const roiOffset = optionalOffset(draft.roiOffset, "recognition.roi_offset", errors);
   const threshold = draft.threshold === "" ? undefined : Number(draft.threshold);
   if (threshold !== undefined && (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)) {
@@ -363,11 +372,13 @@ export function buildNodeEmulator(draft: NodeEmulatorDraft): {
   });
   const attach = draft.attach.trim() ? json(draft.attach, "attach", errors) : undefined;
   const config: Omit<Node, "id"> = {
+    kind: draft.kind,
     recognition,
     actions,
     params,
     target: draft.target,
     timeout: integer(draft.timeout, "timeout", errors),
+    error_timeout: integer(draft.errorTimeout, "error_timeout", errors),
     rate_limit: integer(draft.rateLimit, "rate_limit", errors),
     pre_delay: integer(draft.preDelay, "pre_delay", errors),
     post_delay: integer(draft.postDelay, "post_delay", errors),
@@ -392,6 +403,6 @@ export function buildNodeEmulator(draft: NodeEmulatorDraft): {
   const paramValues = Object.fromEntries(params.map((param) => [param.key, param.default ?? ""]));
   return {
     errors,
-    value: { node, metadata: { target: draft.target, nodes: { [draft.id]: metadataConfig }, edges: {} }, paramValues },
+    value: { node, metadata: { target: draft.target, nodes: { [draft.id]: metadataConfig } }, paramValues },
   };
 }

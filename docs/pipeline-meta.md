@@ -29,12 +29,13 @@ Graph positions intentionally do not belong in `.meta.json`. See the [pipeline g
     "title": "^Target UI - Login$",
     "capture_area": "client"
   },
+  "launch": {
+    "exe": "path/to/app.exe",
+    "args": ["--login"],
+    "wait_for_window": true
+  },
   "nodes": {
     "<NodeName>": { ... },
-    ...
-  },
-  "edges": {
-    "<FromNode>-><ToNode>": { ... },
     ...
   }
 }
@@ -43,10 +44,8 @@ Graph positions intentionally do not belong in `.meta.json`. See the [pipeline g
 | Key | Type | Required | Default | Description |
 |-----|------|----------|---------|-------------|
 | `target` | `PipelineTarget` or `null` | No | `null` | Default target inherited by nodes; without one, pipeline execution reuses an active stream |
+| `launch` | `LaunchConfig` or `null` | No | `null` | External process to start before pipeline execution |
 | `nodes` | `object` | Yes | — | Map of node ID to node configuration |
-| `edges` | `object` | No | `{}` | Map of `"From->To"` to edge configuration |
-
-Edge keys use the format `"SourceNode->TargetNode"`. For error edges, the edge type is specified in the value, not the key.
 
 ---
 
@@ -114,8 +113,7 @@ input to the other application.
     "capture_area": "client",
     "window_size": [1280, 720]
   },
-  "nodes": {},
-  "edges": {}
+  "nodes": {}
 }
 ```
 
@@ -148,17 +146,89 @@ Windows without title bars (embedded content, system trays) have empty titles. U
 
 ---
 
+## Launch Configuration
+
+The optional top-level `launch` field specifies an external process to start before pipeline execution. For a filtered window target, WatchDog first checks for an existing matching, live window and reuses it. It launches only when that target is absent, then resolves the window before resize, foreground, capture, or node execution. This prevents duplicate applications when the target is already open.
+
+```json
+{
+  "launch": {
+    "exe": "C:\\Program Files\\MyApp\\app.exe",
+    "args": ["--login"],
+    "wait_for_window": true,
+    "wait_timeout_ms": 15000
+  }
+}
+```
+
+### Launch fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `exe` | `string` | No* | — | Path to executable. Mutually exclusive with `cmd` |
+| `cmd` | `string` | No* | — | Command to run. Mutually exclusive with `exe` |
+| `args` | `string[]` | No | `[]` | Arguments for the executable or command |
+| `shell` | `boolean` | No | `false` | Run command in shell (`cmd.exe /C` on Windows). Only applies with `cmd` |
+| `cwd` | `string` | No | inherited | Working directory for the process |
+| `env` | `Record<string, string>` | No | `{}` | Environment variables for the process |
+| `wait_for_window` | `boolean` | No | `false` | Wait for a window matching the pipeline target to appear |
+| `wait_timeout_ms` | `number` | No | `10000` | Timeout in milliseconds to wait for window |
+
+*Either `exe` or `cmd` must be provided.
+
+`launch` with a window target requires at least one window identity filter: `process`, `class`, or `title`. A filterless window target has no identity to verify, so it can only reuse an already active window stream and cannot safely launch an application. For a normal application window, set `wait_for_window` to `true`; otherwise WatchDog does one immediate post-launch lookup and reports that the target is not ready if it has not appeared yet.
+
+### Examples
+
+**Launch executable with arguments:**
+
+```json
+{
+  "launch": {
+    "exe": "C:\\Program Files\\MyApp\\app.exe",
+    "args": ["--login", "--debug"]
+  }
+}
+```
+
+**Run command in shell:**
+
+```json
+{
+  "launch": {
+    "cmd": "python server.py",
+    "shell": true,
+    "cwd": "C:\\MyApp"
+  }
+}
+```
+
+**Launch and wait for window:**
+
+```json
+{
+  "launch": {
+    "exe": "C:\\Program Files\\MyApp\\app.exe",
+    "wait_for_window": true,
+    "wait_timeout_ms": 15000
+  }
+}
+```
+
+---
+
 ## Node Fields
 
 Each node entry in the `nodes` map has the following fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `kind` | `"Normal"` \\| `"Entry"` | `"Normal"` | Structural node kind. `Entry` marks the pipeline entry node (exactly one required); entry nodes carry no recognition or actions |
 | `recognition` | `Recognition` | `{"type":"DirectHit"}` | How the engine detects this node on screen |
 | `actions` | `Action[]` | `[]` | Actions to execute when the node is recognized |
-| `params` | `Parameter[]` | `[]` | Developer-editable fields shown by Node Test; values can be referenced as `{{key}}` in supported action strings |
 | `target` | `PipelineTarget` or `null` | inherited | Optional capture target override; omitted or `null` inherits the top-level target. Declare `window_size` only on the top-level target |
-| `timeout` | `u64` | `20000` | Maximum time to wait for recognition (ms) |
+| `timeout` | `u64` | `20000` | Quota shared by this node's children (ms). Candidates are tried round-robin until this quota is exhausted; the `timeout` in a child node is the quota for its own children |
+| `error_timeout` | `u64` | `20000` | Quota for executing this node's error target (ms); progress keeps showing on this (parent) node |
 | `rate_limit` | `u64` | `1000` | Minimum time between recognition attempts on this node (ms). When recognition fails, the engine waits at least this long before retrying |
 | `pre_delay` | `u64` | `200` | Delay before executing actions (ms) |
 | `post_delay` | `u64` | `200` | Delay after executing actions (ms) |
@@ -168,6 +238,8 @@ Each node entry in the `nodes` map has the following fields:
 | `repeat` | `u32` | `1` | Number of times to repeat the complete ordered action list; must be at least 1 |
 | `repeat_delay` | `u64` | `0` | Delay between action repeats (ms) |
 | `attach` | `JSON` or `null` | `null` | Arbitrary data attached to the node (used by custom plugins) |
+
+> **Note:** `params` and `param_values` are not valid in the `nodes` section. They belong in the `instances` section.
 
 ### Minimal node (all defaults)
 
@@ -213,9 +285,47 @@ Every recognition type also accepts these common optional fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `roi` | `[i32, i32, i32, i32]` | `[0, 0, 0, 0]` | Recognition boundary; the all-zero value means the complete captured image |
-| `roi_offset` | `[i32, i32, i32, i32]` | `[0, 0, 0, 0]` | Offset added to the ROI before recognition |
-| `candidate_selection` | `CandidateSelection` | `{"order":"native","index":0}` | Sort eligible candidates, then select a zero-based index; DirectHit and ColorMatch ignore it |
+| `roi` | `[i32, i32, i32, i32]` or `"NodeId"` | `[0, 0, 0, 0]` | Fixed capture-local boundary or a prior node's recognized box; all zeros mean the full image |
+| `roi_offset` | `[i32, i32, i32, i32]` | `[0, 0, 0, 0]` | Signed values added to the resolved ROI's x, y, width, and height before clipping |
+| `candidate_selection` | `CandidateSelection` | `{"order":"native","index":0}` | Sort eligible candidates, then select a zero-based index; DirectHit, Entry and ColorMatch ignore it |
+
+For nested recognition, use `"roi": "Find-Panel"` on a later node. `Find-Panel` must be an existing Mermaid node that matched and returned a box **earlier in the same run**; unknown and self-references fail pipeline validation. Mermaid node IDs may contain letters, digits, underscores, and hyphens, but must start with a letter or underscore. The engine maps the earlier node's screen-space box into the current captured frame, including frame/client changes on the same window. Referencing another window or monitor, a node with no successful box, or a non-overlapping mapped ROI fails recognition immediately with a diagnostic. That failure follows the node's normal error edge if one exists. Independent Node Test and Node Emulator runs cannot resolve earlier-node references.
+
+`roi_offset` is always `[dx, dy, dwidth, dheight]`. The four values are added to x, y, width, and height **after** the fixed ROI or prior-node box resolves, then the result is clipped to the captured image. The all-zero fixed ROI `[0, 0, 0, 0]` alone means the full frame. Any other fixed ROI needs positive width and height.
+
+For example, these two files recognize a button only inside a previously detected panel:
+
+````markdown
+```mermaid
+flowchart TD
+    Find-Panel["Find panel"]
+    Find-Button["Find button inside panel"]
+    Done["Done"]
+    Find-Panel --> Find-Button
+    Find-Button --> Done
+```
+````
+
+```json
+{
+  "target": { "type": "window", "title": "^My Application$", "capture_area": "client" },
+  "nodes": {
+    "Find-Panel": {
+      "recognition": { "type": "TemplateMatch", "template": "panel.png" }
+    },
+    "Find-Button": {
+      "recognition": {
+        "type": "TemplateMatch",
+        "template": "button.png",
+        "roi": "Find-Panel",
+        "roi_offset": [0, 0, 0, 0]
+      },
+      "actions": [{ "type": "Click", "target": true }]
+    },
+    "Done": {}
+  }
+}
+```
 
 `candidate_selection.order` defaults to `"native"`; supported values are `native`, `top_to_bottom`, `bottom_to_top`, `left_to_right`, `right_to_left`, and `confidence_desc`. `candidate_selection.index` defaults to `0` and is applied after sorting.
 
@@ -226,6 +336,16 @@ Always matches immediately. Used for terminal nodes, error nodes, or nodes that 
 ```json
 { "type": "DirectHit" }
 ```
+
+### Entry nodes (`kind`)
+
+`Entry` is a structural **node kind**, not a recognition type. Declare it alongside the other node fields:
+
+```json
+{ "kind": "Entry", "timeout": 20000 }
+```
+
+An `Entry` node carries no recognition or actions — the engine transitions straight to its children (declaring `actions` on it fails validation with `entry_node_has_actions`). Its `timeout` is the quota for its children. Exactly one `Entry` node is **required** per pipeline: none fails with `missing_entry_node`, two or more with `invalid_entry_count`.
 
 ### TemplateMatch
 
@@ -497,28 +617,260 @@ true
 
 ---
 
-## Edge Fields
+## Edge Types
 
-Each edge entry in the `edges` map has the following fields:
+Edge types are defined in the Mermaid file, not in the meta JSON:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `edge_type` | `string` | `"next"` | Edge type: `"next"` (normal flow) or `"error"` (error handling) |
+- `-->` — Normal transition (`"next"`). Followed when the source node succeeds.
+- `-->|error|` or `-.->` — Error transition (`"error"`). Followed when the source node fails.
 
-Edge type determines how the engine traverses the graph:
+### Children (Switch Nodes)
 
-- `"next"` — Normal transition. Followed when the source node succeeds (recognition matches and actions complete).
-- `"error"` — Error transition. Followed when the source node fails (recognition timeout, action error, etc.).
+Every node carries a children list (`n >= 0` outgoing `-->` edges). `n == 0` completes the run; `n >= 1` tries the children round-robin against the parent's timeout quota. There is no separate single-next path — `n == 1` re-selects the only child every round:
 
-```json
-{ "edge_type": "next" }
+1. After the source node succeeds (recognition + actions), the engine collects all `-->` targets as candidates
+2. Round-robin through candidates: one recognition attempt per round
+3. First candidate that matches wins → execute its actions → follow its path
+4. The source node's `timeout` is a **shared quota** for all candidates
+5. When the quota is exhausted, the source node's `-->|error|` edge runs under the `error_timeout` quota with progress kept on the source node (or the run fails if no error edge exists)
+
+Multiple candidates example:
+```mermaid
+flowchart TD
+    A --> B
+    A --> C
+    A -->|error| D
+```
+
+- A succeeds → try B → try C → try B → try C → ... (round-robin)
+- If B matches → execute B's actions → follow B's edge
+- If C matches → execute C's actions → follow C's edge
+- If all timeout → follow A's error edge → D
+
+Single candidate example:
+```mermaid
+flowchart TD
+    A --> B
+    A -->|error| C
+```
+
+- A succeeds → try B
+- If B matches → execute B's actions → follow B's edge
+- If B timeout → follow A's error edge → C (not B's error edge)
+
+#### Candidate Skipping
+
+Candidates that are disabled or have reached `max_hit` are skipped in the rotation. Both cases produce a `StepResult` with `skipped: true` so the frontend can display the skip event:
+
+```typescript
+{
+  node_id: "B",
+  matched: true,      // true because the node would have matched if active
+  confidence: 0.0,
+  box_region: null,
+  actions_fired: 0,
+  skipped: true,      // indicates this candidate was skipped
+  duration_ms: 0,
+  error: null
+}
+```
+
+#### Recursive children
+
+When a matched candidate itself has one or more `-->` edges, the engine clears the current children state and starts trying the new candidates. This allows nested decision trees:
+
+```mermaid
+flowchart TD
+    A --> B
+    A --> C
+    B --> D
+    B --> E
+    A -->|error| F
+```
+
+- A succeeds → children: try B, C
+- B matches → B's actions execute → B has children: try D, E
+- If D matches → D's actions execute → follow D's edge
+- If E matches → E's actions execute → follow E's edge
+- If B's candidates timeout → follow B's error edge (if defined)
+
+Note: Each level of children uses its own parent's timeout quota.
+
+---
+
+## Node Label vs ID (Config Lookup)
+
+Meta.json keys match node **labels**, not node IDs. This is a breaking change from the previous ID-based lookup.
+
+### How it works
+
+When the engine builds the graph, it looks up each node's config in meta.json using the node's **label** (from the Mermaid flowchart). If the label is empty, it falls back to the node ID.
+
+```mermaid
+flowchart TD
+    A["Click"] --> B
+    C["Click"] --> D
 ```
 
 ```json
-{ "edge_type": "error" }
+{
+  "nodes": {
+    "Click": {
+      "recognition": { "type": "TemplateMatch", "template": "button.png" },
+      "actions": [{ "type": "Click", "target": true }],
+      "max_hit": 2
+    }
+  }
+}
 ```
 
-Mermaid declares the edge endpoints and may label an error path with `-->|error|`. The matching `.meta.json` entry stores only `edge_type`; it cannot contain node timing or action fields. When metadata omits an edge entry, the edge uses `"next"` unless the Mermaid edge is explicitly labeled `error`.
+In this example:
+- Node `A` has label `"Click"` → gets config from `meta.json.nodes["Click"]`
+- Node `C` has label `"Click"` → also gets config from `meta.json.nodes["Click"]`
+- Both nodes share the same recognition, actions, and timing settings
+- Each node has its own independent `hit_counts` entry (keyed by node ID, not label)
+
+### When ID = label
+
+If your Mermaid node ID matches the label (e.g., `Click["Click"]`), behavior is identical to the previous ID-based lookup. This is the common case.
+
+### When ID ≠ label
+
+If you use different IDs and labels (e.g., `A["Click"]`), meta.json must have an entry for `"Click"` (the label), not `"A"` (the ID). The validation checks labels against meta.json keys.
+
+### Node instances
+
+Each node ID in the Mermaid flowchart is a unique instance, even if multiple nodes share the same label. The engine tracks per-instance state:
+- `hit_counts[node_id]` — how many times this specific node matched
+- `max_hit` — limits matches per instance (not per label)
+
+---
+
+## Node Templates and Instances
+
+The `instances` field in meta.json allows you to define reusable node behavior templates and create multiple instances of them with per-instance overrides.
+
+### How it works
+
+1. Define node templates in the `nodes` section (behavior, recognition, actions, timing)
+2. Map Mermaid node IDs to templates in the `instances` section
+3. Define parameters and parameter values per instance
+
+**Priority order**: Instance lookup → Label-based lookup → Default
+
+```json
+{
+  "nodes": {
+    "Click": {
+      "recognition": { "type": "TemplateMatch", "template": "button.png" },
+      "actions": [{ "type": "Click", "target": true }]
+    }
+  },
+  "instances": {
+    "A": {
+      "node": "Click",
+      "params": [
+        { "key": "button_name", "type": "string", "required": false, "default": "Button" }
+      ],
+      "param_values": { "button_name": "Submit" }
+    },
+    "B": {
+      "node": "Click",
+      "params": [
+        { "key": "button_name", "type": "string", "required": false, "default": "Button" }
+      ],
+      "param_values": { "button_name": "Cancel" },
+      "timeout": 5000
+    }
+  }
+}
+```
+
+In this example:
+- Node `A` gets config from template `"Click"` with `button_name` = `"Submit"`
+- Node `B` gets config from template `"Click"` with `button_name` = `"Cancel"` and a custom timeout
+- If neither `A` nor `B` appear in `instances`, the engine falls back to label-based lookup
+
+### Instance fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `node` | `string` | Yes | — | Reference to a node template in the `nodes` section |
+| `kind` | `string` | No | Template's value | Override structural node kind (`Normal` \\| `Entry`) |
+| `params` | `ParamDef[]` | No | `[]` | Parameter definitions for this instance |
+| `param_values` | `Record<string, unknown>` | No | `{}` | Default values for parameters |
+| `timeout` | `number` | No | Template's value | Override children-quota timeout (ms) |
+| `error_timeout` | `number` | No | Template's value | Override error-target quota (ms) |
+| `rate_limit` | `number` | No | Template's value | Override rate limit (ms) |
+| `pre_delay` | `number` | No | Template's value | Override pre-delay (ms) |
+| `post_delay` | `number` | No | Template's value | Override post-delay (ms) |
+| `enabled` | `boolean` | No | Template's value | Override enabled state |
+| `inverse` | `boolean` | No | Template's value | Override inverse state |
+| `max_hit` | `number` | No | Template's value | Override max hit count |
+| `repeat` | `number` | No | Template's value | Override repeat count |
+| `repeat_delay` | `number` | No | Template's value | Override repeat delay (ms) |
+
+### Validation
+
+- Instance `node` references must point to existing templates in the `nodes` section
+- Mermaid nodes not in `instances` must have their label (or ID if label is empty) in `nodes`
+
+---
+
+## Runtime Node Instance Model
+
+During pipeline execution, the engine tracks per-node state. The frontend polls this state to display runtime information.
+
+### State tracked per node
+
+| State | Source | Description |
+|-------|--------|-------------|
+| `hit_counts` | Backend `PipelineStatus` | Map of `node_id → match_count` |
+| `current_node_id` | Backend `PipelineStatus` | Which node is currently executing |
+| `step_count` | Backend `PipelineStatus` | Total steps completed |
+| `elapsed_ms` | Backend `PipelineStatus` | Total pipeline elapsed time |
+| `nodeElapsedMs` | Frontend store | Time spent on current node (approximate) |
+| `childrenParentId` | Frontend store | Parent node ID while its children are tried |
+| `childrenStartTime` | Frontend store | When children trying started (for timeout calculation) |
+| `childrenChildId` | Frontend store | Child node currently executing |
+| `childrenTimeoutMs` | Frontend store | Active quota (parent `timeout`, or `error_timeout` for error targets) |
+| `lastStepResults` | Frontend store | Last 10 `StepResult` entries |
+
+### StepResult structure
+
+Each node execution produces a `StepResult`:
+
+```typescript
+interface StepResult {
+  node_id: string;        // Which node executed
+  matched: boolean;       // Whether recognition succeeded
+  confidence: number;     // Match confidence (0.0-1.0)
+  box_region: Region | null;  // Recognized region (screen coords)
+  actions_fired: number;  // How many actions executed
+  skipped?: boolean;      // Skipped due to max_hit or disabled
+  duration_ms: number;    // Time spent on this node
+  error: string | null;   // Error message if failed
+  timings_ms?: Record<string, number>;  // Detailed phase timings
+}
+```
+
+### Children trying (backend state, formerly heuristic)
+
+The backend reports the children-trying state on every status update. When this state is present:
+- `childrenParentId` is the parent node whose children are tried
+- `childrenStartTime` records when trying began
+- `childrenChildId` is the child currently executing (highlighted)
+- Progress bar shows on the parent using the active quota (`childrenTimeoutMs`)
+
+### Detailed timings
+
+When `detailed_timings` is enabled, `timings_ms` includes phase breakdowns:
+- `pipeline_startup` — graph parsing, validation, stream setup
+- `frame_acquire` — time to capture a frame
+- `recognition` — recognition evaluation
+- `coordinate` — coordinate mapping
+- `pre_delay`, `actions`, `post_delay` — action phases
+- `debug_image` — debug image generation
 
 ---
 
@@ -529,12 +881,14 @@ Mermaid declares the edge endpoints and may label an error path with `-->|error|
 ````
 ```mermaid
 flowchart TD
+    Start["Start"]
     Idle["Idle"]
     Click["Click"]
     Verify["Verify"]
     Done["Done"]
     Error["Error"]
 
+    Start --> Idle
     Idle --> Click
     Click --> Verify
     Verify --> Done
@@ -547,6 +901,10 @@ flowchart TD
 ```json
 {
   "nodes": {
+    "Start": {
+      "kind": "Entry",
+      "timeout": 20000
+    },
     "Idle": {
       "recognition": {
         "type": "TemplateMatch",
@@ -614,12 +972,6 @@ flowchart TD
       "enabled": true,
       "max_hit": 1
     }
-  },
-  "edges": {
-    "Idle->Click": { "edge_type": "next" },
-    "Click->Verify": { "edge_type": "next" },
-    "Verify->Done": { "edge_type": "next" },
-    "Verify->Error": { "edge_type": "error" }
   }
 }
 ```
@@ -652,8 +1004,7 @@ The smallest valid meta.json. All omitted fields use their defaults.
     "Test": {
       "recognition": { "type": "DirectHit" }
     }
-  },
-  "edges": {}
+  }
 }
 ```
 
@@ -663,7 +1014,9 @@ The smallest valid meta.json. All omitted fields use their defaults.
 
 | Field | Constant | Value | Notes |
 |-------|----------|-------|-------|
-| `timeout` | `DEFAULT_TIMEOUT_MS` | `20000` | |
+| `timeout` | `DEFAULT_TIMEOUT_MS` | `20000` | Quota shared by the node's children |
+| `kind` | — | `"Normal"` | Structural node kind; exactly one `"Entry"` node required |
+| `error_timeout` | `DEFAULT_TIMEOUT_MS` | `20000` | Quota for the node's error target |
 | `rate_limit` | `DEFAULT_RATE_LIMIT_MS` | `1000` | Wait time between failed recognition retries |
 | `pre_delay` | `DEFAULT_PRE_DELAY_MS` | `200` | |
 | `post_delay` | `DEFAULT_POST_DELAY_MS` | `200` | |

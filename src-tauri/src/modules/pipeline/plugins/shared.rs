@@ -1,7 +1,8 @@
 use super::PluginError;
 use crate::modules::pipeline::models::action::{Action, Target};
 use crate::modules::pipeline::models::graph::CaptureArea;
-use crate::modules::pipeline::models::recognizer::Region;
+use crate::modules::pipeline::models::recognizer::{RecognitionRoi, Region};
+use crate::services::stream::StreamTarget;
 use std::collections::HashMap;
 
 /// Resolves a node ROI against the captured frame.
@@ -83,6 +84,82 @@ pub fn resolve_recognition_roi_with_offset(
         (right - left) as i32,
         (bottom - top) as i32,
     ])
+}
+
+/// Convert a prior node's screen-space box into the current capture frame.
+pub fn resolve_node_recognition_roi(
+    roi: Option<&RecognitionRoi>,
+    roi_offset: Option<&[i32; 4]>,
+    frame_width: u32,
+    frame_height: u32,
+    bounds: Option<CaptureBounds>,
+    current_target: &StreamTarget,
+    prior_regions: &HashMap<String, Region>,
+    prior_targets: &HashMap<String, StreamTarget>,
+) -> Result<[i32; 4], PluginError> {
+    let fixed = match roi {
+        None => None,
+        Some(RecognitionRoi::Fixed(rect)) => Some(*rect),
+        Some(RecognitionRoi::Node(id)) => {
+            if id.trim().is_empty() {
+                return Err(PluginError::RecognitionFailed(
+                    "ROI node reference is empty".into(),
+                ));
+            }
+            let region = prior_regions.get(id).ok_or_else(|| {
+                PluginError::RecognitionFailed(format!(
+                    "ROI node '{id}' has no successful recognition box in this run"
+                ))
+            })?;
+            let prior_target = prior_targets.get(id).ok_or_else(|| {
+                PluginError::RecognitionFailed(format!(
+                    "ROI node '{id}' has no capture target metadata"
+                ))
+            })?;
+            let same_identity = match (prior_target, current_target) {
+                (StreamTarget::Window { hwnd: a, .. }, StreamTarget::Window { hwnd: b, .. }) => {
+                    a == b
+                }
+                (StreamTarget::Screen { index: a }, StreamTarget::Screen { index: b }) => a == b,
+                _ => false,
+            };
+            if !same_identity {
+                return Err(PluginError::RecognitionFailed(format!(
+                    "ROI node '{id}' belongs to another capture target"
+                )));
+            }
+            let bounds = bounds.ok_or_else(|| {
+                PluginError::RecognitionFailed(
+                    "Cannot resolve ROI node without current frame bounds".into(),
+                )
+            })?;
+            if bounds.width == 0 || bounds.height == 0 || frame_width == 0 || frame_height == 0 {
+                return Err(PluginError::RecognitionFailed(
+                    "Cannot resolve ROI against an empty frame".into(),
+                ));
+            }
+            let left = ((region.x as i64 - bounds.left as i64) as f64 * frame_width as f64
+                / bounds.width as f64)
+                .floor() as i64;
+            let top = ((region.y as i64 - bounds.top as i64) as f64 * frame_height as f64
+                / bounds.height as f64)
+                .floor() as i64;
+            let right = ((region.x as i64 + region.width as i64 - bounds.left as i64) as f64
+                * frame_width as f64
+                / bounds.width as f64)
+                .ceil() as i64;
+            let bottom = ((region.y as i64 + region.height as i64 - bounds.top as i64) as f64
+                * frame_height as f64
+                / bounds.height as f64)
+                .ceil() as i64;
+            let values = [left, top, right - left, bottom - top];
+            let rect: [i32; 4] = values.map(|value| {
+                i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX })
+            });
+            Some(rect)
+        }
+    };
+    resolve_recognition_roi_with_offset(fixed.as_ref(), roi_offset, frame_width, frame_height)
 }
 
 /// Resolves an action target after applying its four-component offset.
@@ -689,6 +766,94 @@ mod coordinate_tests {
             .unwrap(),
             [10, 20, 610, 440]
         );
+    }
+
+    #[test]
+    fn node_roi_maps_screen_box_into_client_frame_then_applies_offset() {
+        let id = "FindPanel".to_string();
+        let prior = HashMap::from([(
+            id.clone(),
+            Region {
+                x: -90,
+                y: 70,
+                width: 80,
+                height: 40,
+            },
+        )]);
+        let frame_target = StreamTarget::Window {
+            hwnd: 42,
+            capture_area: CaptureArea::Frame,
+        };
+        let client_target = StreamTarget::Window {
+            hwnd: 42,
+            capture_area: CaptureArea::Client,
+        };
+        let targets = HashMap::from([(id.clone(), frame_target)]);
+        let bounds = CaptureBounds {
+            left: -100,
+            top: 50,
+            width: 400,
+            height: 200,
+        };
+        assert_eq!(
+            resolve_node_recognition_roi(
+                Some(&RecognitionRoi::Node(id)),
+                Some(&[2, 3, 4, -2]),
+                800,
+                400,
+                Some(bounds),
+                &client_target,
+                &prior,
+                &targets,
+            )
+            .unwrap(),
+            [22, 43, 164, 78]
+        );
+    }
+
+    #[test]
+    fn node_roi_rejects_missing_and_incompatible_targets() {
+        let id = "FindPanel".to_string();
+        let roi = RecognitionRoi::Node(id.clone());
+        let prior = HashMap::from([(
+            id.clone(),
+            Region {
+                x: 10,
+                y: 10,
+                width: 20,
+                height: 20,
+            },
+        )]);
+        let target = StreamTarget::Screen { index: 1 };
+        let bounds = Some(CaptureBounds {
+            left: 0,
+            top: 0,
+            width: 100,
+            height: 100,
+        });
+        assert!(resolve_node_recognition_roi(
+            Some(&roi),
+            None,
+            100,
+            100,
+            bounds,
+            &target,
+            &HashMap::new(),
+            &HashMap::new()
+        )
+        .is_err());
+        let targets = HashMap::from([(id, StreamTarget::Screen { index: 0 })]);
+        assert!(resolve_node_recognition_roi(
+            Some(&roi),
+            None,
+            100,
+            100,
+            bounds,
+            &target,
+            &prior,
+            &targets
+        )
+        .is_err());
     }
 
     #[test]

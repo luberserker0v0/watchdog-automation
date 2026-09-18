@@ -17,7 +17,7 @@ function PipelineCard({ id, onPreview }: PipelineCardProps) {
       name: pipeline.name,
       status: pipeline.status,
       isChecked: pipeline.isChecked,
-      collectedParams: pipeline.collectedParams,
+      paramsByNode: pipeline.paramsByNode,
       userParams: pipeline.userParams,
       error: pipeline.error,
     } : null;
@@ -34,7 +34,7 @@ function PipelineCard({ id, onPreview }: PipelineCardProps) {
   const [expanded, setExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const handleParamChange = useCallback(
-    (key: string, value: string | number | boolean) => updateParams(id, key, value),
+    (nodeId: string, key: string, value: string | number | boolean) => updateParams(id, nodeId, key, value),
     [id, updateParams],
   );
 
@@ -120,14 +120,18 @@ function PipelineCard({ id, onPreview }: PipelineCardProps) {
 
       {expanded && (
         <div className="pipeline-card-panel">
-          {entry.collectedParams.length > 0 && (
-            <ParamsForm
-              params={entry.collectedParams}
-              values={entry.userParams}
-              onChange={handleParamChange}
-              disabled={isLocked}
-            />
-          )}
+          {Object.entries(entry.paramsByNode).map(([nodeId, params]) => (
+            params.length > 0 && (
+              <ParamsForm
+                key={nodeId}
+                title={nodeId}
+                params={params}
+                values={entry.userParams[nodeId] ?? {}}
+                onChange={(key, value) => handleParamChange(nodeId, key, value)}
+                disabled={isLocked}
+              />
+            )
+          ))}
           {entry.path.includes("sample") && <TargetWindowButton />}
         </div>
       )}

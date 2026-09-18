@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePreferencesStore } from "../../../core/stores/usePreferencesStore";
 import { useCaptureFrameStore } from "../../stores/useCaptureFrameStore";
 import { useDebugStore } from "../../stores/useDebugStore";
@@ -59,6 +59,7 @@ export default function RecognitionTab(props: RecognitionTabProps) {
   const storeIsStreaming = useStreamStore((s) => s.isStreaming);
   const setRoi = useOverlayStore((s) => s.setRoi);
   const setResultRoi = useOverlayStore((s) => s.setResultRoi);
+  const clearRecognition = useOverlayStore((s) => s.clearRecognition);
 
   const recogType = useDebugStore((s) => s.recogType);
   const fields = useDebugStore((s) => s.recogFields);
@@ -75,31 +76,28 @@ export default function RecognitionTab(props: RecognitionTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const appendLog = useLogStore((s) => s.appendLog);
+  const executionGeneration = useRef(0);
 
-  useEffect(() => {
-    const parsed = parseRoi(fields);
-    if (parsed) {
-      setRoi({ x: parsed[0], y: parsed[1], w: parsed[2], h: parsed[3] });
-    }
-  }, [fields.roi, setRoi]);
+  useEffect(() => () => {
+    executionGeneration.current += 1;
+    clearRecognition();
+  }, [clearRecognition]);
 
   const handleTypeChange = (type: RecogType) => {
     setRecogType(type);
     clearRecogFields();
     setResult(null);
     setError(null);
+    executionGeneration.current += 1;
+    clearRecognition();
   };
 
   const syncRoiToStore = (value: string) => {
     setRecogField("roi", value);
-    if (!value.trim()) {
-      setRoi({ x: 0, y: 0, w: 0, h: 0 });
-      return;
-    }
-    const parts = value.split(",").map((s) => Number(s.trim()));
-    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
-      setRoi({ x: parts[0], y: parts[1], w: parts[2], h: parts[3] });
-    }
+    executionGeneration.current += 1;
+    setResult(null);
+    setError(null);
+    clearRecognition();
   };
 
   const handleRun = async () => {
@@ -107,6 +105,7 @@ export default function RecognitionTab(props: RecognitionTabProps) {
       setError("請先截圖或開始串流");
       return;
     }
+    const generation = ++executionGeneration.current;
     setLoading(true);
     setResult(null);
     setResultRoi(null);
@@ -114,6 +113,7 @@ export default function RecognitionTab(props: RecognitionTabProps) {
     try {
       const recognition = buildRecognition(recogType, fields);
       const roi = parseRoi(fields);
+      if (roi) setRoi({ x: roi[0], y: roi[1], w: roi[2], h: roi[3] });
       const buf = isStreaming ? null : captureBuf;
       const candidateSelection = recogType === "OCR" || recogType === "TemplateMatch"
         ? {
@@ -122,6 +122,7 @@ export default function RecognitionTab(props: RecognitionTabProps) {
           }
         : undefined;
       const res = await testRecognition(recognition, roi, buf, candidateSelection);
+      if (generation !== executionGeneration.current) return;
       setResult(res);
       const detail = res.matched
         ? `${recogType}: Yes (${(res.confidence * 100).toFixed(1)}%)${res.text ? ` "${res.text}"` : ""}`
@@ -131,10 +132,11 @@ export default function RecognitionTab(props: RecognitionTabProps) {
         setResultRoi({ x: res.box_region.x, y: res.box_region.y, w: res.box_region.width, h: res.box_region.height });
       }
     } catch (e) {
+      if (generation !== executionGeneration.current) return;
       setError(String(e));
       appendLog({ source: "debug", label: "辨識", detail: `${recogType}: Error: ${e}`, result: "error" });
     } finally {
-      setLoading(false);
+      if (generation === executionGeneration.current) setLoading(false);
     }
   };
 

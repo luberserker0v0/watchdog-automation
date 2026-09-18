@@ -33,6 +33,12 @@ export function useDetachedPreviewBridge() {
     let sessionId = 0;
     const cleanups: Array<() => void> = [];
     const frameStore = useCaptureFrameStore.getState();
+    const resetOverlay = () => {
+      const overlay = useOverlayStore.getState();
+      overlay.clearAll();
+      overlay.clearCursor();
+      overlay.setImageDimensions(null);
+    };
 
     const setup = async () => {
       const stopFrameTimer = () => {
@@ -49,9 +55,11 @@ export function useDetachedPreviewBridge() {
             sessionId = 0;
             stopFrameTimer();
             setStreaming(false);
+            resetOverlay();
             return;
           }
 
+          if (sessionId !== status.session_id) resetOverlay();
           sessionId = status.session_id;
           const mode = status.target_type as CaptureMode;
           setStreaming(true);
@@ -73,11 +81,13 @@ export function useDetachedPreviewBridge() {
         sessionId = 0;
         setStreaming(false);
         frameStore.clearFrame(event.payload.target_type);
+        resetOverlay();
       });
       if (disposed) { unlistenStopped(); return; } else cleanups.push(unlistenStopped);
 
       const unlistenTarget = await listen<TargetInfoPayload>("preview-target-info", (event) => {
         if (disposed) return;
+        resetOverlay();
         setTargetInfo(event.payload);
         setCaptureMode(event.payload.mode);
         void syncStream();
@@ -89,8 +99,7 @@ export function useDetachedPreviewBridge() {
         const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
         frameStore.setCapturedFrame(mode, url, bytes);
         setCaptureMode(mode);
-        useOverlayStore.getState().clearAll();
-        useOverlayStore.getState().clearCursor();
+        resetOverlay();
       });
       if (disposed) { unlistenImage(); return; } else cleanups.push(unlistenImage);
 
