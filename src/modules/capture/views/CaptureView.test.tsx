@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
-import { useUiStore } from "../../core/stores/useUiStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
+import { useUiStore } from "../../shell/stores/useUiStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import CaptureView from "./CaptureView";
 

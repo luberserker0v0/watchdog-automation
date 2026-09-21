@@ -1,4 +1,4 @@
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useWindowStore } from "../stores/useWindowStore";
 import { useStreamStore } from "../stores/useStreamStore";

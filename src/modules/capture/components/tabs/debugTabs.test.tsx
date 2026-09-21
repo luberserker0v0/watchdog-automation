@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import InspectorTab from "./InspectorTab";
-import RecognitionTab from "./RecognitionTab";
+import RecognitionTab from "../../../testing/tabs/RecognitionTab";
 
 const windowApi = vi.hoisted(() => ({ getWindowDetails: vi.fn() }));
 vi.mock("../../../../api/window", () => windowApi);

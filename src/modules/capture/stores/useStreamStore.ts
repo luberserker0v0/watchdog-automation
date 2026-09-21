@@ -8,11 +8,11 @@ import {
   type StreamStoppedPayload,
   type StreamFramePayload,
 } from "../../../api/stream";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useScreenStore } from "./useScreenStore";
 import { useWindowStore } from "./useWindowStore";
 import { useCaptureFrameStore } from "./useCaptureFrameStore";
-import type { CaptureArea, CaptureMode } from "../../core/stores/usePreferencesStore";
+import type { CaptureArea, CaptureMode } from "../../shell/stores/usePreferencesStore";
 
 interface StreamState {
   isStreaming: boolean;

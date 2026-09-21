@@ -6,7 +6,7 @@ import {
   defaultActionDraft,
   defaultParamDraft,
   type NodeEmulatorDraft,
-} from "../components/tools/nodeEmulatorModel";
+} from "../../testing/emulator/nodeEmulatorModel";
 
 type ActionType = "Click" | "LongPress" | "Swipe" | "Scroll" | "InputText" | "ClickKey";
 type RecogType = "DirectHit" | "TemplateMatch" | "OCR" | "ColorMatch";

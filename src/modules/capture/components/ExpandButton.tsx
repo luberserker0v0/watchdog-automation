@@ -1,5 +1,5 @@
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
-import { useUiStore } from "../../core/stores/useUiStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
+import { useUiStore } from "../../shell/stores/useUiStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { openOrFocusPreview } from "../services/previewWindowManager";

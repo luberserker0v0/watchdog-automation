@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useWindowStore } from "../stores/useWindowStore";
 import TargetSelect from "./TargetSelect";

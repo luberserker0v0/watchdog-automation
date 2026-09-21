@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ScreenInfo } from "../../../api/types";
 import { getScreens, captureScreen, saveCapture } from "../../../api/screen";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { getTimestamp } from "../utils";
 import { useCaptureFrameStore } from "./useCaptureFrameStore";
 

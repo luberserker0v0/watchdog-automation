@@ -26,7 +26,6 @@ flowchart TD
     InputPassword --> ClickLogin
     ClickLogin --> VerifySuccess
     ClickLogin -->|error| LoginError
-    LoginError --> VerifySuccess
     VerifySuccess --> ClickNotification
     ClickNotification --> SwipeCards
     SwipeCards --> ScrollList

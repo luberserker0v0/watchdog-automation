@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
-import { useUiStore } from "../../core/stores/useUiStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
+import { useUiStore } from "../../shell/stores/useUiStore";
 
 const mocks = vi.hoisted(() => {
   const eventHandlers = new Map<string, (event: { payload: unknown }) => void>();

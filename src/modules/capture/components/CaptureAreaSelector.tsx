@@ -1,4 +1,4 @@
-import { usePreferencesStore, type CaptureArea } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore, type CaptureArea } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../stores/useStreamStore";
 
 export default function CaptureAreaSelector() {

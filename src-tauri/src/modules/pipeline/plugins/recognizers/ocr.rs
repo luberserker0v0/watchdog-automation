@@ -1,4 +1,4 @@
-use crate::modules::pipeline::models::recognizer::{
+use crate::modules::pipeline::authoring::models::recognizer::{
     MatchCandidate, MatchResult, Recognition, Region,
 };
 use crate::modules::pipeline::plugins::shared::resolve_recognition_roi;

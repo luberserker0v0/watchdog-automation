@@ -149,7 +149,8 @@ export interface MatchCandidate {
 export interface Node {
   id: string;
   label?: string;
-  kind?: "Normal" | "Entry";
+  kind?: "Normal" | "Entry" | "Endpoint";
+  desc?: string;
   recognition: Recognition;
   actions?: Action[];
   params?: ParamDef[];
@@ -158,7 +159,9 @@ export interface Node {
   error_timeout?: number;
   rate_limit?: number;
   pre_delay?: number;
+  pre_wait_freezes?: FreezeWait;
   post_delay?: number;
+  post_wait_freezes?: FreezeWait;
   enabled?: boolean;
   inverse?: boolean;
   max_hit?: number;
@@ -171,18 +174,29 @@ export interface InstanceConfig {
   node: string;
   params?: ParamDef[];
   param_values?: Record<string, unknown>;
-  kind?: "Normal" | "Entry";
+  kind?: "Normal" | "Entry" | "Endpoint";
+  desc?: string;
   timeout?: number;
   error_timeout?: number;
   rate_limit?: number;
   pre_delay?: number;
+  pre_wait_freezes?: FreezeWait;
   post_delay?: number;
+  post_wait_freezes?: FreezeWait;
   enabled?: boolean;
   inverse?: boolean;
   max_hit?: number;
   repeat?: number;
   repeat_delay?: number;
 }
+
+export type FreezeWait = number | {
+  time: number;
+  threshold?: number;
+  rate_limit?: number;
+  timeout?: number;
+  roi?: [number, number, number, number];
+};
 
 export interface LaunchConfig {
   exe?: string;
@@ -205,7 +219,6 @@ export interface Edge {
 
 export interface PipelineGraph {
   version: string;
-  desktop?: string;
   target?: PipelineTarget;
   launch?: LaunchConfig;
   nodes: Node[];
@@ -262,7 +275,10 @@ export interface PipelineStatus {
   step_count: number;
   elapsed_ms: number;
   step_results: StepResult[];
+  patrol_state?: PatrolState;
   error?: string | null;
+  cleanup_error?: string | null;
+  cleanup_complete?: boolean;
   attempt_count?: number;
   effective_target?: PipelineTarget | null;
   hit_counts?: Record<string, number>;
@@ -273,6 +289,43 @@ export interface PipelineStatus {
   revision?: number;
 }
 
+export interface PatrolState {
+  actions: Array<{
+    id: number;
+    node_id: string;
+    repetition: number;
+    action_index: number;
+    kind: string;
+    intent: string;
+    target: string;
+    source_session: number;
+    source_frame: number;
+    started_ms: number;
+    completed_ms: number | null;
+    dispatch: { status: "pending" | "sent" | "failed" | "blocked"; reason?: string };
+    effect: { status: "unverified" | "observed"; node_id?: string; session?: number; frame?: number };
+  }>;
+  observations: Array<{
+    expected_node_id: string;
+    target: string;
+    session: number;
+    frame: number;
+    elapsed_ms: number;
+    recognizer_matched: boolean | null;
+    recognizer_confidence: number | null;
+  }>;
+  decisions: Array<{
+    expected_node_id: string;
+    matched_node_id: string | null;
+    target: string;
+    session: number;
+    frame: number;
+    elapsed_ms: number;
+    outcome: string;
+    reason: string | null;
+  }>;
+}
+
 export interface PipelineStatusEvent {
   run_id: string;
   revision: number;
@@ -281,6 +334,8 @@ export interface PipelineStatusEvent {
   step_count: number;
   elapsed_ms: number;
   error?: string | null;
+  cleanup_error?: string | null;
+  cleanup_complete?: boolean;
   attempt_count?: number;
   effective_target?: PipelineTarget | null;
   hit_counts?: Record<string, number>;
@@ -304,10 +359,11 @@ export async function loadPipeline(path: string): Promise<LoadResult> {
 }
 
 export async function savePipeline(
-  graph: PipelineGraph,
   path: string,
+  mermaid: string,
+  meta: string,
 ): Promise<boolean> {
-  return invoke<boolean>("save_pipeline", { graph, path });
+  return invoke<boolean>("save_pipeline", { path, mermaid, meta });
 }
 
 export async function savePipelineLayout(
@@ -327,8 +383,22 @@ export async function listPipelines(): Promise<PipelineInfo[]> {
   return invoke<PipelineInfo[]>("list_pipelines");
 }
 
-export async function startPipeline(path: string, userParams?: Record<string, Record<string, unknown>>, saveDebugImages?: boolean, detailedTimings?: boolean): Promise<string> {
-  return invoke<string>("start_pipeline", { path, userParams, saveDebugImages, detailedTimings });
+export interface VlmConnection {
+  endpoint: string;
+  model: string;
+  api_key?: string;
+}
+
+export interface PatrolConfig {
+  enabled: boolean;
+  cycle_seconds: number;
+  k_hops: number;
+  threshold: number;
+  min_margin: number;
+}
+
+export async function startPipeline(path: string, userParams?: Record<string, Record<string, unknown>>, saveDebugImages?: boolean, detailedTimings?: boolean, patrolConfig?: PatrolConfig, vlmConfig?: VlmConnection): Promise<string> {
+  return invoke<string>("start_pipeline", { path, userParams, saveDebugImages, detailedTimings, patrolConfig, vlmConfig });
 }
 
 export function normalizePipelineStartError(error: unknown): PipelineStartError {
@@ -368,7 +438,7 @@ export async function getPipelineStatus(
   return invoke<PipelineStatus>("get_pipeline_status", { runId });
 }
 
-export async function testAction(action: Action, context?: ActionTestContext): Promise<string> {
+export async function testAction(action: Action, context: ActionTestContext): Promise<string> {
   return invoke<string>("test_action", { action, context });
 }
 

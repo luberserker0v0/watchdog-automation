@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { applyCaptureUpdate, matchWindowByTarget } from "./useCaptureController";

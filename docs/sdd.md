@@ -1,0 +1,335 @@
+# Software Design Description — WatchDog
+
+- **Product:** watch-dog (`0.1.0`)
+- **Status:** observed implementation design; source-inspected, not system-certified
+- **Audit basis:** working tree inspected and automated checks run 2026-09-21; not a release baseline
+- **Requirements source:** `docs/srs.md` (candidate `REQ-*` and inferred `STK-*` IDs)
+- **File contracts:** `docs/pipeline-meta.md`, `docs/pipeline-layout.md`, `schemas/`
+
+The SRS Appendix D assigns responsibility to capabilities. This SDD maps them
+to components, dependencies, data, and interfaces.
+
+| Read this section for | Location |
+|-----------------------|----------|
+| System boundary and executables | §1 |
+| Component ownership and dependencies | §2–3 |
+| Data and IPC contracts | §4 |
+| Failure behavior and verification limits | §5–6 and SRS §9 |
+
+A requirement allocation does not imply an acceptance test passed. SRS §9
+records implementation evidence and outstanding native verification.
+
+## 1. System context
+
+Production and tester are React/WebView frontends connected to a Rust/Tauri
+backend through commands, events, and the `watchdog:///frame` protocol. The
+sample target is a separate executable for tests and demos. The backend reads
+pixels through OS capture APIs and sends mouse/keyboard input through the OS.
+Pipeline files and preferences are local data.
+
+`src-tauri/src/lib.rs` registers commands, the frame protocol, and shared
+state. `src/App.tsx` and `src/main-target.tsx` compose the frontend windows.
+These roots wire capabilities together; they do not own feature behavior.
+
+## 2. Components and dependency rules
+
+Backend dependencies flow from consumers toward providers:
+
+```text
+core ← capture ← authoring ← plugins ← runtime ← testing
+           ↑           ↑           ↑         ↑
+           └───────────┴───────────┴─────────┘
+```
+
+The diagram shows allowed direction, not mandatory imports. `core/` must
+not import feature modules. Capture owns target identity, capture area, stream
+frames, and physical frame bounds. Authoring uses capture target types.
+Plugins use authoring configuration and capture context. Runtime coordinates
+those providers; testing reuses the registry with its own action execution
+path and the same foreground rule for window targets (§3.3). `lib.rs` composes
+the application.
+
+The frontend has a separate composition boundary. `src/api/` wraps IPC;
+`src/modules/shell/` owns navigation and preferences. Some feature views
+currently read other feature stores to present combined UI. Those integration
+imports are recorded in §8 and do not reverse the Rust dependency direction.
+
+| Capability | Primary files | Provides | Consumes |
+|------------|---------------|----------|----------|
+| CAP | `src/modules/capture/`; `src-tauri/src/modules/capture/` | Screens, windows, desktops, `StreamService`, `StreamFrame`, `StreamTarget`, `PipelineTarget`, `CaptureArea`, `CaptureBounds` | Core and OS capture/window APIs |
+| AUTHOR | `src/modules/pipeline/authoring/`; backend `modules/pipeline/authoring/` | Parsers, merged graph, validation, load/save | Capture target types, core paths |
+| REC, ACT | Backend `modules/pipeline/plugins/` | Plugin registry, ROI evaluation, action mapping and execution | Authoring node config, capture frame/bounds |
+| PIPE | `src/modules/pipeline/runtime/`; backend `modules/pipeline/runtime/` | Plan, run lifecycle, status, step evidence, runtime UI | Authoring, capture, plugins |
+| TEST | `src/modules/testing/`; backend `modules/testing/` | Node tests, emulator, batch workflow | Capture, authoring, plugins, runtime |
+| OBS | Runtime/capture UI; backend runtime evidence | Events, snapshots, logs, progress, debug images | Run and capture state |
+| SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts` | Persisted preferences and session flags | Browser storage, stream status |
+
+`src/modules/sample_target/` contains the sample target UI;
+`src/main-target.tsx` mounts it. Shell layout, shared utilities, and the sample
+target support SRS capabilities without receiving
+new requirement prefixes.
+
+### 2.1 Main-app startup maintenance
+
+`lib.rs::run_app` creates user directories and initializes the logger before
+calling `core/maintenance.rs` and setting up Tauri. The tester and sample
+target startup paths do not call maintenance.
+
+| Data | Rule | Failure behavior |
+|------|------|------------------|
+| Dated application logs | Retain the 30 newest, including the current log. | Log the error; continue startup. |
+| Generated visions | On first startup without a marker, or at least seven days after successful cleanup, remove generated contents and recreate the debug directory. | Log the error; continue startup. Update the marker only after success. |
+
+Cleanup is confined to canonical user-data logs and visions directories and
+does not follow symbolic links.
+
+## 3. Component design
+
+### 3.1 Capture (CAP)
+
+Backend `capture/repositories/` wraps screen, window, Win32, and virtual
+desktop APIs. `capture/services/stream.rs` owns the broadcast channel,
+current target, session generation, cached frame, and capture owner.
+`capture/services/bounds.rs` resolves a captured screen or window to physical
+screen bounds. Commands expose enumeration, one-shot capture, stream control,
+resize, and desktop operations.
+
+Ownership is `none`, `manual`, or `pipeline` plus run ID. A manual stream
+blocks pipeline acquisition; a pipeline blocks manual acquisition and other
+pipelines. Release checks owner kind and, for pipelines, run ID. Each
+`StreamFrame` carries a session ID, sequence, capture time, encoded bytes,
+dimensions, target, and optional bounds. Runtime rejects stale frames using
+session, sequence, and time boundaries.
+
+### 3.2 Authoring (AUTHOR)
+
+`parser/mermaid.rs` parses topology; `parser/meta.rs` parses templates,
+instances, target, and launch data; `parser/layout.rs` parses positions.
+`parser/mod.rs` uses an explicit instance's referenced template when one is
+present. Without an instance it looks up the Mermaid label and then the node
+ID. It applies supported instance overrides to the template to build
+`PipelineGraph`. Instance parameter definitions enter the graph with
+`param_values` applied as visible defaults. At run start, values resolve from
+definition defaults, then instance values, then explicit caller values.
+
+`editor.rs` checks source coverage and graph rules when loading.
+`save_pipeline(path, mermaid, meta)` validates and writes original source text,
+retaining launch settings and template/instance structure; a legacy graph-only
+call receives an error. Both pipeline and layout saves are confined to the
+canonical user pipeline root, with symlink escape checks. Layout remains
+presentation data and never enters the execution plan. Metadata and layout
+parsers check the bundled Draft 2020-12 schemas before Serde conversion and
+custom graph validation.
+
+### 3.3 Recognition and actions (REC, ACT)
+
+`plugins/mod.rs` registers `RecognizerPlugin` and `ActionPlugin` types.
+Recognizers evaluate a supplied image and recognition configuration.
+`plugins/shared.rs` resolves ROI and action geometry using capture-owned
+bounds. The pipeline engine and isolated node tests restore and verify a
+window target's foreground state just before each registered action. If Windows
+does not grant foreground ownership, they refuse input with
+`target_not_foreground`. Standalone `test_action` requires a screen or window
+context matching the active stream; window contexts get another foreground
+check immediately before dispatch.
+
+### 3.4 Runtime (PIPE)
+
+#### 3.4.1 Plan, startup, and completion
+
+`runtime/plan.rs` compiles one Entry and indexed next/error routes into an
+`ExecutionPlan`. `runtime/runner.rs` prepares a run in this order:
+
+1. Parse and validate source files, then compile routes.
+2. Resolve or launch the target and prepare window placement.
+3. Acquire capture ownership, start and verify the stream, then publish the run handle.
+
+Startup failures and run completion attempt stream release and window
+restoration. A failed startup restoration extends the start diagnostic.
+Pipeline graphs contain no desktop selector; desktop enumeration filters only
+the capture UI's window list.
+
+Authoring requires at least one Endpoint and permits several. Endpoints have
+no recognition, actions, or outgoing edges. The engine records a matched step
+there without capture or input. A normal leaf fails with its node ID in the
+reason; enabled Patrol performs a final advisory validation before failed
+status. `RunHandle` retains state, history, and a monotonic revision for 60
+seconds after completion so the frontend can poll the final status.
+
+#### 3.4.2 Node execution and freeze waits
+
+`runtime/engine/` tries children within the parent's quota and manages error
+routes, recognition retries, action repeats, pause/stop, and `StepResult`
+evidence. The node's input path follows this sequence:
+
+| Order | Operation | On failure or interruption |
+|-------|-----------|----------------------------|
+| 1 | Optional `pre_wait_freezes` on the active capture target/session. | Timeout or stop ends the wait; failure follows the node's error handling. |
+| 2 | Cancellable `pre_delay`; fresh-frame recognition and action-target mapping. | Failed refreshed recognition follows the error route. |
+| 3 | Ordered action list, repeated with configured pacing. | Action error is recorded; window input is guarded immediately before dispatch (§3.3). |
+| 4 | Optional `post_wait_freezes` after dispatched input. | Timeout follows node error handling. |
+| 5 | Cancellable `post_delay`. | Runs after action attempts, including action or post-wait errors. |
+
+`engine/freeze.rs` compares downsampled frames, optionally inside a
+capture-local ROI. Visible change resets its stable-duration timer. Paused time
+does not count, and a separate timeout bounds active waiting.
+
+#### 3.4.3 Patrol scheduling and scoring
+
+The Settings View supplies patrol enablement, cycle seconds (default 20), K
+hops, score threshold, and minimum margin to `start_pipeline`. Patrol settings
+are absent from pipeline metadata; a legacy `patrol` field receives a field
+diagnostic. Invalid or unavailable configuration is logged without preventing
+the pipeline from starting.
+
+| Phase | Behavior |
+|-------|----------|
+| Periodic start | `engine/runner.rs` starts a worker with the run. The first sample is due one configured cycle after start. |
+| Later samples | The worker waits for the previous response and for one cycle since that request began. A response slower than the cycle allows the next request immediately. At most one periodic request is in flight. |
+| Local search | `runtime/patrol.rs` scores the latest frame against the expected node and undirected K-hop neighbors. A request includes at most 16 candidates. Missing reference images use descriptions. |
+| Expansion | An inconclusive local result expands to 2K hops and shared-parent siblings. |
+| Report | `aligned`, `possible_mismatch`, or `inconclusive`, with run, expected and possible matched node, target, capture session, and frame sequence. Reports go to the Execution Log and run evidence. |
+
+The VLM HTTP request has a separate 120-second timeout. Scoring runs while the
+pipeline continues recognition, actions, and routing, so a report can arrive
+after node advancement. A report, model error, or reference save failure does
+not change routing, block input, or fail the run.
+
+After a successful node visit, a background worker saves an unannotated full
+target frame. `ReferenceStore` places it under a stable pipeline hash and the
+run ID. It reads only that run's references; a new run uses descriptions until
+its own visits produce images. No baseline run is needed.
+
+Before terminal status, the engine stops periodic sampling, cancels unfinished
+periodic VLM work, and waits for reference saves. On failure it also attempts
+one final validation and waits for its report. That check prefers a newer
+cached frame in the same capture session; if no frame exists, it logs that
+validation was unavailable. The run then closes an atomic report gate before
+publishing terminal status. No Patrol report follows terminal status.
+
+#### 3.4.4 Patrol evidence and run status
+
+`engine/patrol_state.rs` holds bounded evidence for each run:
+
+| Evidence | Recorded facts |
+|----------|----------------|
+| Capture | Node, target, session, frame sequence, and recognizer result. |
+| Action | Sanitized intent, source frame, and dispatch outcome. Successful dispatch starts with an unverified visual effect. |
+| Later observation | A confidently matched newer frame from the same target and capture session can associate an observed node with an earlier action. |
+
+Pipeline status exposes this ledger. Text input, key values, and custom
+parameters are excluded from status and logs. Patrol prompts may include at
+most four recent sanitized action facts from the same target. The prompt labels
+them as dispatch facts, not proof of a GUI transition.
+
+### 3.5 Testing, observability, and settings (TEST, OBS, SET)
+
+#### 3.5.1 Testing
+
+`modules/testing/node_test.rs` loads metadata and tests isolated recognition
+or action against a supplied or cached frame. The frontend emulator validates
+draft fields. The batch controller runs selected pipelines sequentially.
+
+#### 3.5.2 Run evidence
+
+| Channel | Producer and consumer |
+|---------|-----------------------|
+| `pipeline-status` | Runtime sends revisioned snapshots and appended steps. The frontend shows the latest ten steps; backend handles retain full history. |
+| `patrol-report` | Runtime sends independent advisory reports to the Execution Log. |
+| Debug images and timings | Engine produces these when the corresponding options are enabled. |
+| Cleanup fields | Status and events carry `cleanup_complete` and optional `cleanup_error`. The frontend follows a terminal run until cleanup finishes and shows restoration failure separately. |
+
+The frontend remembers terminal run IDs and discards cross-channel Patrol
+events delivered after terminal status has already been observed.
+
+#### 3.5.3 Patrol Chat Room
+
+An app-level listener collects `patrol-chat-event` messages before runs start
+and while the room is closed. Each structured event carries run/sample IDs,
+capture identity, sender, operation kind, exact prompt text parts, exact
+response text, and score rows. It excludes the API key and image base64.
+
+| View behavior | Contract |
+|---------------|----------|
+| Layout | VLM messages on the left; Patrol operations on the right. Details are closed by default. |
+| Session controls | Run selector, auto-scroll, and clear-session action for bounded in-memory history. |
+| Previews | Backend caches images by opaque ID. Expansion fetches a preview; eviction displays an unavailable state. |
+| Effect | Trace events only describe activity; they cannot change routes or dispatch actions. |
+
+#### 3.5.4 Settings persistence
+
+Preferences persist in `watchdog:settings`. Save-to-disk and
+save-debug-images are session-only and rehydrate as off. The VLM endpoint and
+model name persist; the API key remains in memory for the app session, is
+passed to `start_pipeline` only when a run starts, and is omitted from stored
+preferences and logs.
+
+## 4. Data and interface contracts
+
+| Contract | Owner | Invariant |
+|----------|-------|-----------|
+| Mermaid `.md` + `.meta.json` | AUTHOR | Exactly one Entry and at least one Endpoint; metadata resolves for each node, including optional pre/post freeze waits; validation precedes execution |
+| Optional `.layout.json` | AUTHOR | Positions cannot change routes or actions |
+| `PipelineTarget`, `CaptureArea` | CAP | One target and capture-area representation across layers |
+| `StreamFrame`, `CaptureBounds` | CAP | Bounds map encoded pixels to physical pixels; session/sequence identify freshness |
+| `ExecutionPlan` | PIPE | Entry and routes are compiled before capture-driven execution |
+| `PipelineStatus`, `StepResult`, `PatrolState` | PIPE | Revision increases per run; terminal outcomes carry evidence and cleanup completion/error; status exposes bounded patrol evidence |
+| `patrol-report` event | PIPE / OBS | A completed background sample carries run and capture identity plus aligned, possible-mismatch, or inconclusive outcome; the frontend appends it to the Execution Log |
+| `patrol-chat-event`, image cache commands | PIPE / OBS | Ordered session trace contains formatted text and image IDs, excludes credentials and inline image data; previews load on demand |
+| `ValidationError` | AUTHOR | Type and message distinguish authoring failures |
+
+The Tauri command list in `src-tauri/src/lib.rs` implements SRS
+`REQ-IF-010`–`017`; `src/api/` is its frontend wrapper. Events include
+`pipeline-status`, `patrol-report`, `patrol-chat-event`, and `update_capture` (`REQ-IF-018/019`), and the frame
+protocol is `watchdog:///frame` (`REQ-IF-020`). Schemas under `schemas/`
+describe authoring files. OS interfaces stay behind capture repositories and
+action plugins.
+
+## 5. Failure and recovery
+
+- Authoring failures return validation errors before a run is registered.
+- Ownership conflicts reject a start without replacing the current stream.
+- Startup and run-end cleanup attempt to restore window placement and release
+  capture. Startup diagnostics include restore failures; completed runs expose
+  them through status and events.
+- Window-target action paths try to activate the target before input and refuse
+  input if that window cannot be verified foreground immediately before dispatch.
+- Polling recovers missed status events; the UI discards stale revisions.
+
+## 6. Traceability and verification
+
+SRS Appendix D is the responsibility map; §2 maps it to code. SRS §7 is a
+candidate functional contract; SRS §9 records inspected alignment and
+verification limits. SRS Appendix F starts the REQ → test-case matrix for
+high-risk examples; complete STK → REQ → design → test traceability remains
+open. Current passing checks are `npm run build`, `npm test`,
+`cargo check --all-features`, and `cargo test --lib`. Windows capture, real
+foreground input, window restoration, OCR, and VLM exchange still need live
+executable-level verification.
+
+## 7. Design decisions
+
+- Capture owns target and frame-bound types because it produces frames and
+  resolves their physical coordinates. Authoring re-exports target types for
+  compatibility with existing graph and IPC consumers.
+- Core owns the user-data root name and never imports a feature module.
+- Runtime constructs the plugin registry; isolated tests reuse the same
+  registrations and plugin behavior.
+- The SRS maps capabilities; this document records code placement.
+
+## 8. Open issues
+
+- Frontend capture components still read runtime stores for active-pipeline
+  display and stream controls. A shell-level integration interface could
+  remove this coupling without changing capture behavior.
+- Capture ownership is stored as strings in `StreamService`; a typed enum
+  would prevent invalid owner values.
+- The source-preserving `save_pipeline` IPC shape differs from the retired
+  graph-only shape. Existing external callers must pass Mermaid and metadata
+  source text.
+- Existing user files outside the bundled JSON Schema constraints now fail
+  at load/start with a field diagnostic; they require manual correction.
+- `build.rs` delay-loads `comctl32.dll`. The unit-test harness can start
+  without resolving Tauri's unused `TaskDialogIndirect` import against legacy
+  Common Controls; the application still uses Tauri's embedded activation
+  manifest. All enabled library tests now execute.

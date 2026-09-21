@@ -101,9 +101,45 @@ Reuse the active window while changing only the captured area:
 
 Window actions use global Windows mouse and keyboard input. Before capture,
 WatchDog restores a minimized target and verifies that it became the foreground
-window. It checks the foreground HWND again immediately before every action. If
-focus moved elsewhere, the node fails with `target_not_foreground` and sends no
-input to the other application.
+window. Before every window action, it restores or activates the target again
+if focus moved elsewhere, then verifies the foreground HWND. If Windows does
+not grant foreground ownership, the node reports `target_not_foreground` and
+sends no input to the other application.
+
+### Optional VLM patrol
+
+Patrol is an engine setting, not pipeline metadata. In Settings, configure the
+OpenAI-compatible chat completions URL, vision model, and optional API key,
+then turn on **Enable patrol**. The first validation starts after the configured
+cycle (20 seconds by default). Later validations start after both the previous
+VLM response and a full cycle since that request began; a response taking
+longer than the cycle starts the next validation immediately. The VLM HTTP
+request has a separate 120-second timeout. Recognition,
+actions, and node routing continue independently. Patrol reports `aligned`,
+`possible_mismatch`, or `inconclusive` in the Execution Log; a possible match is
+advice for adjusting the pipeline and never selects or replays a node. A VLM
+error or uncertain score leaves pipeline execution unchanged.
+
+Patrol scores the current full capture frame against the expected node and its
+K-hop neighbors, using node descriptions and any saved references. An
+inconclusive local tier expands to 2K hops, including shared-parent siblings.
+Each tier is limited to 16 candidates. After successful visits, a background
+worker saves a clean, unannotated frame under
+`%USERPROFILE%/.watch_dog/visions/patrol/<pipeline-hash>/<run-id>/`.
+References are used only within the run that captured them, so a later run
+cannot reuse stale screenshots. A new run uses descriptions until its own
+references are available. Reference save failures are logged without failing
+the pipeline. Turning off **Enable patrol** disables sampling and recording.
+
+Settings also control K hops (1–4, default 1), match threshold (default 0.85),
+and minimum score margin (default 0.1). Changes apply to the next run. Enablement,
+search settings, URL, and model persist; the API key lasts only for the current
+application session. A `patrol` field in `.meta.json` is rejected with a
+diagnostic directing you to Settings. `get_pipeline_status` includes bounded
+`patrol_state` evidence for captures, recognition results, action dispatches,
+and reports. A sent action remains `unverified` until patrol matches a later
+frame from the same target and session. Text input, key values, and custom
+parameters are excluded from the ledger and VLM prompt.
 
 ```json
 {
@@ -223,7 +259,8 @@ Each node entry in the `nodes` map has the following fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `kind` | `"Normal"` \\| `"Entry"` | `"Normal"` | Structural node kind. `Entry` marks the pipeline entry node (exactly one required); entry nodes carry no recognition or actions |
+| `kind` | `"Normal"` \\| `"Entry"` \\| `"Endpoint"` | `"Normal"` | Structural node kind. Exactly one `Entry` and at least one `Endpoint` are required. |
+| `desc` | `string` | `""` | Free-text description of what this node does. Display-only; the engine ignores it |
 | `recognition` | `Recognition` | `{"type":"DirectHit"}` | How the engine detects this node on screen |
 | `actions` | `Action[]` | `[]` | Actions to execute when the node is recognized |
 | `target` | `PipelineTarget` or `null` | inherited | Optional capture target override; omitted or `null` inherits the top-level target. Declare `window_size` only on the top-level target |
@@ -231,7 +268,9 @@ Each node entry in the `nodes` map has the following fields:
 | `error_timeout` | `u64` | `20000` | Quota for executing this node's error target (ms); progress keeps showing on this (parent) node |
 | `rate_limit` | `u64` | `1000` | Minimum time between recognition attempts on this node (ms). When recognition fails, the engine waits at least this long before retrying |
 | `pre_delay` | `u64` | `200` | Delay before executing actions (ms) |
+| `pre_wait_freezes` | `u64` or object | `0` | Wait for consecutive stable frames before `pre_delay`; a fresh recognition runs after the delay and before input. Object fields: `time` (ms), `threshold` (default 0.98), `rate_limit` (default 200 ms), `timeout` (default 10000 ms), optional capture-local `roi` [x,y,width,height] |
 | `post_delay` | `u64` | `200` | Delay after executing actions (ms) |
+| `post_wait_freezes` | `u64` or object | `0` | Wait for stable frames after dispatched actions and before `post_delay` |
 | `enabled` | `bool` | `true` | Whether this node is active — disabled nodes are skipped |
 | `inverse` | `bool` | `false` | If `true`, the node matches when recognition **fails** |
 | `max_hit` | `u32` | `4294967295` | Maximum number of times this node can be entered |
@@ -331,7 +370,7 @@ flowchart TD
 
 ### DirectHit
 
-Always matches immediately. Used for terminal nodes, error nodes, or nodes that don't need visual recognition.
+Always matches immediately. Used for normal nodes that do not need visual recognition.
 
 ```json
 { "type": "DirectHit" }
@@ -346,6 +385,16 @@ Always matches immediately. Used for terminal nodes, error nodes, or nodes that 
 ```
 
 An `Entry` node carries no recognition or actions — the engine transitions straight to its children (declaring `actions` on it fails validation with `entry_node_has_actions`). Its `timeout` is the quota for its children. Exactly one `Entry` node is **required** per pipeline: none fails with `missing_entry_node`, two or more with `invalid_entry_count`.
+
+### Endpoint nodes (`kind`)
+
+Declare one or more `Endpoint` nodes as successful destinations:
+
+```json
+{ "kind": "Endpoint" }
+```
+
+An `Endpoint` records a matched step and completes the run without capturing a frame, recognizing, or executing actions. It cannot have outgoing edges, recognition settings, or actions. A pipeline with no Endpoint fails loading with `missing_endpoint_node`. A successful normal node with no children fails the run with a non-Endpoint termination error; enabled Patrol attempts its final advisory check before failure status.
 
 ### TemplateMatch
 
@@ -626,7 +675,7 @@ Edge types are defined in the Mermaid file, not in the meta JSON:
 
 ### Children (Switch Nodes)
 
-Every node carries a children list (`n >= 0` outgoing `-->` edges). `n == 0` completes the run; `n >= 1` tries the children round-robin against the parent's timeout quota. There is no separate single-next path — `n == 1` re-selects the only child every round:
+Every node carries a children list (`n >= 0` outgoing `-->` edges). `n == 0` completes only at an `Endpoint`; at any other node it fails the run. `n >= 1` tries the children round-robin against the parent's timeout quota. There is no separate single-next path — `n == 1` re-selects the only child every round:
 
 1. After the source node succeeds (recognition + actions), the engine collects all `-->` targets as candidates
 2. Round-robin through candidates: one recognition attempt per round
@@ -796,14 +845,17 @@ In this example:
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `node` | `string` | Yes | — | Reference to a node template in the `nodes` section |
-| `kind` | `string` | No | Template's value | Override structural node kind (`Normal` \\| `Entry`) |
+| `kind` | `string` | No | Template's value | Override structural node kind (`Normal` \\| `Entry` \\| `Endpoint`) |
+| `desc` | `string` | No | Template's value | Override free-text description |
 | `params` | `ParamDef[]` | No | `[]` | Parameter definitions for this instance |
 | `param_values` | `Record<string, unknown>` | No | `{}` | Default values for parameters |
 | `timeout` | `number` | No | Template's value | Override children-quota timeout (ms) |
 | `error_timeout` | `number` | No | Template's value | Override error-target quota (ms) |
 | `rate_limit` | `number` | No | Template's value | Override rate limit (ms) |
 | `pre_delay` | `number` | No | Template's value | Override pre-delay (ms) |
+| `pre_wait_freezes` | `number` or object | No | Template's value | Override pre-action stable-frame wait |
 | `post_delay` | `number` | No | Template's value | Override post-delay (ms) |
+| `post_wait_freezes` | `number` or object | No | Template's value | Override post-action stable-frame wait |
 | `enabled` | `boolean` | No | Template's value | Override enabled state |
 | `inverse` | `boolean` | No | Template's value | Override inverse state |
 | `max_hit` | `number` | No | Template's value | Override max hit count |
@@ -869,7 +921,7 @@ When `detailed_timings` is enabled, `timings_ms` includes phase breakdowns:
 - `frame_acquire` — time to capture a frame
 - `recognition` — recognition evaluation
 - `coordinate` — coordinate mapping
-- `pre_delay`, `actions`, `post_delay` — action phases
+- `pre_wait_freezes`, `pre_delay`, `actions`, `post_wait_freezes`, `post_delay` — action phases
 - `debug_image` — debug image generation
 
 ---
@@ -957,10 +1009,7 @@ flowchart TD
       "max_hit": 3
     },
     "Done": {
-      "recognition": { "type": "DirectHit" },
-      "actions": [
-        { "type": "DoNothing" }
-      ],
+      "kind": "Endpoint",
       "enabled": true,
       "max_hit": 1
     },
@@ -1015,7 +1064,8 @@ The smallest valid meta.json. All omitted fields use their defaults.
 | Field | Constant | Value | Notes |
 |-------|----------|-------|-------|
 | `timeout` | `DEFAULT_TIMEOUT_MS` | `20000` | Quota shared by the node's children |
-| `kind` | — | `"Normal"` | Structural node kind; exactly one `"Entry"` node required |
+| `kind` | — | `"Normal"` | Structural node kind; exactly one `"Entry"` and at least one `"Endpoint"` required |
+| `desc` | — | `""` | Display-only description |
 | `error_timeout` | `DEFAULT_TIMEOUT_MS` | `20000` | Quota for the node's error target |
 | `rate_limit` | `DEFAULT_RATE_LIMIT_MS` | `1000` | Wait time between failed recognition retries |
 | `pre_delay` | `DEFAULT_PRE_DELAY_MS` | `200` | |

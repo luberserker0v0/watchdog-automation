@@ -1,6 +1,6 @@
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../stores/useStreamStore";
-import { useUiStore } from "../../core/stores/useUiStore";
+import { useUiStore } from "../../shell/stores/useUiStore";
 import ModeSelector from "../components/ModeSelector";
 import DesktopFilter from "../components/DesktopFilter";
 import WindowStateFilter from "../components/WindowStateFilter";

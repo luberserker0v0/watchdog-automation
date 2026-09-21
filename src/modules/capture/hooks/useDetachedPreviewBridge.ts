@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getStreamStatus } from "../../../api/stream";
 import type { StreamStoppedPayload } from "../../../api/stream";
-import type { CaptureArea, CaptureMode } from "../../core/stores/usePreferencesStore";
+import type { CaptureArea, CaptureMode } from "../../shell/stores/usePreferencesStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
 import type { PipelineTarget } from "../../../api/pipeline";

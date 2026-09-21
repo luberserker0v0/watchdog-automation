@@ -193,8 +193,8 @@ User-provided resources and runtime output are stored separately:
 │   ├── pipeline-nodes\  User node-test metadata
 │   ├── images\          User template-matching images
 │   └── models\          User/custom model files
-├── logs\                Runtime logs
-└── visions\             Captures and debug images
+├── logs\                Runtime logs (30 newest dated files retained at startup)
+└── visions\             Captures and debug images (cleared at startup when seven days are due)
 ```
 
 Template image resolution checks user `resources\images` first, then falls back to bundled `src-tauri\resources\images`. On startup, pipelines from the legacy `%USERPROFILE%\.watch_dog\pipelines` location move to `%USERPROFILE%\.watch_dog\resources\pipelines` without overwriting an existing pipeline.

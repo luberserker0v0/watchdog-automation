@@ -1,17 +1,19 @@
 import { useEffect } from "react";
 import { setRecognitionDevice } from "./api/pipeline";
-import { useUiStore } from "./modules/core/stores/useUiStore";
-import { usePreferencesStore } from "./modules/core/stores/usePreferencesStore";
-import Sidebar from "./modules/core/components/Sidebar";
-import ResizableSplit from "./modules/core/components/ResizableSplit";
+import { useUiStore } from "./modules/shell/stores/useUiStore";
+import { usePreferencesStore } from "./modules/shell/stores/usePreferencesStore";
+import Sidebar from "./modules/shell/components/Sidebar";
+import ResizableSplit from "./modules/shell/components/ResizableSplit";
 import CaptureView from "./modules/capture/views/CaptureView";
-import PipelineView from "./modules/pipeline/views/PipelineView";
-import NodeTestView from "./modules/pipeline/views/NodeTestView";
-import ExecutionLog from "./modules/pipeline/components/ExecutionLog";
+import PipelineView from "./modules/pipeline/runtime/views/PipelineView";
+import NodeTestView from "./modules/testing/views/NodeTestView";
+import ExecutionLog from "./modules/pipeline/runtime/components/ExecutionLog";
+import PatrolChatRoom from "./modules/pipeline/runtime/views/PatrolChatRoom";
+import { ensurePatrolChatListener } from "./modules/pipeline/runtime/stores/usePatrolChatStore";
 import PreviewPage from "./modules/capture/views/PreviewPage";
 import SettingsView from "./modules/settings/views/SettingsView";
 import { useCaptureController } from "./modules/capture/hooks/useCaptureController";
-import "./modules/core/styles/sidebar.css";
+import "./modules/shell/styles/sidebar.css";
 import "./App.css";
 
 function SplitLayout() {
@@ -34,9 +36,10 @@ function Workspace() {
   const activeView = useUiStore((s) => s.activeView);
 
   return (
-    <div className="workspace">
+    <div className={`workspace ${activeView === "patrolChat" ? "patrol-chat-workspace" : ""}`}>
       {activeView === "pipeline" && <PipelineView />}
       {activeView === "nodeTest" && <NodeTestView />}
+      {activeView === "patrolChat" && <PatrolChatRoom />}
     </div>
   );
 }
@@ -48,6 +51,7 @@ function MainContent() {
     <div className="app-content">
       {activeView === "pipeline" && <SplitLayout />}
       {activeView === "nodeTest" && <SplitLayout />}
+      {activeView === "patrolChat" && <Workspace />}
       {activeView === "settings" && <SettingsView />}
     </div>
   );
@@ -57,6 +61,10 @@ function App() {
   const isPreview = window.location.hash === "#preview";
   const recognitionDevice = usePreferencesStore((state) => state.recognitionDevice);
   useCaptureController(!isPreview);
+
+  useEffect(() => {
+    if (!isPreview) void ensurePatrolChatListener();
+  }, [isPreview]);
 
   useEffect(() => {
     if (isPreview) return;

@@ -1,0 +1,34 @@
+.patrol-chat-workspace { height: 100%; }
+.patrol-chat-room { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; background: #f7f9fc; color: #1c2738; }
+.patrol-chat-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 24px; border-bottom: 1px solid #dce4ee; background: #fff; }
+.patrol-chat-toolbar h2 { font-size: 21px; margin: 0; }
+.patrol-chat-toolbar p { color: #64748b; font-size: 12px; margin-top: 3px; }
+.patrol-chat-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.patrol-chat-controls label { display: flex; align-items: center; gap: 6px; }
+.patrol-chat-controls select, .patrol-chat-controls button { border: 1px solid #cbd5e1; background: #fff; color: inherit; border-radius: 7px; padding: 6px 9px; }
+.patrol-chat-controls button { cursor: pointer; }
+.patrol-chat-timeline { flex: 1; min-height: 0; overflow: auto; padding: 20px clamp(14px, 4vw, 60px) 42px; }
+.patrol-chat-empty { text-align: center; color: #64748b; margin: 15vh auto; }
+.patrol-chat-sample { width: fit-content; max-width: 90%; margin: 22px auto 14px; padding: 5px 13px; border-radius: 20px; background: #e8edf4; color: #475569; font-size: 12px; text-align: center; }
+.patrol-chat-message { width: min(70%, 680px); min-width: 280px; margin: 9px 0; padding: 13px 15px; border: 1px solid #d8e2ef; border-radius: 14px; background: #fff; box-shadow: 0 2px 7px #13233d0a; overflow-wrap: anywhere; }
+.patrol-chat-message.patrol { margin-left: auto; background: #eaf3ff; border-color: #c5dcfb; }
+.patrol-chat-message-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+.patrol-chat-message-head span { color: #64748b; }
+.patrol-chat-summary { margin: 7px 0 0; line-height: 1.45; }
+.patrol-chat-message details { margin-top: 9px; border-top: 1px solid #cbd5e1; padding-top: 7px; }
+.patrol-chat-message summary { cursor: pointer; color: #2563eb; font-size: 12px; }
+.patrol-chat-context { color: #64748b; font-size: 11px; line-height: 1.5; margin: 10px 0; }
+.patrol-chat-content { display: grid; gap: 9px; max-height: 55vh; overflow: auto; }
+.patrol-chat-field { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+.patrol-chat-field span { color: #64748b; }
+.patrol-chat-field strong { text-align: right; font-weight: 500; }
+.patrol-chat-text strong, .patrol-chat-image strong { display: block; font-size: 12px; margin-bottom: 4px; }
+.patrol-chat-text p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; padding: 9px; background: #ffffffa8; border-radius: 6px; }
+.patrol-chat-image span { color: #64748b; font-size: 12px; }
+.patrol-chat-image button { display: block; width: 100%; background: none; border: 0; cursor: zoom-in; text-align: left; }
+.patrol-chat-image img { display: block; width: min(100%, 280px); max-height: 180px; object-fit: contain; border-radius: 7px; border: 1px solid #cbd5e1; }
+.patrol-chat-image img.large { width: 100%; max-height: 55vh; }
+.patrol-chat-score { display: grid; grid-template-columns: minmax(60px, 1fr) 2fr auto; align-items: center; gap: 8px; font-size: 12px; }
+.patrol-chat-score meter { width: 100%; }
+@media (max-width: 700px) { .patrol-chat-toolbar { align-items: flex-start; flex-direction: column; } .patrol-chat-message { width: min(90%, 680px); min-width: 0; } }
+@media (prefers-color-scheme: dark) { .patrol-chat-room { background: #171c26; color: #e5edf7; } .patrol-chat-toolbar { background: #202735; border-color: #39455a; } .patrol-chat-toolbar p, .patrol-chat-message-head span, .patrol-chat-context, .patrol-chat-field span { color: #a7b5c8; } .patrol-chat-message { background: #273244; border-color: #3c4b61; } .patrol-chat-message.patrol { background: #1e3b58; border-color: #3a6387; } .patrol-chat-sample { background: #354154; color: #d5e1ef; } .patrol-chat-message details, .patrol-chat-field { border-color: #4b5b70; } .patrol-chat-text p { background: #172233; } .patrol-chat-controls select, .patrol-chat-controls button { background: #273244; border-color: #53627a; } }

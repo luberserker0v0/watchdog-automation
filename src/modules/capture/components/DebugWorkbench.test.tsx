@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDebugStore } from "../stores/useDebugStore";
 
 vi.mock("./tabs/InspectorTab", () => ({ default: () => <div>coordinate tool body</div> }));
-vi.mock("./tabs/ActionTesterTab", () => ({ default: () => <div>action tool body</div> }));
-vi.mock("./tabs/RecognitionTab", () => ({ default: () => <div>recognition tool body</div> }));
-vi.mock("./tools/NodeEmulatorTool", () => ({ default: () => <div>emulator tool body</div> }));
+vi.mock("../../testing/tabs/ActionTesterTab", () => ({ default: () => <div>action tool body</div> }));
+vi.mock("../../testing/tabs/RecognitionTab", () => ({ default: () => <div>recognition tool body</div> }));
+vi.mock("../../testing/emulator/NodeEmulatorTool", () => ({ default: () => <div>emulator tool body</div> }));
 
 import DebugWorkbench, { DEBUG_TOOLS } from "./DebugWorkbench";
 

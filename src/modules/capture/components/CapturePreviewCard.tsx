@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
-import { useUiStore } from "../../core/stores/useUiStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
+import { useUiStore } from "../../shell/stores/useUiStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import TargetInfo from "./TargetInfo";
 import ExpandButton from "./ExpandButton";

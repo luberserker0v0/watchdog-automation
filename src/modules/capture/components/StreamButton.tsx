@@ -1,6 +1,6 @@
 import { useStreamStore } from "../stores/useStreamStore";
-import { usePipelineStore } from "../../pipeline/stores/usePipelineStore";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { refreshOpenPreviewContext } from "../services/previewWindowManager";
 
 export default function StreamButton() {

@@ -1,33 +1,29 @@
-mod commands;
-mod error;
-mod models;
+pub mod core;
 pub mod modules;
-mod repositories;
-mod services;
-pub mod utils;
 
-use commands::stream::StreamState;
-use services::stream::StreamService;
+use modules::capture::commands::stream::StreamState;
+use modules::capture::services::stream::StreamService;
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub static STREAM_FRAME: Mutex<Option<Vec<u8>>> = Mutex::new(None);
-pub static FRAME_CACHE: Mutex<Option<services::stream::StreamFrame>> = Mutex::new(None);
+pub static FRAME_CACHE: Mutex<Option<modules::capture::services::stream::StreamFrame>> =
+    Mutex::new(None);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    run_app(tauri::generate_context!())
+    run_app(tauri::generate_context!(), true)
 }
 
 pub fn run_tester() {
     log::info!("[exe] Running as TESTER");
-    run_app(tauri::generate_context!())
+    run_app(tauri::generate_context!(), false)
 }
 
 pub fn run_target() {
     log::info!("[exe] Running as TARGET");
-    utils::paths::ensure_user_dirs();
-    utils::logger::init();
+    core::paths::ensure_user_dirs();
+    core::logger::init();
 
     // Production opens the combined Target UI. The node tester can request an
     // isolated page by launching this same executable with a window label.
@@ -80,9 +76,12 @@ pub fn run_target() {
         .expect("error while running target application");
 }
 
-fn run_app(context: tauri::Context<tauri::Wry>) {
-    utils::paths::ensure_user_dirs();
-    utils::logger::init();
+fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
+    core::paths::ensure_user_dirs();
+    core::logger::init();
+    if clean_generated_data {
+        core::maintenance::cleanup_on_startup();
+    }
     log::info!("Starting watch-dog application");
 
     let stream_service = Arc::new(StreamService::new());
@@ -113,9 +112,9 @@ fn run_app(context: tauri::Context<tauri::Wry>) {
             }
         })
         .setup(move |app| {
-            utils::paths::init_resource_dir(app.handle());
+            core::paths::init_resource_dir(app.handle());
 
-            repositories::virtual_desktop::get_desktop_manager();
+            modules::capture::repositories::virtual_desktop::get_desktop_manager();
 
             if let Some(window) = app.get_webview_window("main") {
                 let svc = stream_service_for_setup.clone();
@@ -137,36 +136,38 @@ fn run_app(context: tauri::Context<tauri::Wry>) {
         })
         .manage(StreamState(stream_service))
         .invoke_handler(tauri::generate_handler![
-            commands::screen::get_screens,
-            commands::screen::capture_screen,
-            commands::screen::save_capture,
-            commands::screen::save_region_capture,
-            commands::window::get_windows,
-            commands::window::capture_window_by_hwnd,
-            commands::window::get_window_details,
-            commands::window::resize_window_client,
-            modules::pipeline::commands::editor::load_pipeline,
-            modules::pipeline::commands::editor::save_pipeline,
-            modules::pipeline::commands::editor::save_pipeline_layout,
-            modules::pipeline::commands::editor::validate_pipeline,
-            modules::pipeline::commands::editor::list_pipelines,
-            modules::pipeline::commands::runner::start_pipeline,
-            modules::pipeline::commands::runner::stop_pipeline,
-            modules::pipeline::commands::runner::pause_pipeline,
-            modules::pipeline::commands::runner::get_pipeline_status,
-            modules::pipeline::commands::runner::list_running_pipelines,
-            modules::pipeline::commands::runner::test_action,
-            modules::pipeline::commands::runner::test_recognition,
-            modules::pipeline::commands::runner::set_recognition_device,
-            commands::stream::start_stream,
-            commands::stream::stop_stream,
-            commands::stream::get_stream_status,
-            commands::desktop::get_desktops,
-            commands::desktop::get_current_desktop,
-            commands::target::open_target_window,
-            commands::node_test::list_node_metas,
-            commands::node_test::open_window,
-            commands::node_test::test_node,
+            modules::capture::commands::screen::get_screens,
+            modules::capture::commands::screen::capture_screen,
+            modules::capture::commands::screen::save_capture,
+            modules::capture::commands::screen::save_region_capture,
+            modules::capture::commands::window::get_windows,
+            modules::capture::commands::window::capture_window_by_hwnd,
+            modules::capture::commands::window::get_window_details,
+            modules::capture::commands::window::resize_window_client,
+            modules::pipeline::authoring::editor::load_pipeline,
+            modules::pipeline::authoring::editor::save_pipeline,
+            modules::pipeline::authoring::editor::save_pipeline_layout,
+            modules::pipeline::authoring::editor::validate_pipeline,
+            modules::pipeline::authoring::editor::list_pipelines,
+            modules::pipeline::runtime::runner::start_pipeline,
+            modules::pipeline::runtime::runner::stop_pipeline,
+            modules::pipeline::runtime::runner::pause_pipeline,
+            modules::pipeline::runtime::runner::get_pipeline_status,
+            modules::pipeline::runtime::chat::get_patrol_chat_image,
+            modules::pipeline::runtime::chat::clear_patrol_chat_images,
+            modules::pipeline::runtime::runner::list_running_pipelines,
+            modules::pipeline::runtime::runner::test_action,
+            modules::pipeline::runtime::runner::test_recognition,
+            modules::pipeline::runtime::runner::set_recognition_device,
+            modules::capture::commands::stream::start_stream,
+            modules::capture::commands::stream::stop_stream,
+            modules::capture::commands::stream::get_stream_status,
+            modules::capture::commands::desktop::get_desktops,
+            modules::capture::commands::desktop::get_current_desktop,
+            modules::capture::commands::target::open_target_window,
+            modules::testing::node_test::list_node_metas,
+            modules::testing::node_test::open_window,
+            modules::testing::node_test::test_node,
         ])
         .run(context)
         .expect("error while running tauri application");

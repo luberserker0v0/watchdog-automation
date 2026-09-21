@@ -1,11 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { useWindowStore } from "../stores/useWindowStore";
-import { usePipelineStore } from "../../pipeline/stores/usePipelineStore";
+import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
 import TargetInfo from "./TargetInfo";
 
 describe("TargetInfo capture dimensions", () => {

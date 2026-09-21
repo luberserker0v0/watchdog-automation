@@ -2,8 +2,8 @@ pub mod actions;
 pub mod recognizers;
 pub mod shared;
 
-use crate::modules::pipeline::models::action::Action;
-use crate::modules::pipeline::models::recognizer::{
+use crate::modules::pipeline::authoring::models::action::Action;
+use crate::modules::pipeline::authoring::models::recognizer::{
     select_candidate, CandidateSelection, MatchResult, Recognition,
 };
 use image::DynamicImage;
@@ -44,8 +44,11 @@ pub trait ActionPlugin: Send + Sync {
     async fn execute(
         &self,
         action: &Action,
-        box_region: Option<&crate::modules::pipeline::models::recognizer::Region>,
-        prev_regions: &HashMap<String, crate::modules::pipeline::models::recognizer::Region>,
+        box_region: Option<&crate::modules::pipeline::authoring::models::recognizer::Region>,
+        prev_regions: &HashMap<
+            String,
+            crate::modules::pipeline::authoring::models::recognizer::Region,
+        >,
     ) -> Result<(), PluginError>;
 }
 
@@ -93,12 +96,14 @@ impl PluginRegistry {
                 Ok(MatchResult {
                     matched: true,
                     confidence: 1.0,
-                    box_region: Some(crate::modules::pipeline::models::recognizer::Region {
-                        x: x as i32,
-                        y: y as i32,
-                        width,
-                        height,
-                    }),
+                    box_region: Some(
+                        crate::modules::pipeline::authoring::models::recognizer::Region {
+                            x: x as i32,
+                            y: y as i32,
+                            width,
+                            height,
+                        },
+                    ),
                     text: None,
                     candidates: Vec::new(),
                     raw_candidate_count: None,
@@ -198,8 +203,11 @@ impl PluginRegistry {
     pub async fn execute_action(
         &self,
         action: &Action,
-        box_region: Option<&crate::modules::pipeline::models::recognizer::Region>,
-        prev_regions: &HashMap<String, crate::modules::pipeline::models::recognizer::Region>,
+        box_region: Option<&crate::modules::pipeline::authoring::models::recognizer::Region>,
+        prev_regions: &HashMap<
+            String,
+            crate::modules::pipeline::authoring::models::recognizer::Region,
+        >,
     ) -> Result<(), PluginError> {
         match action {
             Action::DoNothing => Ok(()),

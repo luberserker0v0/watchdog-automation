@@ -133,6 +133,26 @@
       "description": "Supported value: non-negative integer duration in milliseconds.",
       "markdownDescription": "**Supported value**\n\nnon-negative integer duration in milliseconds."
     },
+    "freezeWait": {
+      "description": "Wait for consecutive visually stable frames before or after actions. Zero disables the wait.",
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 30000, "description": "Supported value: stable milliseconds; zero disables the wait.", "markdownDescription": "**Supported value**\n\nStable milliseconds from 0 to 30000; zero disables the wait." },
+        {
+          "type": "object",
+          "description": "Supported value: object with time and optional comparison settings.",
+          "markdownDescription": "**Supported value**\n\nObject with time, threshold, rate limit, timeout, and optional capture-local ROI.",
+          "additionalProperties": false,
+          "required": ["time"],
+          "properties": {
+            "time": { "type": "integer", "minimum": 0, "maximum": 30000, "description": "Supported value: stable duration in milliseconds, 0..30000; zero disables the wait.", "markdownDescription": "**Supported value**\n\nStable duration in milliseconds, 0..30000; zero disables the wait." },
+            "threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.98, "description": "Supported value: normalized frame similarity from 0 to 1. Default: 0.98.", "markdownDescription": "**Supported value**\n\nNormalized frame similarity from 0 to 1. **Default:** 0.98." },
+            "rate_limit": { "type": "integer", "minimum": 1, "maximum": 5000, "default": 200, "description": "Supported value: minimum milliseconds between compared frames, 1..5000. Default: 200.", "markdownDescription": "**Supported value**\n\nMinimum milliseconds between compared frames, 1..5000. **Default:** 200." },
+            "timeout": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 10000, "description": "Supported value: maximum active wait milliseconds, 1..120000 and at least time. Default: 10000.", "markdownDescription": "**Supported value**\n\nMaximum active wait milliseconds, 1..120000 and at least time. **Default:** 10000." },
+            "roi": { "type": "array", "prefixItems": [ { "type": "integer", "minimum": 0, "description": "Capture-local left coordinate." }, { "type": "integer", "minimum": 0, "description": "Capture-local top coordinate." }, { "type": "integer", "minimum": 1, "description": "Comparison width in pixels." }, { "type": "integer", "minimum": 1, "description": "Comparison height in pixels." } ], "items": false, "minItems": 4, "maxItems": 4, "description": "Supported value: optional capture-local [x,y,width,height] comparison area.", "markdownDescription": "**Supported value**\n\nOptional capture-local `[x,y,width,height]` comparison area." }
+          }
+        }
+      ]
+    },
     "point": {
       "type": "array",
       "description": "Supported action-target forms: true | string | [integer, integer] | [integer, integer, integer, integer]. This value is the [x,y] fixed capture-local point form.",
@@ -1080,9 +1100,14 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["Normal", "Entry"],
-          "description": "Supported values: Normal | Entry. Override the template's structural node kind. Default: inherit from template.",
-          "markdownDescription": "**Supported values**\n\n- `Normal` — regular node\n- `Entry` — pipeline entry marker\n\nOverride the template's structural node kind.\n\n**Default:** inherit from template."
+          "enum": ["Normal", "Entry", "Endpoint"],
+          "description": "Supported values: Normal | Entry | Endpoint. Override the template's structural node kind. Default: inherit from template.",
+          "markdownDescription": "**Supported values**\n\n- `Normal` — regular node\n- `Entry` — pipeline entry marker\n- `Endpoint` — successful terminal marker\n\nOverride the template's structural node kind.\n\n**Default:** inherit from template."
+        },
+        "desc": {
+          "type": "string",
+          "description": "Supported value: free-text description override. Default: inherit from template.",
+          "markdownDescription": "**Supported value**\n\nFree-text description of what this node does.\n\n**Default:** inherit from template."
         },
         "timeout": {
           "$ref": "#/$defs/milliseconds",
@@ -1104,11 +1129,13 @@
           "description": "Supported value: non-negative integer milliseconds. Override the template's pre_delay. Default: inherit from template.",
           "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's pre_delay.\n\n**Default:** inherit from template."
         },
+        "pre_wait_freezes": { "$ref": "#/$defs/freezeWait", "description": "Supported value: freeze wait duration or options object. Override the template's pre-action wait.", "markdownDescription": "**Supported value**\n\nFreeze wait duration or options object. Overrides the template's pre-action wait." },
         "post_delay": {
           "$ref": "#/$defs/milliseconds",
           "description": "Supported value: non-negative integer milliseconds. Override the template's post_delay. Default: inherit from template.",
           "markdownDescription": "**Supported value**\n\nnon-negative integer in milliseconds.\n\nOverride the template's post_delay.\n\n**Default:** inherit from template."
         },
+        "post_wait_freezes": { "$ref": "#/$defs/freezeWait", "description": "Supported value: freeze wait duration or options object. Override the template's post-action wait.", "markdownDescription": "**Supported value**\n\nFreeze wait duration or options object. Overrides the template's post-action wait." },
         "enabled": {
           "type": "boolean",
           "description": "Supported values: true | false. Override the template's enabled state. Default: inherit from template.",
@@ -1146,10 +1173,10 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["Normal", "Entry"],
+          "enum": ["Normal", "Entry", "Endpoint"],
           "default": "Normal",
-          "description": "Supported values: Normal | Entry. Structural node kind. Selected Entry: marks the pipeline entry node; entry nodes carry no recognition or actions and transition straight to their children. Exactly one Entry node is required per pipeline. Default: Normal.",
-          "markdownDescription": "**Supported values**\n\n- `Normal` — regular node\n- `Entry` — pipeline entry marker; carries no recognition or actions\n\nExactly one `Entry` node is required per pipeline.\n\n**Default:** `Normal`"
+          "description": "Supported values: Normal | Entry | Endpoint. Entry starts a run; Endpoint completes it. Endpoint carries no recognition or actions and has no outgoing edges. Exactly one Entry and at least one Endpoint are required. Default: Normal.",
+          "markdownDescription": "**Supported values**\n\n- `Normal` — regular node\n- `Entry` — pipeline entry marker\n- `Endpoint` — successful terminal marker; no recognition, actions, or outgoing edges\n\nExactly one `Entry` and at least one `Endpoint` are required per pipeline.\n\n**Default:** `Normal`"
         },
         "recognition": {
           "$ref": "#/$defs/recognition",
@@ -1158,6 +1185,12 @@
           },
           "description": "Supported value: recognition object with type DirectHit, TemplateMatch, OCR, ColorMatch, or Custom. Default recognition type: DirectHit; omitting recognition uses {\"type\":\"DirectHit\"}.",
           "markdownDescription": "**Supported recognition types**\n\n`DirectHit` | `TemplateMatch` | `OCR` | `ColorMatch` | `Custom`\n\n**Default recognition type:** `DirectHit`  \nOmitting `recognition` uses `{ \"type\": \"DirectHit\" }`."
+        },
+        "desc": {
+          "type": "string",
+          "default": "",
+          "description": "Supported value: free-text description of what this node does. Display-only; the engine ignores it. Default: empty string.",
+          "markdownDescription": "**Supported value**\n\nFree-text description of what this node does.\n\nDisplay-only; the engine ignores it.\n\n**Default:** `\"\"`"
         },
         "actions": {
           "type": "array",
@@ -1231,12 +1264,14 @@
           "description": "Supported value: non-negative integer milliseconds after recognition and before the first action. Default: 200.",
           "markdownDescription": "**Supported value**\n\nnon-negative integer milliseconds after recognition and before the first action.\n\n**Default:** 200."
         },
+        "pre_wait_freezes": { "$ref": "#/$defs/freezeWait", "default": 0, "description": "Supported value: freeze wait duration or options object after recognition and before pre_delay/action. Default: 0 (disabled).", "markdownDescription": "**Supported value**\n\nFreeze wait duration or options object after recognition and before `pre_delay` and action. **Default:** 0 (disabled)." },
         "post_delay": {
           "$ref": "#/$defs/milliseconds",
           "default": 200,
           "description": "Supported value: non-negative integer milliseconds after actions finish; it also runs after an action error. Default: 200.",
           "markdownDescription": "**Supported value**\n\nnon-negative integer milliseconds after actions finish; it also runs after an action error.\n\n**Default:** 200."
         },
+        "post_wait_freezes": { "$ref": "#/$defs/freezeWait", "default": 0, "description": "Supported value: freeze wait duration or options object after dispatched actions and before post_delay. Default: 0 (disabled).", "markdownDescription": "**Supported value**\n\nFreeze wait duration or options object after dispatched actions and before `post_delay`. **Default:** 0 (disabled)." },
         "enabled": {
           "type": "boolean",
           "default": true,

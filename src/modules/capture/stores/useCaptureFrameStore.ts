@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { CaptureMode } from "../../core/stores/usePreferencesStore";
+import type { CaptureMode } from "../../shell/stores/usePreferencesStore";
 
 interface CaptureFrame {
   previewUrl: string | null;

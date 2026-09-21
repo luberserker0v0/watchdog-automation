@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import { createNodeEmulatorDraft } from "../components/tools/nodeEmulatorModel";
+import { createNodeEmulatorDraft } from "../../testing/emulator/nodeEmulatorModel";
 import { useDebugStore } from "./useDebugStore";
 
 beforeEach(() => {

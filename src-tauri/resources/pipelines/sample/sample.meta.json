@@ -311,14 +311,7 @@
       }
     },
     "Done": {
-      "recognition": {
-        "type": "DirectHit"
-      },
-      "actions": [
-        {
-          "type": "StopTask"
-        }
-      ],
+      "kind": "Endpoint",
       "max_hit": 1
     }
   },
@@ -352,10 +345,7 @@
           "label": "Password",
           "default": "123456"
         }
-      ],
-      "param_values": {
-        "password": "password123"
-      }
+      ]
     },
     "ClickLogin": {
       "node": "ClickLogin"
@@ -396,10 +386,7 @@
           "label": "Key",
           "default": 19
         }
-      ],
-      "param_values": {
-        "key": 19
-      }
+      ]
     },
     "FindKeyDetectPanel": {
       "node": "FindKeyDetectPanel"
@@ -413,10 +400,7 @@
           "label": "Key",
           "default": "pause"
         }
-      ],
-      "param_values": {
-        "key": "pause"
-      }
+      ]
     },
     "Done": {
       "node": "Done"

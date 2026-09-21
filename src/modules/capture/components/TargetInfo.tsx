@@ -1,11 +1,11 @@
-import type { CaptureMode } from "../../core/stores/usePreferencesStore";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import type { CaptureMode } from "../../shell/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { useWindowStore } from "../stores/useWindowStore";
-import { usePipelineStore } from "../../pipeline/stores/usePipelineStore";
+import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
 
 const ENGINE_LABELS: Record<string, string> = { gdi: "GDI", dxgi: "DXGI", graphics: "Graphics" };
 

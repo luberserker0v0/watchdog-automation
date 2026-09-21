@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { CaptureMode } from "../../core/stores/usePreferencesStore";
+import type { CaptureMode } from "../../shell/stores/usePreferencesStore";
 import DebugWorkbench from "../components/DebugWorkbench";
 import TargetInfo from "../components/TargetInfo";
 import { useDetachedPreviewBridge } from "../hooks/useDetachedPreviewBridge";

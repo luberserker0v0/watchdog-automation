@@ -31,6 +31,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+jsonschema = { version = "0.56.0", default-features = false }
 xcap = "0.9.8"
 log = "0.4"
 fern = "0.7"
@@ -41,6 +42,7 @@ imageproc = "0.25"
 ab_glyph = "0.2"
 turbojpeg = { version = "1", features = ["image"] }
 regex-lite = "0.1"
+reqwest = { version = "=0.13.4", features = ["json"] }
 enigo = { version = "0.2", features = ["serde"] }
 notify = "6"
 async-trait = "0.1"

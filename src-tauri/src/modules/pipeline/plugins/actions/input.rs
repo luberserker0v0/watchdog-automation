@@ -1,5 +1,5 @@
-use crate::modules::pipeline::models::action::Action;
-use crate::modules::pipeline::models::recognizer::Region;
+use crate::modules::pipeline::authoring::models::action::Action;
+use crate::modules::pipeline::authoring::models::recognizer::Region;
 use crate::modules::pipeline::plugins::{ActionPlugin, PluginError};
 use std::collections::HashMap;
 

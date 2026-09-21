@@ -1,4 +1,4 @@
-use crate::modules::pipeline::models::recognizer::{MatchResult, Recognition, Region};
+use crate::modules::pipeline::authoring::models::recognizer::{MatchResult, Recognition, Region};
 use crate::modules::pipeline::plugins::shared::resolve_recognition_roi;
 use crate::modules::pipeline::plugins::{PluginError, RecognizerPlugin};
 use image::DynamicImage;

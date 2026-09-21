@@ -1,4 +1,5 @@
-import { usePreferencesStore, type CaptureArea, type CaptureEngine, type RecognitionDevice, type TimingGranularity } from "../../core/stores/usePreferencesStore";
+import { useState } from "react";
+import { usePreferencesStore, type CaptureArea, type CaptureEngine, type RecognitionDevice, type TimingGranularity } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
 import "../styles/settings.css";
 
@@ -25,6 +26,23 @@ export default function SettingsView() {
   const setTimingGranularity = usePreferencesStore((s) => s.setTimingGranularity);
   const recognitionDevice = usePreferencesStore((s) => s.recognitionDevice);
   const setRecognitionDevice = usePreferencesStore((s) => s.setRecognitionDevice);
+  const llmEndpoint = usePreferencesStore((s) => s.llmEndpoint);
+  const setLlmEndpoint = usePreferencesStore((s) => s.setLlmEndpoint);
+  const llmModel = usePreferencesStore((s) => s.llmModel);
+  const setLlmModel = usePreferencesStore((s) => s.setLlmModel);
+  const llmApiKey = usePreferencesStore((s) => s.llmApiKey);
+  const setLlmApiKey = usePreferencesStore((s) => s.setLlmApiKey);
+  const patrolEnabled = usePreferencesStore((s) => s.patrolEnabled);
+  const setPatrolEnabled = usePreferencesStore((s) => s.setPatrolEnabled);
+  const patrolCycleSeconds = usePreferencesStore((s) => s.patrolCycleSeconds);
+  const setPatrolCycleSeconds = usePreferencesStore((s) => s.setPatrolCycleSeconds);
+  const [cycleDraft, setCycleDraft] = useState(String(patrolCycleSeconds));
+  const patrolKHops = usePreferencesStore((s) => s.patrolKHops);
+  const setPatrolKHops = usePreferencesStore((s) => s.setPatrolKHops);
+  const patrolThreshold = usePreferencesStore((s) => s.patrolThreshold);
+  const setPatrolThreshold = usePreferencesStore((s) => s.setPatrolThreshold);
+  const patrolMinMargin = usePreferencesStore((s) => s.patrolMinMargin);
+  const setPatrolMinMargin = usePreferencesStore((s) => s.setPatrolMinMargin);
   const fps = useStreamStore((s) => s.fps);
   const setFps = useStreamStore((s) => s.setFps);
   const isStreaming = useStreamStore((s) => s.isStreaming);
@@ -119,6 +137,9 @@ export default function SettingsView() {
                 />
                 <span className="settings-toggle-slider" />
               </label>
+              <span className="settings-item-hint">
+                每次開啟視窗時此設定皆為關閉
+              </span>
             </div>
             {saveToDisk && (
               <div className="settings-item">
@@ -128,6 +149,65 @@ export default function SettingsView() {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h3 className="settings-section-title">LLM / VLM 巡檢設定</h3>
+          <div className="settings-section-body">
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-enabled">啟用巡檢</label>
+              <label className="settings-toggle">
+                <input id="patrol-enabled" type="checkbox" checked={patrolEnabled}
+                  onChange={(e) => setPatrolEnabled(e.target.checked)} />
+                <span className="settings-toggle-slider" />
+              </label>
+              <span className="settings-item-hint">啟用後會依設定週期在背景使用 VLM 分析畫面，並在流程失敗前再檢查一次；結果只顯示於執行紀錄，不會影響節點動作或流程。成功造訪節點後會儲存參考畫面。</span>
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-cycle">巡檢週期（秒）</label>
+              <input id="patrol-cycle" className="settings-item-control" type="number" min={1} max={3600} step={1}
+                value={cycleDraft} onChange={(e) => setCycleDraft(e.target.value)}
+                onBlur={() => {
+                  setPatrolCycleSeconds(cycleDraft.trim() === "" ? 20 : Number(cycleDraft));
+                  setCycleDraft(String(usePreferencesStore.getState().patrolCycleSeconds));
+                }} disabled={!patrolEnabled} />
+              <span className="settings-item-hint">從流程開始計時；預設 20 秒後首次巡檢。之後每次巡檢會等待前次 VLM 回覆與完整週期，兩者都完成後立即開始；VLM 請求另有 120 秒逾時限制。</span>
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-k-hops">鄰近搜尋距離 K</label>
+              <input id="patrol-k-hops" className="settings-item-control" type="number" min={1} max={4} step={1}
+                value={patrolKHops} onChange={(e) => setPatrolKHops(Number(e.target.value))} disabled={!patrolEnabled} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-threshold">最低匹配分數</label>
+              <input id="patrol-threshold" className="settings-item-control" type="number" min={0} max={1} step={0.01}
+                value={patrolThreshold} onChange={(e) => setPatrolThreshold(Number(e.target.value))} disabled={!patrolEnabled} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-margin">最低分數差距</label>
+              <input id="patrol-margin" className="settings-item-control" type="number" min={0} max={1} step={0.01}
+                value={patrolMinMargin} onChange={(e) => setPatrolMinMargin(Number(e.target.value))} disabled={!patrolEnabled} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="llm-endpoint">Chat completions URL</label>
+              <input id="llm-endpoint" className="settings-item-control" type="url"
+                placeholder="https://provider.example/v1/chat/completions"
+                value={llmEndpoint} onChange={(e) => setLlmEndpoint(e.target.value)} />
+              <span className="settings-item-hint">巡檢模式會將完整擷取畫面與參考影像傳送至此端點。</span>
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="llm-model">視覺模型</label>
+              <input id="llm-model" className="settings-item-control" type="text"
+                placeholder="Vision-capable model name"
+                value={llmModel} onChange={(e) => setLlmModel(e.target.value)} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="llm-api-key">API key</label>
+              <input id="llm-api-key" className="settings-item-control" type="password"
+                autoComplete="off" value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} />
+              <span className="settings-item-hint">API key 僅保留於本次應用程式工作階段；URL 與模型名稱會儲存。</span>
+            </div>
           </div>
         </div>
 
@@ -174,7 +254,7 @@ export default function SettingsView() {
                 <span className="settings-toggle-slider" />
               </label>
               <span className="settings-item-hint">
-                開啟後，每次節點辨識嘗試都會各自儲存影像，包含成功、重試與逾時
+                開啟後，每次節點辨識嘗試都會各自儲存影像，包含成功、重試與逾時；每次開啟視窗時此設定皆為關閉
               </span>
             </div>
             {saveDebugImages && (

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getWindowDetails, type WindowDetailInfo } from "../../../api/window";
 import type { PipelineTarget } from "../../../api/pipeline";
-import { usePreferencesStore, type CaptureMode } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore, type CaptureMode } from "../../shell/stores/usePreferencesStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useWindowStore } from "../stores/useWindowStore";
 import { useStreamStore } from "../stores/useStreamStore";

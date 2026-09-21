@@ -66,6 +66,11 @@
   border-color: #3b82f6;
 }
 
+input.settings-item-control {
+  width: min(360px, 100%);
+  box-sizing: border-box;
+}
+
 .settings-item-text {
   font-size: 13px;
   color: #999;

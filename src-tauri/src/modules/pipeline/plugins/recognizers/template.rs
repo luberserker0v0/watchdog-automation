@@ -1,8 +1,10 @@
-use crate::modules::pipeline::models::constants::MAX_RGB_DIFF_SQ;
-use crate::modules::pipeline::models::recognizer::{MatchCandidate, MatchResult, Region};
+use crate::core::resource_resolver;
+use crate::modules::pipeline::authoring::models::constants::MAX_RGB_DIFF_SQ;
+use crate::modules::pipeline::authoring::models::recognizer::{
+    MatchCandidate, MatchResult, Region,
+};
 use crate::modules::pipeline::plugins::shared::resolve_recognition_roi;
 use crate::modules::pipeline::plugins::{PluginError, RecognizerPlugin};
-use crate::utils::resource_resolver;
 use image::DynamicImage;
 use std::collections::HashMap;
 
@@ -248,7 +250,7 @@ impl RecognizerPlugin for TemplateRecognizer {
     }
 }
 
-use crate::modules::pipeline::models::recognizer::Recognition;
+use crate::modules::pipeline::authoring::models::recognizer::Recognition;
 
 #[cfg(test)]
 mod tests {

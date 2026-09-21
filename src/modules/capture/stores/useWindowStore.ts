@@ -3,7 +3,7 @@ import type { WindowInfo } from "../../../api/types";
 import type { WindowState } from "../../../api/window";
 import { getWindows, captureWindowByHwnd } from "../../../api/window";
 import { saveCapture } from "../../../api/screen";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useDesktopStore } from "./useDesktopStore";
 import { getTimestamp } from "../utils";
 import { useCaptureFrameStore } from "./useCaptureFrameStore";

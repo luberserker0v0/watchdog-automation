@@ -1,4 +1,4 @@
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../stores/useStreamStore";
 
 export default function ModeSelector() {

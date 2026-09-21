@@ -17,7 +17,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: eventApi.listen }));
 
 import { useCaptureFrameStore } from "./useCaptureFrameStore";
 import { useStreamStore } from "./useStreamStore";
-import { usePreferencesStore } from "../../core/stores/usePreferencesStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 
 describe("stream lifecycle", () => {
   beforeEach(() => {
