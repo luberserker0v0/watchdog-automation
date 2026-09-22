@@ -424,7 +424,12 @@ Matches by running PaddleOCR on the screen/ROI and comparing the recognized text
 | `expected` | `string` | No | omitted | Expected text regex; omission accepts any text that passes the confidence threshold |
 | `threshold` | `f64` | No | `0.3` | Minimum OCR confidence (0.0–1.0) |
 
-When `expected` is provided, the node matches if the recognized text matches the regex pattern. When `expected` is `null`, any recognized text matches.
+When `expected` is provided, the node first tests each recognized text block
+against the regex pattern. If no individual block matches, it tests the
+smallest compact sequence of adjacent blocks. This allows a phrase wrapped
+across multiple visual lines to produce one bounded candidate and click region;
+text blocks spread across the screen are not merged. When `expected` is
+`null`, any recognized text matches.
 
 ```json
 {

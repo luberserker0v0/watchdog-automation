@@ -421,5 +421,4 @@ mod cleanup_status_tests {
         assert_eq!(event.cleanup_error.as_deref(), Some("placement refused"));
         assert!(event.cleanup_complete);
     }
-
 }

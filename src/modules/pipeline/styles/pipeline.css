@@ -364,6 +364,28 @@
   min-width: 80px;
 }
 
+.execution-log-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+}
+
+.execution-log-tag.hint {
+  color: #b45309;
+  background: #fffbeb;
+}
+
+.execution-log-tag.redirect {
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
 .execution-log-detail {
   color: #888;
   flex: 1;

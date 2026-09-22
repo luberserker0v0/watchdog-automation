@@ -18,6 +18,9 @@ flowchart TD
     ClickKeyboard["ClickKeyboard"]
     FindKeyDetectPanel["FindKeyDetectPanel"]
     VerifyKeyboard["VerifyKeyboard"]
+    KeyboardIdle["KeyboardIdle"]
+    KeyboardDetected["KeyboardDetected"]
+    DoneIdle["DoneIdle"]
     Done["Done"]
 
     Start --> RecognizeTitle
@@ -36,5 +39,8 @@ flowchart TD
     ScrollPage2 --> ClickKeyboard
     ClickKeyboard --> FindKeyDetectPanel
     FindKeyDetectPanel --> VerifyKeyboard
-    VerifyKeyboard --> Done
+    VerifyKeyboard --> KeyboardIdle
+    VerifyKeyboard --> KeyboardDetected
+    KeyboardIdle --> DoneIdle
+    KeyboardDetected --> Done
 ```

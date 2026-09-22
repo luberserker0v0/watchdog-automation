@@ -5,7 +5,7 @@ import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import SettingsView from "./SettingsView";
 
 beforeEach(() => {
-  usePreferencesStore.setState({ patrolEnabled: false, patrolCycleSeconds: 20 });
+  usePreferencesStore.setState({ patrolEnabled: false, patrolCycleSeconds: 20, patrolRecoveryPolicy: "hint_only", patrolMaxRedirects: 1 });
 });
 
 it("enables patrol with one switch and exposes search settings", async () => {
@@ -19,6 +19,9 @@ it("enables patrol with one switch and exposes search settings", async () => {
   expect(screen.queryByLabelText("巡檢模式")).toBeNull();
   await user.click(screen.getByLabelText("啟用巡檢"));
   expect(hops.disabled).toBe(false);
+  await user.selectOptions(screen.getByLabelText("失敗復原方式"), "redirection_only");
+  expect(screen.getByLabelText("每次執行最多重新導向次數")).toBeTruthy();
+  expect(usePreferencesStore.getState().patrolRecoveryPolicy).toBe("redirection_only");
   await user.clear(cycle);
   await user.type(cycle, "30");
   await user.tab();

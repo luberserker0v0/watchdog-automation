@@ -301,6 +301,7 @@
       }
     },
     "VerifyKeyboard": {
+      "desc": "Confirm that the configured key appears before selecting one of the visible keyboard states.",
       "recognition": {
         "type": "OCR",
         "roi": "FindKeyDetectPanel",
@@ -310,7 +311,42 @@
         "expected": "{{key}}"
       }
     },
+    "KeyboardIdle": {
+      "desc": "Select this branch only while the key panel still asks for a keyboard key.",
+      "recognition": {
+        "type": "OCR",
+        "roi": "FindKeyDetectPanel",
+        "roi_offset": [
+          0, 20, 330, 65
+        ],
+        "expected": "Press any keyboard key",
+        "threshold": 0.6
+      },
+      "timeout": 3000,
+      "rate_limit": 500,
+      "max_hit": 1
+    },
+    "KeyboardDetected": {
+      "desc": "Select this branch after the key panel reports a detected key.",
+      "recognition": {
+        "type": "OCR",
+        "roi": "FindKeyDetectPanel",
+        "roi_offset": [
+          0, 20, 330, 65
+        ],
+        "expected": "Detected key",
+        "threshold": 0.6
+      },
+      "timeout": 3000,
+      "rate_limit": 500,
+      "max_hit": 1
+    },
+    "DoneIdle": {
+      "kind": "Endpoint",
+      "max_hit": 1
+    },
     "Done": {
+      "desc": "Successful endpoint for the detected-key fan-out branch.",
       "kind": "Endpoint",
       "max_hit": 1
     }
@@ -401,6 +437,15 @@
           "default": "pause"
         }
       ]
+    },
+    "KeyboardIdle": {
+      "node": "KeyboardIdle"
+    },
+    "KeyboardDetected": {
+      "node": "KeyboardDetected"
+    },
+    "DoneIdle": {
+      "node": "DoneIdle"
     },
     "Done": {
       "node": "Done"

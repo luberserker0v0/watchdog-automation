@@ -149,6 +149,24 @@ pub(crate) fn apply(ctx: &mut ExecutionContext, handle: &RunHandle, transition: 
     }
 }
 
+pub(crate) fn redirect(ctx: &mut ExecutionContext, handle: &RunHandle, target: &str) {
+    ctx.children = None;
+    clear_children_state(handle);
+    ctx.failed = false;
+    ctx.failure_error = None;
+    // A recovery starts a new execution epoch. Nodes visited before the
+    // failure must be eligible to run again instead of being skipped by their
+    // previous max_hit counters.
+    ctx.hit_counts.clear();
+    ctx.current_node_id = target.to_string();
+    if let Ok(mut hit_counts) = handle.hit_counts.lock() {
+        hit_counts.clear();
+    }
+    if let Ok(mut current_node) = handle.current_node_id.lock() {
+        *current_node = Some(target.to_string());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,6 +322,27 @@ mod tests {
         let children = ctx.children.as_ref().expect("children state");
         assert_eq!(children.timeout_ms, 100);
         assert_eq!(ctx.current_node_id, "B");
+    }
+
+    #[test]
+    fn recovery_redirect_clears_failure_children_and_hit_counts() {
+        let mut ctx = context(
+            vec![node("A", 100, 50), node("B", 100, 50)],
+            vec![edge("A", "B", EdgeType::Next)],
+            "A",
+        );
+        let handle = RunHandle::new("run".into());
+        ctx.failed = true;
+        ctx.failure_error = Some("boom".into());
+        ctx.hit_counts.insert("B".into(), 1);
+        redirect(&mut ctx, &handle, "B");
+        assert_eq!(ctx.current_node_id, "B");
+        assert!(!ctx.failed);
+        assert!(ctx.failure_error.is_none());
+        assert!(ctx.hit_counts.is_empty());
+        assert!(ctx.children.is_none());
+        assert!(handle.hit_counts.lock().unwrap().is_empty());
+        assert_eq!(handle.current_node_id.lock().unwrap().as_deref(), Some("B"));
     }
 
     #[test]

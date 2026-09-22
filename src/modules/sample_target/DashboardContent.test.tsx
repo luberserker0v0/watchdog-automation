@@ -59,3 +59,24 @@ describe("Dashboard key detection", () => {
     expect(screen.getByText("space")).toBeInTheDocument();
   });
 });
+
+describe("Dashboard recovery test", () => {
+  it("can ignore one armed click and recover on retry", () => {
+    render(<DashboardContent showRecoveryLab />);
+
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Arm first miss" }));
+    expect(screen.getByText("First click will be ignored")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recovery" }));
+    expect(screen.getByText("Retry required")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recovery" }));
+    expect(screen.getByText("Recovered")).toBeInTheDocument();
+  });
+
+  it("keeps the recovery test out of the combined dashboard", () => {
+    render(<DashboardContent />);
+    expect(screen.queryByRole("region", { name: "Recovery Test" })).not.toBeInTheDocument();
+  });
+});

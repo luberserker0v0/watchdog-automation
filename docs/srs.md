@@ -79,6 +79,9 @@ references do not override observed runtime behavior when they differ.
 | Error budget | A parent node's `error_timeout`: the budget for executing its error target |
 | StepResult | Per-node execution record (`node_id`, `matched`, `confidence`, `box_region`, actions fired, timings, error) |
 | PatrolState | Bounded per-run evidence of captures, action dispatch, and later visually observed states |
+| State Matcher | Patrol VLM task that scores which nearby pipeline node matches one current frame |
+| Action Effect Verifier | Patrol VLM task that compares one action attempt's before/after frames with its direct visual successors |
+| Action attempt | One ordered action batch from a successful visit to a node, tracked from pre-dispatch frame through advisory effect classification |
 | ROI | Region of interest: fixed rectangle or a prior node's recognized box |
 | HWND | Native window handle identifying a capture/action target |
 | Capture owner | Single holder (`none` / `manual` / `pipeline+run_id`) of the streaming session |
@@ -244,11 +247,14 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-PIPE-018 | Failed startup shall attempt to restore window placement and release capture ownership; a placement restoration failure shall be included in the start diagnostic. | E | test |
 | REQ-PIPE-019 | Run end shall attempt to restore window placement and release capture ownership; a restoration failure shall appear separately in final run status and events. | E | test |
 | REQ-PIPE-020 | Enabled patrol shall save clean full capture-frame references after successfully visited nodes in a background worker, separate from annotated debug images. References shall be scoped to the current run and shall never be loaded from an earlier run. No prior recording run is required. A save failure shall be logged without changing the run outcome. | E | test |
-| REQ-PIPE-021 | When patrol is enabled, the first validation shall start one Settings-controlled cycle after the run begins (20 seconds by default). Each later validation shall start after both the prior VLM response and a full cycle since that request started; a slow response shall trigger the next validation immediately when it arrives. At most one periodic VLM request shall be in flight per run. The VLM request timeout shall be separate from the cycle interval. Scoring shall run independently of recognition, actions, and routing. Missing references shall use node descriptions for scoring. | E | test |
-| REQ-PIPE-022 | When local VLM scores are below threshold or ambiguous, patrol shall expand to the 2K-hop neighborhood, including shared-parent siblings, and score again. A positive non-inverted, non-DirectHit recognizer result may confirm the expected node when it has the highest VLM score above threshold even if neighboring visible elements have similar scores. Invalid, missing, or inconclusive scores shall produce a report without changing pipeline execution. | E | test |
-| REQ-PIPE-023 | Patrol shall emit an aligned, possible-mismatch, or inconclusive report with run and capture identity to the Execution Log. It shall not select, replay, reroute, stop, or fail pipeline nodes. Before a failed run publishes terminal status, patrol shall attempt one final validation using the latest available captured frame and wait for its report. A run without a captured frame shall log that final validation was unavailable. Before any terminal status, the engine shall stop periodic sampling and finish outstanding reference saves; patrol shall emit no later report for that run. | E | test |
-| REQ-PIPE-024 | The engine shall keep bounded per-run patrol evidence for captured frames, recognition results, each attempted action, dispatch outcome, and patrol decision. A successfully dispatched action shall remain visually unverified until a later frame from the same target and capture session is confidently matched; input text, key values, and custom parameters shall be excluded from this evidence. | E | test |
+| REQ-PIPE-021 | When patrol is enabled, the first validation shall start one Settings-controlled cycle after the run begins (20 seconds by default). Each later validation shall start after both the prior VLM response and a full cycle since that request started; a slow response shall trigger the next validation immediately when it arrives. At most one VLM request shall be in flight per run. The VLM request timeout shall be separate from the cycle interval. Patrol shall prioritize an unresolved action attempt with a newer same-session frame; otherwise it shall run state matching. Both tasks shall run independently of recognition, actions, and routing. | E | test |
+| REQ-PIPE-022 | The State Matcher shall receive only the current frame, anchor, nearby node descriptions, and available references. When local scores are below threshold or ambiguous, it shall expand to the 2K-hop neighborhood, including shared-parent siblings. A positive non-inverted, non-DirectHit recognizer result may confirm the expected node when it has the highest VLM score above threshold. Action history shall not be included in this task. | E | test |
+| REQ-PIPE-023 | Patrol shall emit task-specific reports with run and capture identity to the Execution Log. Periodic state and action reports shall remain advisory. Before an impending failed run publishes terminal status, the engine shall stop periodic sampling, perform the final action/state check, then apply the Settings recovery policy. Before actual terminal status, it shall finish outstanding reference saves and close report delivery so no Patrol report follows terminal status. | E | test |
+| REQ-PIPE-024 | The engine shall keep bounded per-run patrol evidence for captured frames, recognition results, input dispatches, grouped action attempts, effect results, state-match decisions, and recovery decisions. Input text and arbitrary character keys shall be represented only by counts; allowlisted non-text control keys may use semantic names. Custom parameters shall be excluded. Images shall remain in bounded private/session caches rather than pipeline status. | E | test |
 | REQ-PIPE-025 | A node may optionally wait for consecutive stable captured frames before actions and after dispatched actions. Zero disables either wait. The wait shall use the active capture target and session, a bounded timeout, configurable similarity and comparison area, and shall pause or stop with the run. A pre-action wait shall be followed by `pre_delay`, fresh-frame recognition, and action-target resolution before input. Wait timeout or failed refreshed recognition shall route through the node's error handling; `post_delay` shall still run after an action or post-wait error. | E | test |
+| REQ-PIPE-027 | The Action Effect Verifier shall compare the exact pre-dispatch frame and a newer frame from the same target/session against an ordered sanitized action batch, direct normal successors, and the declared visual error successor when present. Its VLM contract shall distinguish `expected_successor` from `error_successor` and map them to the report outcomes `achieved` and `unexpected`; a matched error successor shall never be `achieved`. It may also report `unchanged`, `in_progress`, or `inconclusive`. Only `achieved` with a declared direct normal-node successor may confirm the attempt; state matching alone shall never confirm an action. Endpoint-only completion has no visual postcondition and shall not create an action-effect request. | E | test |
+| REQ-PIPE-028 | Each VLM response shall be parsed and semantically validated against its task contract. Invalid JSON, fields, enums, scores, candidate IDs, or successor IDs shall cause one same-task format retry with the validation error and original inputs. A second invalid response shall produce `inconclusive`; raw responses and diagnostics shall remain observable, and invalid or inconclusive responses shall never affect routing. | E | test |
+| REQ-PIPE-029 | Patrol recovery shall use one Settings-selected policy and shall receive bounded candidate descriptions, sanitized candidate actions, available references, and failure context. `hint_only` shall publish a suggested allowlisted node and reason without changing execution. `redirection_only` may propose an allowlisted normal node; the engine shall accept it only above the configured threshold, on the unchanged capture target/session, below the per-run redirect limit, and when the same failure-to-target route has not already been accepted. An accepted redirect shall clear failure and child-routing state, reset hit quotas for a new execution epoch, and execute the target through normal recognition, foreground checks, and action dispatch. Invalid, rejected, unavailable, or inconclusive recovery shall preserve the original failure. | E | test |
 
 #### 7.1.4 Recognizers
 
@@ -257,7 +263,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-REC-001 | The system shall provide DirectHit, TemplateMatch, OCR, ColorMatch, and Custom recognizers through a registration-based plugin interface. | E | test |
 | REQ-REC-002 | DirectHit shall always match and return the effective ROI as its box. | E | test |
 | REQ-REC-003 | TemplateMatch shall locate template-similar regions filtered by threshold (default 0.7). | E | test |
-| REQ-REC-004 | OCR shall recognize text blocks filterable by confidence, threshold (default 0.3), and optional expected regex. | E | test |
+| REQ-REC-004 | OCR shall recognize text blocks filterable by confidence, threshold (default 0.3), and optional expected regex. If no individual block matches, OCR shall also test the smallest compact sequence of adjacent blocks so a visually wrapped phrase can produce one bounded action candidate; distant text shall not be merged. | E | test |
 | REQ-REC-005 | ColorMatch shall match pixels in the ROI against an inclusive RGB range and return the ROI as its box. | E | test |
 | REQ-REC-006 | ROI shall resolve from a fixed rectangle or a prior node's box with offsets, clipped to the frame; empty or non-overlapping results shall fail recognition. | E | test |
 | REQ-REC-007 | Candidate selection shall order (`native` default plus directional/confidence orders) and index into eligible results; DirectHit and ColorMatch ignore it. | E | test |
@@ -297,9 +303,9 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-OBS-001 | `get_pipeline_status` shall serve as the recovery path when events were missed. | E | test |
 | REQ-OBS-002 | The graph shall show timeout progress on the parent node (normal or error quota) while highlighting the executing child. | E | test |
 | REQ-OBS-003 | The UI shall retain the last 10 step results per pipeline; the backend shall retain the full history per run. | E | test |
-| REQ-OBS-004 | Log entries shall record per-step outcomes and independent patrol reports, expanding phase timings only in detailed mode. | D | review |
+| REQ-OBS-004 | Log entries shall record per-step outcomes and concise independent Patrol results. The start and recovery entries shall visibly tag Patrol recovery as `HINT ONLY` or `REDIRECT`; hint entries shall state that routing is unchanged, while redirect entries shall report acceptance or rejection. Action results shall use readable transition and state labels; capture identity, attempt ID, confidence, and exact VLM reasoning shall remain available in the Patrol Chat Room. Phase timings shall expand only in detailed mode. | D | review |
 | REQ-OBS-005 | The UI shall prefer live events and poll at low frequency as backup. | E | review |
-| REQ-OBS-006 | A read-only Patrol Chat Room shall show chronological Patrol operations on the right and VLM replies on the left, grouped by sample and filterable by run. Each message shall show a formatted summary with details closed by default; expanded details shall preserve exact prompt and response text, candidate scores, capture identity, and on-demand image previews. Session history shall be bounded and clearing it shall also clear cached previews. | E | test |
+| REQ-OBS-006 | A read-only Patrol Chat Room shall show chronological Patrol operations on the right and VLM replies on the left, grouped by sample and filterable by run. Each message shall show a formatted summary with details closed by default; expanded details shall preserve task identity, exact prompt and response text, validation retries, candidate scores, action evidence, capture identity, and on-demand before/after/reference previews. Session history shall be bounded and clearing it shall also clear cached previews. | E | test |
 
 #### 7.1.8 Settings
 
@@ -310,7 +316,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-SET-003 | The OCR device shall switch between CPU and DirectML at runtime with GPU-to-CPU fallback (see REQ-ENV-003). | E | test |
 | REQ-SET-004 | Frame-cadence selection shall be disabled while streaming or under the event-driven engine. | D | test |
 | REQ-SET-005 | Timing granularity shall select off, summary, or detailed execution logging. | E | test |
-| REQ-SET-006 | Settings shall exclusively control engine patrol enablement, cycle seconds (default 20), K hops, score threshold, minimum margin, OpenAI-compatible chat-completions URL, vision model name, and session-only API key. No patrol mode shall be exposed. Enablement and non-secret options shall persist; the key shall not be persisted in browser storage. | E | test |
+| REQ-SET-006 | Settings shall exclusively control engine patrol enablement, cycle seconds (default 20), K hops, score threshold, minimum margin, recovery policy (`hint_only` default or `redirection_only`), maximum redirects per run (default 1), OpenAI-compatible chat-completions URL, vision model name, and session-only API key. Enablement and non-secret options shall persist; the key shall not be persisted in browser storage. | E | test |
 
 ### 7.2 Interface requirements
 
@@ -339,7 +345,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-IF-015 | The system shall expose pipeline-editor commands: `load_pipeline`, source-preserving `save_pipeline(path, mermaid, meta)`, `save_pipeline_layout`, `validate_pipeline`, `list_pipelines`. | E | test |
 | REQ-IF-016 | The system shall expose pipeline-runner commands: `start_pipeline`, `stop_pipeline`, `pause_pipeline`, `get_pipeline_status`, `list_running_pipelines`, `test_action`, `test_recognition`, `set_recognition_device`. | E | test |
 | REQ-IF-017 | The system shall expose node-test commands: `list_node_metas`, `open_window`, `test_node`. | E | test |
-| REQ-IF-018 | The system shall emit `pipeline-status` events carrying revision-ordered run snapshots with an optional appended step, separate `patrol-report` events, and structured `patrol-chat-event` messages for operations and VLM exchanges. The chat event shall not contain the API key or image base64 payloads. | E | test |
+| REQ-IF-018 | The system shall emit `pipeline-status` events carrying revision-ordered run snapshots with an optional appended step, separate `patrol-report` and `patrol-recovery` events, and structured `patrol-chat-event` messages for operations and VLM exchanges. The chat event shall not contain the API key or image base64 payloads. | E | test |
 | REQ-IF-019 | The system shall emit `update_capture` events synchronizing the frontend capture view with backend stream ownership. | E | test |
 | REQ-IF-020 | The system shall serve the live stream through the `watchdog:///frame` protocol. | E | test |
 | REQ-IF-021 | `get_patrol_chat_image` shall retrieve a session-cached image by opaque ID for an opened message; `clear_patrol_chat_images` shall clear the cache. An evicted image shall produce an explicit unavailable result. | E | test |
@@ -447,16 +453,18 @@ passed a native acceptance test.
 | REQ-CON-004, REQ-IF-015 | `save_pipeline` accepts original Mermaid and metadata sources, validates them, and confines writes to the custom root. The graph-only API is rejected. | `authoring/editor.rs`; `src/api/pipeline.ts` | Implemented; path tests require execution |
 | REQ-IF-002, REQ-IF-003 | Metadata and layout parsers validate against bundled Draft 2020-12 schemas before Serde conversion. | `authoring/parser/meta.rs`; `authoring/parser/layout.rs` | Implemented; bundled sample schema check passed |
 | REQ-PIPE-020, REQ-SET-006 | Settings control patrol and VLM options. A successful node visit queues a clean reference image in the current run's directory; a new run begins with description-only candidates. The API key is session-only. | `runtime/patrol.rs`; `runtime/runner.rs`; `settings/views/SettingsView.tsx` | Implemented; live VLM and native Windows tests pending |
-| REQ-PIPE-021, REQ-PIPE-022 | Periodic scoring runs in the background on a run-clock cycle. An inconclusive local search expands to nearby candidates. | `runtime/patrol.rs`; `runtime/engine/runner.rs` | Implemented; live VLM timing test pending |
-| REQ-PIPE-023 | Patrol reports are advisory. Failure triggers a final validation before terminal status; terminal status follows periodic cancellation and reference saves. | `runtime/engine/runner.rs`; `runtime/patrol.rs` | Implemented; native event-order test pending |
-| REQ-PIPE-024 | Pipeline status exposes bounded per-run patrol evidence. Action dispatch and later observed screen state are recorded separately, with secrets redacted. Patrol reports can arrive after node advancement. | `runtime/engine/patrol_state.rs`; `runtime/engine/runner.rs` | Implemented; native execution test pending |
+| REQ-PIPE-021, REQ-PIPE-022 | Periodic Patrol chooses one task: unresolved action verification first, otherwise state matching. State matching contains no action history and expands an inconclusive local search to nearby candidates. | `runtime/patrol.rs`; `runtime/engine/runner.rs` | Implemented; live VLM timing test pending |
+| REQ-PIPE-023 | Periodic reports remain advisory. Failure stops periodic work, completes the final action/state check, applies the recovery policy, then either resumes an accepted redirect or publishes terminal failure. | `runtime/engine/runner.rs`; `runtime/patrol.rs` | Implemented; live recovery event-order test pending |
+| REQ-PIPE-024, REQ-PIPE-027 | Pipeline status exposes bounded dispatch and grouped attempt evidence. Exact before frames stay in a bounded private cache; only a valid action-effect result for a declared direct visual successor confirms an attempt. | `runtime/engine/patrol_state.rs`; `runtime/engine/runner.rs`; `runtime/patrol.rs` | Implemented; live VLM verification pending |
+| REQ-PIPE-028 | State-match, action-effect, and recovery responses use strict local parsing and semantic validation, one same-task format retry, then an inconclusive result. | `runtime/patrol.rs` | Parser tests passed; live malformed-response walkthrough pending |
+| REQ-PIPE-029 | The engine supplies bounded recovery candidates. Hint policy preserves failure; redirection policy validates confidence, capture identity, node eligibility, run limit, and route uniqueness before starting a new execution epoch. | `runtime/patrol.rs`; `runtime/engine/runner.rs`; `runtime/engine/routing.rs`; `settings/views/SettingsView.tsx` | Unit policy tests passed; live VLM recovery pending |
 | REQ-OBS-006, REQ-IF-018, REQ-IF-021 | The Patrol Chat Room shows the session trace with formatted, collapsed messages and on-demand images. Its listener collects events while the view is closed; the backend emits exact request and response content without API keys. | `runtime/chat.rs`; `runtime/views/PatrolChatRoom.tsx` | Implemented; live VLM and native event verification pending |
 | REQ-MNT-002, REQ-MNT-003 | Main-app startup bounds dated logs and periodically clears generated visions within the user-data root. Cleanup errors are logged and do not block startup. | `core/maintenance.rs`; `lib.rs` | Implemented; startup filesystem test pending |
 
-The frontend production build and all 124 frontend tests pass. The Windows
+The frontend production build and all 127 frontend tests pass. The Windows
 build now delay-loads Common Controls so the Rust unit-test harness does not
 resolve an unused Tauri dialog entry point before tests start; the application
-binary still links successfully with Tauri's manifest. All 167 enabled Rust
+binary still links successfully with Tauri's manifest. All 173 enabled Rust
 library tests pass; the OCR runtime/model test remains intentionally ignored.
 These automated checks cover pure routing, configuration, state, and filesystem
 behavior. Live capture, real foreground activation and input, window
@@ -538,8 +546,9 @@ example names the requirements it clarifies.
 
 - **Given** a validated graph with Entry, a normal leaf `LastClick`, and an Endpoint elsewhere.
 - **When** execution reaches `LastClick` without an outgoing route.
-- **Then** the run fails with `LastClick` in the reason. If Patrol is enabled,
-  final advisory validation is attempted before failed status.
+- **Then** the impending failure contains `LastClick` in the reason. If Patrol
+  is enabled, final validation and the configured recovery task run before the
+  engine resumes an accepted redirect or publishes failed status.
 
 An enabled Endpoint reached by execution instead records a matched step and
 completes without capture, recognition, or actions at that node.
@@ -589,6 +598,41 @@ completes without capture, recognition, or actions at that node.
   and emits no later Patrol report. The UI also discards a report delivered
   after it has already observed terminal status for that run.
 
+#### E.8 Patrol task selection (`REQ-PIPE-021`, `REQ-PIPE-022`, `REQ-PIPE-027`)
+
+- **Given** a sent action attempt, its exact before frame, declared direct
+  visual successors, and a newer frame from the same target/session.
+- **When** the next Patrol cycle starts.
+- **Then** it sends one Action Effect Verifier request containing the ordered
+  sanitized action batch and before/after evidence, and it does not include a
+  K-hop state-localization task in that request.
+- **And given** no eligible unresolved action attempt, **when** a cycle starts,
+  **then** it sends one Current State Matcher request without action history.
+
+#### E.9 Invalid VLM response (`REQ-PIPE-028`)
+
+- **Given** either VLM task returns malformed or semantically invalid JSON.
+- **When** Patrol validates the response.
+- **Then** it sends the same task once more with the validation error and
+  original inputs.
+- **And when** the second response is also invalid, **then** Patrol records an
+  inconclusive advisory result, retains both raw responses in the Chat Room,
+  and leaves pipeline routing unchanged.
+
+#### E.10 Patrol recovery (`REQ-PIPE-029`)
+
+- **Given** normal and graph-declared error routing have reached an impending
+  terminal failure, **when** the configured policy is `hint_only`, **then**
+  Patrol may recommend one engine-supplied candidate, the recommendation is
+  logged, and the original failure is preserved.
+- **Given** the policy is `redirection_only`, **when** Patrol selects an
+  allowlisted normal node above threshold on the unchanged capture session and
+  the redirect limits allow it, **then** the engine clears failure and child
+  state, resets hit quotas, and executes that node through the normal engine.
+- **Given** an unknown node, low confidence, changed capture session, repeated
+  route, exhausted limit, or invalid response, **when** the engine validates
+  the proposal, **then** it rejects the redirect and preserves the failure.
+
 ### Appendix F — Example-to-test traceability
 
 Results below are from 2026-09-21. A **unit pass** verifies the named policy or
@@ -604,6 +648,9 @@ real window, capture session, model, or OS refusal.
 | E.5 Cleanup visibility | `runtime::engine::cleanup_status_tests::cleanup_failure_is_separate_from_execution_result_in_status_and_event` | Unit pass | Force Windows placement restoration to fail and inspect the UI event. |
 | E.6 Startup retention | `core::maintenance::tests::keeps_current_and_newest_dated_logs`; `clears_visions_only_when_interval_is_due`; `vision_cleanup_never_follows_a_nested_link` | Unit pass; live check deferred | Restart and folder inspection were deferred. Link traversal runs when Windows permits symlink creation. |
 | E.7 Terminal Patrol cutoff | `runtime::engine::runner::parameter_tests::terminal_run_cancels_unfinished_patrol_work`; frontend `usePipelineStore` late-report test | Automated and live pass after fixing the completed-run ordering defect | Successful pipeline recheck confirmed that no Patrol report appears after Completed. |
+| E.8 Patrol task selection | `runtime::engine::runner::parameter_tests::patrol_prioritizes_a_sent_unresolved_action_with_a_newer_same_session_frame`; typed task-specific request builders | Unit pass | Live before/after VLM classification pending. |
+| E.9 Invalid VLM response | `runtime::patrol::tests::parses_model_scores_with_or_without_markdown_fence`; `action_effect_response_is_strict_and_successor_bounded` | Parser and semantic validation pass | Live two-response format-retry walkthrough pending. |
+| E.10 Patrol recovery | `runtime::patrol::tests::recovery_candidates_prioritize_recent_nodes_and_exclude_failure`; `recovery_response_is_policy_and_candidate_bounded`; `runtime::engine::routing::tests::recovery_redirect_clears_failure_children_and_hit_counts`; frontend Settings and recovery-log tests | Unit pass | Live hint and accepted/rejected redirect walkthrough pending. |
 
-Verification commands: `npm test` (124 passed), `npm run build`,
-`cargo check --all-features`, and `cargo test --lib` (167 passed, 1 ignored).
+Verification commands: `npm test` (127 passed), `npm run build`,
+`cargo check --all-features`, and `cargo test --lib` (173 passed, 1 ignored).

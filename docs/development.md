@@ -49,6 +49,17 @@ src-tauri\target\debug\watch-dog-target.exe settings
 
 These arguments create windows named `Target UI - Login`, `Target UI - Dashboard`, and `Target UI - Settings`. They are not separate executables.
 
+The shipped `sample` pipeline finishes with a two-candidate keyboard-state
+fan-out and two Endpoint nodes. The first candidate represents the idle key
+panel and the second represents the detected-key state.
+
+The shipped `patrol-redirection` pipeline launches the standalone Dashboard
+and runs its Recovery Test. Before running it, enable Patrol, select
+`redirection_only`, keep the maximum redirects at `1`, and configure the VLM.
+The pipeline arms one harmless missed click. A successful walkthrough reports
+`Retry required`, accepts a redirect to `ApplyRecovery`, retries the click, and
+finishes after the status becomes `Recovered`.
+
 ### Frontend only
 
 ```powershell

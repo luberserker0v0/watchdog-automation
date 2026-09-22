@@ -6,6 +6,7 @@ export interface LogEntry {
   label: string;
   detail: string;
   result?: "success" | "error" | "info";
+  tag?: "hint" | "redirect";
   timestamp: number;
 }
 

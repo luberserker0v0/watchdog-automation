@@ -18,7 +18,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="target-app-body">
-          <DashboardContent />
+          <DashboardContent showRecoveryLab />
         </div>
       </div>
     </div>

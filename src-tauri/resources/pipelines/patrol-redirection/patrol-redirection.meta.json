@@ -1,0 +1,71 @@
+{
+  "target": {
+    "title": "^Target UI - Dashboard$",
+    "type": "window",
+    "capture_area": "client",
+    "window_size": [500, 820]
+  },
+  "launch": {
+    "exe": "watch-dog-target.exe",
+    "args": ["dashboard"],
+    "wait_for_window": true,
+    "wait_timeout_ms": 10000
+  },
+  "nodes": {
+    "Start": {
+      "kind": "Entry",
+      "timeout": 20000
+    },
+    "ArmFirstMiss": {
+      "desc": "Arm the Recovery Test so its next Apply recovery click is deliberately ignored once.",
+      "recognition": {
+        "type": "OCR",
+        "expected": "Arm first miss",
+        "threshold": 0.6
+      },
+      "actions": [{ "type": "Click" }],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "post_delay": 300,
+      "max_hit": 1
+    },
+    "ApplyRecovery": {
+      "desc": "Click Apply recovery. If the test reports Retry required, executing this node again resolves the transient missed action.",
+      "recognition": {
+        "type": "OCR",
+        "expected": "Apply recovery",
+        "threshold": 0.6
+      },
+      "actions": [{ "type": "Click" }],
+      "timeout": 10000,
+      "rate_limit": 500,
+      "post_delay": 300,
+      "max_hit": 1
+    },
+    "VerifyRecovered": {
+      "desc": "Verify that Apply recovery changed the Recovery Test status to Recovered. Retry required means the preceding click was deliberately missed.",
+      "recognition": {
+        "type": "OCR",
+        "expected": "Recovered",
+        "roi": [
+          396, 115, 65, 22
+        ],
+        "threshold": 0.6
+      },
+      "timeout": 5000,
+      "rate_limit": 500,
+      "max_hit": 1
+    },
+    "Done": {
+      "kind": "Endpoint",
+      "max_hit": 1
+    }
+  },
+  "instances": {
+    "Start": { "node": "Start" },
+    "ArmFirstMiss": { "node": "ArmFirstMiss" },
+    "ApplyRecovery": { "node": "ApplyRecovery" },
+    "VerifyRecovered": { "node": "VerifyRecovered" },
+    "Done": { "node": "Done" }
+  }
+}

@@ -12,7 +12,7 @@ import {
 import { useLogStore } from "../../../capture/stores/useLogStore";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../../../capture/stores/useStreamStore";
-import { PipelineBatchController, type PipelineStatusEvent, type PatrolReportEvent } from "../services/PipelineBatchController";
+import { PipelineBatchController, type PipelineStatusEvent, type PatrolRecoveryEvent, type PatrolReportEvent } from "../services/PipelineBatchController";
 import { ensurePatrolChatListener } from "./usePatrolChatStore";
 
 export type PipelineExecutionStatus = "idle" | "running" | "paused" | "stopping" | "stopped" | "completed" | "failed" | "needs_resize";
@@ -115,16 +115,47 @@ export function appendPatrolReport(report: PatrolReportEvent) {
   // already been observed, even if the backend emitted the report first.
   if (terminalPatrolRunIds.has(report.run_id)) return;
   const capture = `${report.trigger === "failure" ? "before failure · " : ""}frame ${report.frame} · session ${report.session} · ${report.target}`;
-  const detail = report.outcome === "aligned"
+  const actionState = report.outcome === "achieved" ? "expected state reached"
+    : report.outcome === "unchanged" ? "no visible change"
+      : report.outcome === "in_progress" ? "transition still in progress"
+        : report.outcome === "unexpected" ? "unexpected state"
+          : "result unclear";
+  const actionPath = `${report.expected_node_id}${report.matched_node_id ? ` → ${report.matched_node_id}` : ""}`;
+  const detail = report.task === "action_effect"
+    ? `${report.trigger === "failure" ? "Before failure · " : ""}${actionPath} · ${actionState}`
+    : report.outcome === "aligned"
     ? `${capture}: ${report.expected_node_id} aligned`
     : report.outcome === "possible_mismatch"
       ? `${capture}: expected ${report.expected_node_id}; possible match ${report.matched_node_id}`
       : `${capture}: ${report.expected_node_id} inconclusive${report.reason ? ` · ${report.reason}` : ""}`;
   useLogStore.getState().appendLog({
     source: "pipeline",
-    label: `Patrol · ${report.run_id}`,
+    label: report.task === "action_effect" ? "Patrol · Action check" : `Patrol · ${report.run_id}`,
     detail,
-    result: report.outcome === "aligned" ? "success" : "info",
+    result: report.outcome === "aligned" || report.outcome === "achieved"
+      ? "success"
+      : report.outcome === "unexpected" ? "error" : "info",
+  });
+}
+
+export function appendPatrolRecovery(report: PatrolRecoveryEvent) {
+  if (terminalPatrolRunIds.has(report.run_id)) return;
+  const path = `${report.failure_node}${report.target_node ? ` → ${report.target_node}` : ""}`;
+  const confidence = report.confidence == null ? "" : ` · ${Math.round(report.confidence * 100)}%`;
+  const label = report.policy === "hint_only"
+    ? "Patrol · Recovery hint"
+    : report.accepted ? "Patrol · Redirect" : "Patrol · Redirect rejected";
+  const detail = report.policy === "hint_only"
+    ? `${path} · advisory only; routing unchanged · ${report.reason}${confidence}`
+    : report.accepted
+      ? `${path} · accepted · ${report.redirect_count}/${report.max_redirects}${confidence}`
+      : `${path} · ${report.reason}${confidence}`;
+  useLogStore.getState().appendLog({
+    source: "pipeline",
+    label,
+    detail,
+    tag: report.policy === "hint_only" ? "hint" : "redirect",
+    result: report.accepted ? "success" : report.policy === "redirection_only" ? "error" : "info",
   });
 }
 
@@ -264,6 +295,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     const hasStatusEvents = await batchController.start(
       (event) => get().applyStatusEvent(event),
       appendPatrolReport,
+      appendPatrolRecovery,
     );
     stopRequested = false;
     const generation = ++executionGeneration;
@@ -297,6 +329,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             k_hops: preferences.patrolKHops,
             threshold: preferences.patrolThreshold,
             min_margin: preferences.patrolMinMargin,
+            recovery_policy: preferences.patrolRecoveryPolicy,
+            max_redirects: preferences.patrolMaxRedirects,
           },
           preferences.patrolEnabled && preferences.llmEndpoint && preferences.llmModel ? {
             endpoint: preferences.llmEndpoint,
@@ -335,6 +369,18 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           detail: `Pipeline started (runId: ${runId})`,
           result: "info",
         });
+        if (preferences.patrolEnabled) {
+          const hintOnly = preferences.patrolRecoveryPolicy === "hint_only";
+          useLogStore.getState().appendLog({
+            source: "pipeline",
+            label: "Patrol active",
+            tag: hintOnly ? "hint" : "redirect",
+            detail: hintOnly
+              ? "Recovery policy is advisory only; Patrol will not change pipeline routing"
+              : `Recovery redirection is enabled; up to ${preferences.patrolMaxRedirects} accepted redirect(s) per run`,
+            result: "info",
+          });
+        }
 
         let statusFailures = 0;
         let statusStopSent = false;

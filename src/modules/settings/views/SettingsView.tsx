@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { usePreferencesStore, type CaptureArea, type CaptureEngine, type RecognitionDevice, type TimingGranularity } from "../../shell/stores/usePreferencesStore";
+import { usePreferencesStore, type CaptureArea, type CaptureEngine, type PatrolRecoveryPolicy, type RecognitionDevice, type TimingGranularity } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
 import "../styles/settings.css";
 
@@ -43,6 +43,10 @@ export default function SettingsView() {
   const setPatrolThreshold = usePreferencesStore((s) => s.setPatrolThreshold);
   const patrolMinMargin = usePreferencesStore((s) => s.patrolMinMargin);
   const setPatrolMinMargin = usePreferencesStore((s) => s.setPatrolMinMargin);
+  const patrolRecoveryPolicy = usePreferencesStore((s) => s.patrolRecoveryPolicy);
+  const setPatrolRecoveryPolicy = usePreferencesStore((s) => s.setPatrolRecoveryPolicy);
+  const patrolMaxRedirects = usePreferencesStore((s) => s.patrolMaxRedirects);
+  const setPatrolMaxRedirects = usePreferencesStore((s) => s.setPatrolMaxRedirects);
   const fps = useStreamStore((s) => s.fps);
   const setFps = useStreamStore((s) => s.setFps);
   const isStreaming = useStreamStore((s) => s.isStreaming);
@@ -162,7 +166,7 @@ export default function SettingsView() {
                   onChange={(e) => setPatrolEnabled(e.target.checked)} />
                 <span className="settings-toggle-slider" />
               </label>
-              <span className="settings-item-hint">啟用後會依設定週期在背景使用 VLM 分析畫面，並在流程失敗前再檢查一次；結果只顯示於執行紀錄，不會影響節點動作或流程。成功造訪節點後會儲存參考畫面。</span>
+              <span className="settings-item-hint">啟用後會依設定週期在背景使用 VLM 分析畫面，並在流程失敗前執行復原分析。成功造訪節點後會儲存參考畫面。</span>
             </div>
             <div className="settings-item">
               <label className="settings-item-label" htmlFor="patrol-cycle">巡檢週期（秒）</label>
@@ -189,6 +193,26 @@ export default function SettingsView() {
               <input id="patrol-margin" className="settings-item-control" type="number" min={0} max={1} step={0.01}
                 value={patrolMinMargin} onChange={(e) => setPatrolMinMargin(Number(e.target.value))} disabled={!patrolEnabled} />
             </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-recovery-policy">失敗復原方式</label>
+              <select id="patrol-recovery-policy" className="settings-item-control"
+                value={patrolRecoveryPolicy}
+                onChange={(e) => setPatrolRecoveryPolicy(e.target.value as PatrolRecoveryPolicy)}
+                disabled={!patrolEnabled}>
+                <option value="hint_only">僅提供提示</option>
+                <option value="redirection_only">僅重新導向</option>
+              </select>
+              <span className="settings-item-hint">提示模式保留原始失敗結果；重新導向模式經引擎驗證後，從 Patrol 指定的候選節點繼續執行。</span>
+            </div>
+            {patrolRecoveryPolicy === "redirection_only" && (
+              <div className="settings-item">
+                <label className="settings-item-label" htmlFor="patrol-max-redirects">每次執行最多重新導向次數</label>
+                <input id="patrol-max-redirects" className="settings-item-control" type="number" min={1} max={10} step={1}
+                  value={patrolMaxRedirects}
+                  onChange={(e) => setPatrolMaxRedirects(Number(e.target.value))}
+                  disabled={!patrolEnabled} />
+              </div>
+            )}
             <div className="settings-item">
               <label className="settings-item-label" htmlFor="llm-endpoint">Chat completions URL</label>
               <input id="llm-endpoint" className="settings-item-control" type="url"

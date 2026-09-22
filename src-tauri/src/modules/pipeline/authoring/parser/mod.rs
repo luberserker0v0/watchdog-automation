@@ -180,4 +180,26 @@ mod tests {
         let plan = crate::modules::pipeline::runtime::plan::ExecutionPlan::compile(graph).unwrap();
         assert_eq!(plan.entry_node_id(), "Start");
     }
+
+    #[test]
+    fn shipped_patrol_redirection_pipeline_is_valid() {
+        let mermaid_content =
+            std::fs::read_to_string("resources/pipelines/patrol-redirection/patrol-redirection.md")
+                .expect("shipped patrol redirection pipeline must exist");
+        let meta_content = std::fs::read_to_string(
+            "resources/pipelines/patrol-redirection/patrol-redirection.meta.json",
+        )
+        .expect("shipped patrol redirection metadata must exist");
+        let mermaid_graph = mermaid::parse(&mermaid_content).unwrap();
+        let metadata = meta::parse(&meta_content).unwrap();
+        let graph = build_graph(&mermaid_graph, &metadata);
+        let validation =
+            crate::modules::pipeline::authoring::editor::validate_pipeline_graph(&graph);
+        assert!(
+            validation.is_empty(),
+            "shipped patrol redirection pipeline must validate: {validation:?}"
+        );
+        let plan = crate::modules::pipeline::runtime::plan::ExecutionPlan::compile(graph).unwrap();
+        assert_eq!(plan.entry_node_id(), "Start");
+    }
 }

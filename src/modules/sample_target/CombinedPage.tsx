@@ -100,7 +100,7 @@ function normalizeDetectedKey(key: string): string {
 }
 
 // ─── Dashboard Content ───
-export function DashboardContent() {
+export function DashboardContent({ showRecoveryLab = false }: { showRecoveryLab?: boolean } = {}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const carouselCounterRef = useRef<HTMLSpanElement>(null);
@@ -112,6 +112,8 @@ export function DashboardContent() {
   const [longPressDone, setLongPressDone] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lastKey, setLastKey] = useState<string | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState("Ready");
+  const [missArmed, setMissArmed] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -145,6 +147,20 @@ export function DashboardContent() {
     if (!longPressDone) {
       setLongPressing(false);
     }
+  };
+
+  const armRecoveryMiss = () => {
+    setMissArmed(true);
+    setRecoveryStatus("First click will be ignored");
+  };
+
+  const applyRecovery = () => {
+    if (missArmed) {
+      setMissArmed(false);
+      setRecoveryStatus("Retry required");
+      return;
+    }
+    setRecoveryStatus("Recovered");
   };
 
   const updateCarouselCounter = () => {
@@ -280,6 +296,26 @@ export function DashboardContent() {
   return (
     <div className="target-dashboard">
       <div className="target-title" data-target="text:Dashboard">Dashboard</div>
+
+      {showRecoveryLab && (
+        <section className="target-recovery-lab" aria-label="Recovery Test">
+          <div className="target-section-header">
+            <span className="target-settings-label" data-target="text:Recovery Test">Recovery Test</span>
+            <strong className="target-recovery-status" data-target={`recovery:${recoveryStatus.toLowerCase().replace(/ /g, "-")}`}>
+              {recoveryStatus}
+            </strong>
+          </div>
+          <p>Arm one harmless missed click, then let Patrol decide whether retrying the action can recover.</p>
+          <div className="target-recovery-actions">
+            <button type="button" className="target-button-secondary" onClick={armRecoveryMiss}>
+              Arm first miss
+            </button>
+            <button type="button" className="target-button" onClick={applyRecovery}>
+              Apply recovery
+            </button>
+          </div>
+        </section>
+      )}
 
       <div>
         <div className="target-section-header">

@@ -6,6 +6,7 @@ export type CaptureEngine = "gdi" | "dxgi" | "graphics";
 export type CaptureArea = "frame" | "client";
 export type TimingGranularity = "off" | "summary" | "detailed";
 export type RecognitionDevice = "cpu" | "directml";
+export type PatrolRecoveryPolicy = "hint_only" | "redirection_only";
 
 interface PreferencesState {
   mode: CaptureMode;
@@ -24,6 +25,8 @@ interface PreferencesState {
   patrolKHops: number;
   patrolThreshold: number;
   patrolMinMargin: number;
+  patrolRecoveryPolicy: PatrolRecoveryPolicy;
+  patrolMaxRedirects: number;
   capturePanelVisible: boolean;
   previewWindowSize: [number, number];
   setMode: (mode: CaptureMode) => void;
@@ -42,6 +45,8 @@ interface PreferencesState {
   setPatrolKHops: (hops: number) => void;
   setPatrolThreshold: (threshold: number) => void;
   setPatrolMinMargin: (margin: number) => void;
+  setPatrolRecoveryPolicy: (policy: PatrolRecoveryPolicy) => void;
+  setPatrolMaxRedirects: (count: number) => void;
   setCapturePanelVisible: (visible: boolean) => void;
   setPreviewWindowSize: (size: [number, number]) => void;
 }
@@ -73,6 +78,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       patrolKHops: 1,
       patrolThreshold: 0.85,
       patrolMinMargin: 0.1,
+      patrolRecoveryPolicy: "hint_only",
+      patrolMaxRedirects: 1,
       capturePanelVisible: true,
       previewWindowSize: [1200, 800],
       setMode: (mode) => set({ mode }),
@@ -91,6 +98,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       setPatrolKHops: (hops) => set({ patrolKHops: Number.isFinite(hops) ? Math.min(4, Math.max(1, Math.round(hops))) : 1 }),
       setPatrolThreshold: (threshold) => set({ patrolThreshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : 0.85 }),
       setPatrolMinMargin: (margin) => set({ patrolMinMargin: Number.isFinite(margin) ? Math.min(1, Math.max(0, margin)) : 0.1 }),
+      setPatrolRecoveryPolicy: (patrolRecoveryPolicy) => set({ patrolRecoveryPolicy }),
+      setPatrolMaxRedirects: (count) => set({ patrolMaxRedirects: Number.isFinite(count) ? Math.min(10, Math.max(1, Math.round(count))) : 1 }),
       setCapturePanelVisible: (capturePanelVisible) => set({ capturePanelVisible }),
       setPreviewWindowSize: (size) => set({ previewWindowSize: normalizePreviewWindowSize(size) }),
     }),
@@ -98,7 +107,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       name: "watchdog:settings",
       // saveToDisk and saveDebugImages are session-only: they reset to off
       // on every window open, so they are never written to storage.
-      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolMinMargin, capturePanelVisible, previewWindowSize }) => ({
+      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, capturePanelVisible, previewWindowSize }) => ({
         mode,
         showFps,
         captureEngine,
@@ -112,6 +121,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         patrolKHops,
         patrolThreshold,
         patrolMinMargin,
+        patrolRecoveryPolicy,
+        patrolMaxRedirects,
         capturePanelVisible,
         previewWindowSize,
       }),
@@ -129,6 +140,8 @@ export const usePreferencesStore = create<PreferencesState>()(
           patrolKHops: Number.isFinite(stored.patrolKHops) ? Math.min(4, Math.max(1, Math.round(stored.patrolKHops!))) : 1,
           patrolThreshold: Number.isFinite(stored.patrolThreshold) ? Math.min(1, Math.max(0, stored.patrolThreshold!)) : 0.85,
           patrolMinMargin: Number.isFinite(stored.patrolMinMargin) ? Math.min(1, Math.max(0, stored.patrolMinMargin!)) : 0.1,
+          patrolRecoveryPolicy: stored.patrolRecoveryPolicy === "redirection_only" ? "redirection_only" : "hint_only",
+          patrolMaxRedirects: Number.isFinite(stored.patrolMaxRedirects) ? Math.min(10, Math.max(1, Math.round(stored.patrolMaxRedirects!))) : 1,
           capturePanelVisible: stored.capturePanelVisible ?? true,
           previewWindowSize: normalizePreviewWindowSize(stored.previewWindowSize),
         };

@@ -14,13 +14,13 @@ export interface PatrolChatEvent {
   sample_id: string;
   occurred_at_ms: number;
   sender: "patrol" | "vlm";
-  kind: "capture" | "search" | "reference" | "request" | "response" | "expansion" | "report" | "reference_save" | "error";
+  kind: "capture" | "search" | "reference" | "request" | "response" | "expansion" | "report" | "reference_save" | "error" | "action_evidence" | "action_request" | "action_response" | "action_report" | "format_retry" | "validation_error";
   summary: string;
   node_id: string;
   target: string;
   session: number;
   frame: number;
-  tier: "local" | "expanded" | null;
+  tier: "local" | "expanded" | "action" | null;
   content: PatrolChatContent[];
 }
 

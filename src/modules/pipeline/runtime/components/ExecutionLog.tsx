@@ -97,6 +97,11 @@ function LogEntries() {
     <div key={entry.id} className={`execution-log-entry ${entry.source} ${entry.result || ""}`}>
       <span className="execution-log-icon">{entry.result === "error" ? "✗" : entry.result === "success" ? "✓" : "ℹ"}</span>
       <span className="execution-log-pipeline">{entry.label}</span>
+      {entry.tag && (
+        <span className={`execution-log-tag ${entry.tag}`}>
+          {entry.tag === "hint" ? "HINT ONLY" : "REDIRECT"}
+        </span>
+      )}
       <span className="execution-log-node">{entry.source}</span>
       <span className="execution-log-detail">{entry.detail}</span>
     </div>

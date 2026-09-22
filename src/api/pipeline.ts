@@ -290,8 +290,23 @@ export interface PipelineStatus {
 }
 
 export interface PatrolState {
+  action_attempts: Array<{
+    id: number;
+    node_id: string;
+    action_ids: number[];
+    expected_successors: string[];
+    error_successor: string | null;
+    target: string;
+    source_session: number;
+    before_frame: number;
+    after_frame: number | null;
+    started_ms: number;
+    completed_ms: number | null;
+    effect: PatrolActionEffect;
+  }>;
   actions: Array<{
     id: number;
+    attempt_id: number;
     node_id: string;
     repetition: number;
     action_index: number;
@@ -303,7 +318,7 @@ export interface PatrolState {
     started_ms: number;
     completed_ms: number | null;
     dispatch: { status: "pending" | "sent" | "failed" | "blocked"; reason?: string };
-    effect: { status: "unverified" | "observed"; node_id?: string; session?: number; frame?: number };
+    effect: PatrolActionEffect;
   }>;
   observations: Array<{
     expected_node_id: string;
@@ -324,7 +339,24 @@ export interface PatrolState {
     outcome: string;
     reason: string | null;
   }>;
+  recoveries: Array<{
+    policy: "hint_only" | "redirection_only";
+    failure_node: string;
+    target_node: string | null;
+    decision: "suggest" | "redirect" | "no_recovery" | "inconclusive";
+    confidence: number | null;
+    reason: string;
+    accepted: boolean;
+    redirect_count: number;
+  }>;
 }
+
+export type PatrolActionEffect =
+  | { status: "unverified" }
+  | { status: "achieved"; matched_successor: string; session: number; frame: number; confidence: number; reason: string }
+  | { status: "unchanged" | "in_progress"; session: number; frame: number; confidence: number; reason: string }
+  | { status: "unexpected"; matched_node: string | null; session: number; frame: number; confidence: number; reason: string }
+  | { status: "inconclusive"; session: number; frame: number; reason: string };
 
 export interface PipelineStatusEvent {
   run_id: string;
@@ -395,6 +427,8 @@ export interface PatrolConfig {
   k_hops: number;
   threshold: number;
   min_margin: number;
+  recovery_policy: "hint_only" | "redirection_only";
+  max_redirects: number;
 }
 
 export async function startPipeline(path: string, userParams?: Record<string, Record<string, unknown>>, saveDebugImages?: boolean, detailedTimings?: boolean, patrolConfig?: PatrolConfig, vlmConfig?: VlmConnection): Promise<string> {

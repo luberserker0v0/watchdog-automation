@@ -195,6 +195,83 @@ pub fn set_device(value: &str) -> Result<String, String> {
 
 pub struct OcrRecognizer;
 
+#[derive(Debug, Clone)]
+struct RecognizedTextBlock {
+    text: String,
+    region: Region,
+    confidence: f64,
+}
+
+fn union_region(blocks: &[RecognizedTextBlock]) -> Region {
+    let left = blocks.iter().map(|block| block.region.x).min().unwrap_or(0);
+    let top = blocks.iter().map(|block| block.region.y).min().unwrap_or(0);
+    let right = blocks
+        .iter()
+        .map(|block| block.region.x + block.region.width as i32)
+        .max()
+        .unwrap_or(left);
+    let bottom = blocks
+        .iter()
+        .map(|block| block.region.y + block.region.height as i32)
+        .max()
+        .unwrap_or(top);
+    Region {
+        x: left,
+        y: top,
+        width: right.saturating_sub(left) as u32,
+        height: bottom.saturating_sub(top) as u32,
+    }
+}
+
+fn compact_text_group(blocks: &[RecognizedTextBlock]) -> bool {
+    let union = union_region(blocks);
+    let union_area = u64::from(union.width) * u64::from(union.height);
+    let text_area = blocks
+        .iter()
+        .map(|block| u64::from(block.region.width) * u64::from(block.region.height))
+        .sum::<u64>();
+    text_area > 0 && union_area <= text_area.saturating_mul(8)
+}
+
+/// PaddleOCR may return each wrapped word as its own block. When no individual
+/// block satisfies the expected pattern, form the smallest matching sequence
+/// of nearby blocks so displayed aggregate text and match behavior agree.
+fn composite_text_candidates(
+    blocks: &[RecognizedTextBlock],
+    matcher: &OcrTextMatcher,
+    threshold: f64,
+) -> Vec<MatchCandidate> {
+    const MAX_COMPOSITE_BLOCKS: usize = 8;
+    for span in 2..=blocks.len().min(MAX_COMPOSITE_BLOCKS) {
+        let mut candidates = Vec::new();
+        for window in blocks.windows(span) {
+            if !compact_text_group(window) {
+                continue;
+            }
+            let text = window
+                .iter()
+                .map(|block| block.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let confidence =
+                window.iter().map(|block| block.confidence).sum::<f64>() / window.len() as f64;
+            if matcher.is_match(&text) && confidence >= threshold {
+                candidates.push(MatchCandidate {
+                    rank: candidates.len(),
+                    region: union_region(window),
+                    confidence,
+                    text: Some(text),
+                    selected: false,
+                });
+            }
+        }
+        if !candidates.is_empty() {
+            return candidates;
+        }
+    }
+    Vec::new()
+}
+
 impl RecognizerPlugin for OcrRecognizer {
     fn name(&self) -> &str {
         "OCR"
@@ -247,7 +324,7 @@ impl RecognizerPlugin for OcrRecognizer {
                 PluginError::RecognitionFailed(format!("PaddleOCR recognition failed: {:?}", e))
             })?;
 
-        let mut all_text = Vec::new();
+        let mut recognized_blocks = Vec::new();
         let mut candidates: Vec<MatchCandidate> = Vec::new();
 
         let compiled_re = if let Some(pattern) = expected {
@@ -263,7 +340,18 @@ impl RecognizerPlugin for OcrRecognizer {
             if text.is_empty() {
                 continue;
             }
-            all_text.push(text.clone());
+            let confidence = block.confidence as f64;
+            let region = Region {
+                x: sx as i32 + block.x as i32,
+                y: sy as i32 + block.y as i32,
+                width: block.width as u32,
+                height: block.height as u32,
+            };
+            recognized_blocks.push(RecognizedTextBlock {
+                text: text.clone(),
+                region: region.clone(),
+                confidence,
+            });
 
             let block_matched = if let Some(re) = &compiled_re {
                 re.is_match(&text)
@@ -271,15 +359,7 @@ impl RecognizerPlugin for OcrRecognizer {
                 true
             };
 
-            let confidence = block.confidence as f64;
             if block_matched && confidence >= threshold {
-                let region = Region {
-                    x: sx as i32 + block.x as i32,
-                    y: sy as i32 + block.y as i32,
-                    width: block.width as u32,
-                    height: block.height as u32,
-                };
-
                 candidates.push(MatchCandidate {
                     rank: candidates.len(),
                     region,
@@ -290,12 +370,22 @@ impl RecognizerPlugin for OcrRecognizer {
             }
         }
 
+        if candidates.is_empty() {
+            if let Some(matcher) = &compiled_re {
+                candidates = composite_text_candidates(&recognized_blocks, matcher, threshold);
+            }
+        }
+
         // Assign final ranks
         for (i, c) in candidates.iter_mut().enumerate() {
             c.rank = i;
         }
 
-        let combined_text = all_text.join(" ");
+        let combined_text = recognized_blocks
+            .iter()
+            .map(|block| block.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
         let selected = candidates.first().cloned();
         let matched = selected.is_some();
         let confidence = selected
@@ -317,7 +407,11 @@ impl RecognizerPlugin for OcrRecognizer {
 
 #[cfg(test)]
 mod tests {
-    use super::{make_literal_whitespace_optional, OcrTextMatcher};
+    use super::{
+        composite_text_candidates, make_literal_whitespace_optional, OcrTextMatcher,
+        RecognizedTextBlock,
+    };
+    use crate::modules::pipeline::authoring::models::recognizer::Region;
 
     #[test]
     fn literal_space_matches_ocr_text_with_or_without_the_gap() {
@@ -342,6 +436,91 @@ mod tests {
             make_literal_whitespace_optional(r"^Card[ ]1$"),
             r"^Card[ ]1$"
         );
+    }
+
+    #[test]
+    fn wrapped_words_form_one_bounded_candidate() {
+        let blocks = [
+            ("Arm", 10, 10, 30, 12, 0.91),
+            ("first", 8, 25, 35, 12, 0.87),
+            ("miss", 9, 40, 32, 12, 0.93),
+        ]
+        .into_iter()
+        .map(
+            |(text, x, y, width, height, confidence)| RecognizedTextBlock {
+                text: text.into(),
+                region: Region {
+                    x,
+                    y,
+                    width,
+                    height,
+                },
+                confidence,
+            },
+        )
+        .collect::<Vec<_>>();
+
+        let candidates = composite_text_candidates(
+            &blocks,
+            &OcrTextMatcher::new("^Arm first miss$").unwrap(),
+            0.6,
+        );
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].text.as_deref(), Some("Arm first miss"));
+        assert_eq!(
+            candidates[0].region,
+            Region {
+                x: 8,
+                y: 10,
+                width: 35,
+                height: 42
+            }
+        );
+        assert!((candidates[0].confidence - 0.9033).abs() < 0.001);
+    }
+
+    #[test]
+    fn distant_words_do_not_form_an_action_candidate() {
+        let blocks = vec![
+            RecognizedTextBlock {
+                text: "Arm".into(),
+                region: Region {
+                    x: 0,
+                    y: 0,
+                    width: 30,
+                    height: 12,
+                },
+                confidence: 0.9,
+            },
+            RecognizedTextBlock {
+                text: "first".into(),
+                region: Region {
+                    x: 300,
+                    y: 300,
+                    width: 35,
+                    height: 12,
+                },
+                confidence: 0.9,
+            },
+            RecognizedTextBlock {
+                text: "miss".into(),
+                region: Region {
+                    x: 600,
+                    y: 600,
+                    width: 32,
+                    height: 12,
+                },
+                confidence: 0.9,
+            },
+        ];
+
+        assert!(composite_text_candidates(
+            &blocks,
+            &OcrTextMatcher::new("Arm first miss").unwrap(),
+            0.6,
+        )
+        .is_empty());
     }
 
     #[test]

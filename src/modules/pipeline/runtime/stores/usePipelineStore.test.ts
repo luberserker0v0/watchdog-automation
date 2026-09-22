@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useLogStore } from "../../../capture/stores/useLogStore";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
-import { appendPatrolReport, usePipelineStore } from "./usePipelineStore";
+import { appendPatrolRecovery, appendPatrolReport, usePipelineStore } from "./usePipelineStore";
 
 const pipelineApi = vi.hoisted(() => ({
   loadPipeline: vi.fn(async (path: string) => ({
@@ -42,7 +42,7 @@ beforeEach(() => {
     resizeIssue: null,
   });
   useLogStore.setState({ entries: [], nextId: 1 });
-  usePreferencesStore.setState({ patrolEnabled: false, patrolKHops: 1, patrolThreshold: 0.85, patrolMinMargin: 0.1, llmEndpoint: "", llmModel: "", llmApiKey: "" });
+  usePreferencesStore.setState({ patrolEnabled: false, patrolKHops: 1, patrolThreshold: 0.85, patrolMinMargin: 0.1, patrolRecoveryPolicy: "hint_only", patrolMaxRedirects: 1, llmEndpoint: "", llmModel: "", llmApiKey: "" });
 });
 
 describe("usePipelineStore", () => {
@@ -96,9 +96,14 @@ describe("usePipelineStore", () => {
     await execution;
     expect(pipelineApi.startPipeline).toHaveBeenCalledWith(
       "one.yml", expect.any(Object), expect.any(Boolean), expect.any(Boolean),
-      { enabled: true, cycle_seconds: 30, k_hops: 2, threshold: 0.91, min_margin: 0.12 },
+      { enabled: true, cycle_seconds: 30, k_hops: 2, threshold: 0.91, min_margin: 0.12, recovery_policy: "hint_only", max_redirects: 1 },
       { endpoint: "http://localhost:8000/v1/chat/completions", model: "vision", api_key: "session-key" },
     );
+    expect(useLogStore.getState().entries).toContainEqual(expect.objectContaining({
+      label: "Patrol active",
+      tag: "hint",
+      detail: expect.stringContaining("advisory only"),
+    }));
     vi.useRealTimers();
   });
 
@@ -177,6 +182,53 @@ describe("usePipelineStore", () => {
     });
 
     expect(useLogStore.getState().entries).toHaveLength(0);
+  });
+
+  it("formats action-effect patrol reports separately from state matches", () => {
+    appendPatrolReport({
+      run_id: "run-action", trigger: "cycle", task: "action_effect", action_attempt_id: 7,
+      expected_node_id: "ClickLogin", matched_node_id: null, target: "window", session: 2,
+      frame: 15, outcome: "unchanged", reason: "Login form remains visible",
+    });
+
+    const entries = useLogStore.getState().entries;
+    expect(entries[entries.length - 1]).toMatchObject({
+      result: "info",
+      label: "Patrol · Action check",
+      detail: "ClickLogin · no visible change",
+    });
+  });
+
+  it("shows a declared action error state without raw capture details", () => {
+    appendPatrolReport({
+      run_id: "run-error", trigger: "failure", task: "action_effect", action_attempt_id: 4,
+      expected_node_id: "ClickLogin", matched_node_id: "LoginError", target: "Window { hwnd: 1 }",
+      session: 1, frame: 51, outcome: "unexpected", reason: "Invalid account or password is visible",
+    });
+
+    const entries = useLogStore.getState().entries;
+    expect(entries[entries.length - 1]).toMatchObject({
+      label: "Patrol · Action check",
+      result: "error",
+      detail: "Before failure · ClickLogin → LoginError · unexpected state",
+    });
+  });
+
+  it("formats recovery hints and accepted redirects", () => {
+    appendPatrolRecovery({
+      run_id: "hint", policy: "hint_only", failure_node: "LoginError",
+      target_node: "InputPassword", decision: "suggest", confidence: 0.91,
+      reason: "Correct the password", accepted: false, redirect_count: 0, max_redirects: 1,
+    });
+    appendPatrolRecovery({
+      run_id: "redirect", policy: "redirection_only", failure_node: "LoginError",
+      target_node: "InputPassword", decision: "redirect", confidence: 0.92,
+      reason: "Login form remains visible", accepted: true, redirect_count: 1, max_redirects: 1,
+    });
+    expect(useLogStore.getState().entries.slice(-2)).toMatchObject([
+      { label: "Patrol · Recovery hint", tag: "hint", result: "info", detail: expect.stringContaining("advisory only; routing unchanged") },
+      { label: "Patrol · Redirect", tag: "redirect", result: "success", detail: expect.stringContaining("accepted · 1/1") },
+    ]);
   });
 
   it("adds a GUI log entry when pipeline startup fails", async () => {

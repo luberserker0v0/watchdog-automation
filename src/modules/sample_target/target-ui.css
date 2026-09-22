@@ -965,6 +965,39 @@ html, body, #root {
   animation: tgt-fadein 0.2s ease;
 }
 
+/* ── Patrol recovery test ── */
+.target-recovery-lab {
+  padding: 12px 14px;
+  border: 1.5px solid var(--tgt-border);
+  border-radius: var(--tgt-radius);
+  background: var(--tgt-card);
+  box-shadow: var(--tgt-card-shadow);
+}
+
+.target-recovery-lab p {
+  margin: 6px 0 12px;
+  color: var(--tgt-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.target-recovery-status {
+  color: var(--tgt-primary);
+  font-size: 12px;
+}
+
+.target-recovery-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.target-recovery-actions > button {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+}
+
 /* ── Vertical Swipe ── */
 .target-swipe-vertical {
   display: flex;
