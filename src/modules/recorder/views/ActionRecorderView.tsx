@@ -83,11 +83,12 @@ export default function ActionRecorderView() {
           </div>
           <div className="recorder-control-group recorder-draft-controls">
             <button className={`recorder-control quiet ${feedback === "copied" ? "confirmed" : ""}`} disabled={!actions.length} onClick={() => void copy()} title="Copy only the pipeline action array"><RecorderIcon name="copy" /><span>{feedback === "copied" ? "Copied!" : "Copy JSON"}</span></button>
-            <button className={`recorder-control quiet ${feedback === "exported" ? "confirmed" : ""}`} disabled={!actions.length} onClick={exportDraft} title="Download the complete recording draft"><RecorderIcon name="export" /><span>{feedback === "exported" ? "Exported!" : "Export"}</span></button>
+            <button className={`recorder-control quiet ${feedback === "exported" ? "confirmed" : ""}`} disabled={!actions.length} onClick={exportDraft} title="Download the complete recording draft to the system Downloads folder"><RecorderIcon name="export" /><span>{feedback === "exported" ? "Saved to Downloads" : "Export"}</span></button>
             <button className="recorder-control quiet destructive" disabled={status.state !== "idle" || !actions.length || pending !== null} onClick={() => void run("clear", clear)} title={status.state !== "idle" ? "Stop recording before clearing the draft" : "Clear all recorded actions"}><RecorderIcon name="trash" /><span>{pending === "clear" ? "Clearing…" : "Clear"}</span></button>
           </div>
         </div>
       </header>
+      <div className="recorder-export-note">Export saves a timestamped JSON draft to your system Downloads folder.</div>
       {(error || hotkeyError) && <div className="recorder-alert">{error || hotkeyError}</div>}
       {!actions.length ? (
         <div className="recorder-empty">Select a capture target, then use Start recording or the configured global shortcut.</div>

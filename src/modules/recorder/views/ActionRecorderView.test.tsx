@@ -19,6 +19,7 @@ it("formats a masked action and lets the user remove the draft", async () => {
   render(<ActionRecorderView />);
   expect(screen.getByText("Typed text (masked)")).toBeTruthy();
   expect(screen.getByText("Printable text was masked.")).toBeTruthy();
+  expect(screen.getByText(/system Downloads folder/)).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Remove" }));
   expect(screen.getByText(/Select a capture target/)).toBeTruthy();
 });

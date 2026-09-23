@@ -9,7 +9,7 @@
 .recording-status-bar button { border:1px solid currentColor; border-radius:6px; background:rgba(255,255,255,.7); color:inherit; padding:5px 10px; cursor:pointer; transition:transform .14s ease,background .14s ease,box-shadow .14s ease; }
 .recording-status-bar button:hover { background:#fff; box-shadow:0 2px 7px rgba(15,23,42,.13); transform:translateY(-1px); }
 .recording-status-bar button:active { box-shadow:none; transform:translateY(0) scale(.97); }
-.recorder-view { height:100%; display:flex; flex-direction:column; background:#f7f8fc; overflow:hidden; }
+.recorder-view { height:100%; min-height:0; display:flex; flex-direction:column; background:#f7f8fc; overflow:hidden; }
 .recorder-header { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 22px; background:white; border-bottom:1px solid #e5e7eb; }
 .recorder-heading { display:flex; align-items:center; gap:10px; min-width:0; }
 .recorder-heading-mark { width:34px; height:34px; flex:0 0 34px; display:grid; place-items:center; border-radius:10px; background:#eef2ff; color:#6366f1; }
@@ -34,9 +34,14 @@
 .recorder-control.confirmed { color:#047857; background:#ecfdf5; border-color:#a7f3d0; }
 .recorder-control.destructive:hover:not(:disabled) { color:#b91c1c; background:#fff1f2; border-color:#fecdd3; }
 .recorder-control:disabled { opacity:.42; cursor:not-allowed; transform:none; box-shadow:none; }
+.recorder-export-note { padding:7px 22px; color:#64748b; background:#f8fafc; border-bottom:1px solid #e5e7eb; font-size:11px; }
 .recorder-alert { margin:14px 20px 0; padding:10px 12px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; border-radius:8px; font-size:12px; }
 .recorder-empty { margin:auto; color:#64748b; font-size:13px; }
-.recorder-timeline { flex:1; overflow:auto; padding:18px 22px 40px; display:flex; flex-direction:column; gap:10px; }
+.recorder-timeline { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-gutter:stable; padding:18px 22px 40px; display:flex; flex-direction:column; gap:10px; }
+.recorder-timeline::-webkit-scrollbar { width:10px; }
+.recorder-timeline::-webkit-scrollbar-track { background:transparent; }
+.recorder-timeline::-webkit-scrollbar-thumb { background:#cbd5e1; border:3px solid transparent; border-radius:999px; background-clip:padding-box; }
+.recorder-timeline::-webkit-scrollbar-thumb:hover { background:#94a3b8; background-clip:padding-box; }
 .recorded-action { display:grid; grid-template-columns:80px 1fr; gap:14px; background:white; border:1px solid #e5e7eb; border-radius:9px; padding:12px; transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease; }
 .recorded-action:hover { border-color:#c7d2fe; box-shadow:0 4px 14px rgba(15,23,42,.06); transform:translateY(-1px); }
 .recorded-action-time { color:#6366f1; font:600 12px monospace; }
@@ -52,7 +57,7 @@
 @media (max-width:950px) { .recorder-header{align-items:flex-start;flex-direction:column}.recorder-toolbar{width:100%;justify-content:space-between;flex-wrap:wrap} }
 @media (prefers-reduced-motion:reduce) { .recorder-heading-mark.active{animation:none}.recorder-control,.recorded-action,.recorded-action-remove,.recording-status-bar button{transition:none} }
 @media (prefers-color-scheme: dark) {
-  .recorder-view{background:#202020}.recorder-header,.recorded-action{background:#2b2b2b;border-color:#444}.recorder-header p,.recorder-empty{color:#aaa}.recorded-action-source{color:#888}
+  .recorder-view{background:#202020}.recorder-header,.recorded-action{background:#2b2b2b;border-color:#444}.recorder-header p,.recorder-empty{color:#aaa}.recorded-action-source{color:#888}.recorder-export-note{color:#aaa;background:#252525;border-color:#444}.recorder-timeline::-webkit-scrollbar-thumb{background:#555;background-clip:padding-box}
   .recorder-heading-mark{background:#312e81;color:#c7d2fe}.recorder-heading-mark.active{background:#4c1d1d;color:#fca5a5}.recorder-action-count{background:#312e81;color:#c7d2fe}
   .recorder-control-group{background:#252525;border-color:#444}.recorder-control{color:#cbd5e1}.recorder-control:hover:not(:disabled){color:#f8fafc;background:#383838;border-color:#555}.recorder-control.secondary{color:#fde68a;background:#422006;border-color:#713f12}.recorder-control.confirmed{color:#6ee7b7;background:#064e3b;border-color:#047857}.recorder-control.destructive:hover:not(:disabled),.recorded-action-remove:hover{color:#fca5a5;background:#4c1d1d;border-color:#7f1d1d}
   .recorded-action:hover{border-color:#6366f1;box-shadow:0 4px 14px rgba(0,0,0,.2)}
