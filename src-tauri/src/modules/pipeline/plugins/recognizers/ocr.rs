@@ -1,10 +1,17 @@
+mod candidates;
+mod matcher;
+
+use candidates::{composite_text_candidates, RecognizedTextBlock};
+#[cfg(test)]
+use matcher::make_literal_whitespace_optional;
+use matcher::OcrTextMatcher;
+
 use crate::modules::pipeline::authoring::models::recognizer::{
     MatchCandidate, MatchResult, Recognition, Region,
 };
 use crate::modules::pipeline::plugins::shared::resolve_recognition_roi;
 use crate::modules::pipeline::plugins::{PluginError, RecognizerPlugin};
 use image::DynamicImage;
-use regex_lite::Regex;
 use std::sync::Mutex;
 
 use paddleocr_rs_onnx::{AccelerationDevice, OcrEngine};
@@ -22,70 +29,6 @@ static ENGINE: Mutex<OcrEngineState> = Mutex::new(OcrEngineState {
 const DET_MODEL: &[u8] = include_bytes!("../../../../../resources/models/ocr/det.onnx");
 const REC_MODEL: &[u8] = include_bytes!("../../../../../resources/models/ocr/rec.onnx");
 const KEYS_FILE: &[u8] = include_bytes!("../../../../../resources/models/ocr/keys.txt");
-
-struct OcrTextMatcher {
-    pattern: Regex,
-    whitespace_tolerant_pattern: Option<Regex>,
-}
-
-impl OcrTextMatcher {
-    fn new(pattern: &str) -> Result<Self, regex_lite::Error> {
-        let whitespace_tolerant = make_literal_whitespace_optional(pattern);
-        Ok(Self {
-            pattern: Regex::new(pattern)?,
-            whitespace_tolerant_pattern: (whitespace_tolerant != pattern)
-                .then(|| Regex::new(&whitespace_tolerant))
-                .transpose()?,
-        })
-    }
-
-    fn is_match(&self, text: &str) -> bool {
-        self.pattern.is_match(text)
-            || self
-                .whitespace_tolerant_pattern
-                .as_ref()
-                .is_some_and(|pattern| pattern.is_match(text))
-    }
-}
-
-/// OCR models may omit a visible word gap from the decoded text. Make only
-/// literal whitespace in a user pattern optional; explicit regex constructs
-/// such as `\s+` and spaces inside character classes retain their semantics.
-fn make_literal_whitespace_optional(pattern: &str) -> String {
-    let mut result = String::with_capacity(pattern.len());
-    let mut chars = pattern.chars().peekable();
-    let mut in_character_class = false;
-
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            result.push(ch);
-            if let Some(escaped) = chars.next() {
-                result.push(escaped);
-            }
-            continue;
-        }
-
-        match ch {
-            '[' => {
-                in_character_class = true;
-                result.push(ch);
-            }
-            ']' if in_character_class => {
-                in_character_class = false;
-                result.push(ch);
-            }
-            _ if ch.is_whitespace() && !in_character_class => {
-                while chars.peek().is_some_and(|next| next.is_whitespace()) {
-                    chars.next();
-                }
-                result.push_str(r"\s*");
-            }
-            _ => result.push(ch),
-        }
-    }
-
-    result
-}
 
 fn init_ort_runtime() -> Result<(), String> {
     let executable = std::env::current_exe()
@@ -194,83 +137,6 @@ pub fn set_device(value: &str) -> Result<String, String> {
 }
 
 pub struct OcrRecognizer;
-
-#[derive(Debug, Clone)]
-struct RecognizedTextBlock {
-    text: String,
-    region: Region,
-    confidence: f64,
-}
-
-fn union_region(blocks: &[RecognizedTextBlock]) -> Region {
-    let left = blocks.iter().map(|block| block.region.x).min().unwrap_or(0);
-    let top = blocks.iter().map(|block| block.region.y).min().unwrap_or(0);
-    let right = blocks
-        .iter()
-        .map(|block| block.region.x + block.region.width as i32)
-        .max()
-        .unwrap_or(left);
-    let bottom = blocks
-        .iter()
-        .map(|block| block.region.y + block.region.height as i32)
-        .max()
-        .unwrap_or(top);
-    Region {
-        x: left,
-        y: top,
-        width: right.saturating_sub(left) as u32,
-        height: bottom.saturating_sub(top) as u32,
-    }
-}
-
-fn compact_text_group(blocks: &[RecognizedTextBlock]) -> bool {
-    let union = union_region(blocks);
-    let union_area = u64::from(union.width) * u64::from(union.height);
-    let text_area = blocks
-        .iter()
-        .map(|block| u64::from(block.region.width) * u64::from(block.region.height))
-        .sum::<u64>();
-    text_area > 0 && union_area <= text_area.saturating_mul(8)
-}
-
-/// PaddleOCR may return each wrapped word as its own block. When no individual
-/// block satisfies the expected pattern, form the smallest matching sequence
-/// of nearby blocks so displayed aggregate text and match behavior agree.
-fn composite_text_candidates(
-    blocks: &[RecognizedTextBlock],
-    matcher: &OcrTextMatcher,
-    threshold: f64,
-) -> Vec<MatchCandidate> {
-    const MAX_COMPOSITE_BLOCKS: usize = 8;
-    for span in 2..=blocks.len().min(MAX_COMPOSITE_BLOCKS) {
-        let mut candidates = Vec::new();
-        for window in blocks.windows(span) {
-            if !compact_text_group(window) {
-                continue;
-            }
-            let text = window
-                .iter()
-                .map(|block| block.text.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
-            let confidence =
-                window.iter().map(|block| block.confidence).sum::<f64>() / window.len() as f64;
-            if matcher.is_match(&text) && confidence >= threshold {
-                candidates.push(MatchCandidate {
-                    rank: candidates.len(),
-                    region: union_region(window),
-                    confidence,
-                    text: Some(text),
-                    selected: false,
-                });
-            }
-        }
-        if !candidates.is_empty() {
-            return candidates;
-        }
-    }
-    Vec::new()
-}
 
 impl RecognizerPlugin for OcrRecognizer {
     fn name(&self) -> &str {
