@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { releaseRecorderHotkeys } from "../../recorder/services/recorderHotkeys";
 import { useRecorderStore } from "../../recorder/stores/useRecorderStore";
+import { useTranslation } from "react-i18next";
 
 interface ShortcutCaptureInputProps {
   id: string;
@@ -36,6 +37,7 @@ export function formatShortcut(event: Pick<KeyboardEvent, "key" | "code" | "ctrl
 }
 
 export default function ShortcutCaptureInput({ id, label, value, disabled = false, onCapture }: ShortcutCaptureInputProps) {
+  const { t } = useTranslation();
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setShortcutCaptureActive = useRecorderStore((state) => state.setShortcutCaptureActive);
@@ -58,7 +60,7 @@ export default function ShortcutCaptureInput({ id, label, value, disabled = fals
       }
       const shortcut = formatShortcut(event);
       if (!shortcut) {
-        setError("Use a modifier combination or a function key.");
+        setError(t("settings.shortcutInvalid"));
         return;
       }
       const validation = onCapture(shortcut);
@@ -71,23 +73,23 @@ export default function ShortcutCaptureInput({ id, label, value, disabled = fals
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [capturing, onCapture, setShortcutCaptureActive]);
+  }, [capturing, onCapture, setShortcutCaptureActive, t]);
 
   useEffect(() => () => setShortcutCaptureActive(false), [setShortcutCaptureActive]);
 
   return (
     <div className="shortcut-capture">
       <input id={id} className={`settings-item-control shortcut-capture-value ${capturing ? "capturing" : ""}`}
-        aria-label={label} readOnly value={capturing ? "Press shortcut… (Esc to cancel)" : value} />
+        aria-label={label} readOnly value={capturing ? t("settings.shortcutPrompt") : value} />
       <button className="settings-action" type="button" disabled={disabled || capturing}
-        aria-label={`Record ${label}`}
+        aria-label={t("settings.shortcutRecordLabel", { label })}
         onClick={async () => {
           setError(null);
           setShortcutCaptureActive(true);
           await releaseRecorderHotkeys();
           setCapturing(true);
         }}>
-        {capturing ? "Listening…" : "Record"}
+        {capturing ? t("settings.shortcutListening") : t("settings.shortcutRecord")}
       </button>
       {error && <span className="settings-item-error" role="alert">{error}</span>}
     </div>

@@ -315,38 +315,38 @@ export default function SettingsView() {
           <h3 className="settings-section-title">{t("settings.recorder")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="recorder-toggle-hotkey">Start / Stop shortcut</label>
-              <ShortcutCaptureInput id="recorder-toggle-hotkey" label="Start / Stop shortcut"
+              <label className="settings-item-label" htmlFor="recorder-toggle-hotkey">{t("settings.startStopShortcut")}</label>
+              <ShortcutCaptureInput id="recorder-toggle-hotkey" label={t("settings.startStopShortcut")}
                 value={recorderStartStopHotkey} disabled={recorderState !== "idle"}
                 onCapture={(shortcut) => {
-                  if (shortcut.toLowerCase() === recorderPauseHotkey.toLowerCase()) return "Shortcuts must be different.";
+                  if (shortcut.toLowerCase() === recorderPauseHotkey.toLowerCase()) return t("settings.shortcutDifferent");
                   setRecorderStartStopHotkey(shortcut);
                   return null;
                 }} />
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="recorder-pause-hotkey">Pause / Resume shortcut</label>
-              <ShortcutCaptureInput id="recorder-pause-hotkey" label="Pause / Resume shortcut"
+              <label className="settings-item-label" htmlFor="recorder-pause-hotkey">{t("settings.pauseShortcut")}</label>
+              <ShortcutCaptureInput id="recorder-pause-hotkey" label={t("settings.pauseShortcut")}
                 value={recorderPauseHotkey} disabled={recorderState !== "idle"}
                 onCapture={(shortcut) => {
-                  if (shortcut.toLowerCase() === recorderStartStopHotkey.toLowerCase()) return "Shortcuts must be different.";
+                  if (shortcut.toLowerCase() === recorderStartStopHotkey.toLowerCase()) return t("settings.shortcutDifferent");
                   setRecorderPauseHotkey(shortcut);
                   return null;
                 }} />
               {hotkeyRegistrationError && <span className="settings-item-error">{hotkeyRegistrationError}</span>}
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="recorder-capture-text">Capture typed text</label>
+              <label className="settings-item-label" htmlFor="recorder-capture-text">{t("settings.captureText")}</label>
               <label className="settings-toggle">
                 <input id="recorder-capture-text" type="checkbox" checked={recorderCaptureText}
                   onChange={(event) => setRecorderCaptureText(event.target.checked)} />
                 <span className="settings-toggle-slider" />
               </label>
-              <span className="settings-item-hint">Off by default. Printable keys become a masked placeholder; enable only when recording non-sensitive text.</span>
+              <span className="settings-item-hint">{t("settings.captureTextHint")}</span>
             </div>
             <div className="settings-item">
-              <span className="settings-item-label">Platform support</span>
-              <span className="settings-item-text">Windows · macOS/Linux planned</span>
+              <span className="settings-item-label">{t("settings.platform")}</span>
+              <span className="settings-item-text">{t("settings.platforms")}</span>
             </div>
           </div>
         </div>

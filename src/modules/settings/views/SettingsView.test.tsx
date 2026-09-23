@@ -70,5 +70,9 @@ it("switches the GUI to Traditional Chinese and persists the choice", async () =
   render(<SettingsView />);
   await user.selectOptions(screen.getByLabelText("Language"), "zh-TW");
   expect(await screen.findByRole("heading", { name: "設定" })).toBeTruthy();
+  expect(screen.getByLabelText("開始 / 停止快捷鍵")).toBeTruthy();
+  expect(screen.getByLabelText("暫停 / 繼續快捷鍵")).toBeTruthy();
+  expect(screen.getByText(/可列印按鍵會成為遮罩佔位符/)).toBeTruthy();
+  expect(screen.getByText("Windows · macOS/Linux 規劃中")).toBeTruthy();
   expect(localStorage.getItem("watchdog:language")).toBe("zh-TW");
 });
