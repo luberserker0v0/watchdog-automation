@@ -41,7 +41,7 @@ pub async fn start_stream(
 
     state.0.acquire_manual_owner().await?;
     if let Err(error) = state.0.start(app, fps, target, capture_engine).await {
-        state.0.release_owner("manual", None).await;
+        state.0.release_manual_owner().await;
         return Err(error);
     }
     Ok(())
@@ -54,7 +54,7 @@ pub async fn stop_stream(
 ) -> Result<(), String> {
     state.0.reject_if_pipeline_owned().await?;
     state.0.stop_and_emit(&app, "user_stopped").await;
-    state.0.release_owner("manual", None).await;
+    state.0.release_manual_owner().await;
     Ok(())
 }
 

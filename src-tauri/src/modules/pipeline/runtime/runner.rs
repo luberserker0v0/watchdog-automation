@@ -537,9 +537,7 @@ async fn start_pipeline_inner(
             )
             .await
         {
-            stream_service
-                .release_owner("pipeline", Some(&run_id))
-                .await;
+            stream_service.release_pipeline_owner(&run_id).await;
             return Err(restore_on_start_error(
                 error.into(),
                 window_restore.as_ref(),
@@ -595,9 +593,7 @@ async fn start_pipeline_inner(
                 stream_service
                     .stop_and_emit(&app, "pipeline_start_failed")
                     .await;
-                stream_service
-                    .release_owner("pipeline", Some(&run_id))
-                    .await;
+                stream_service.release_pipeline_owner(&run_id).await;
                 return Err(restore_on_start_error(error, window_restore.as_ref()));
             }
         }
@@ -627,9 +623,7 @@ async fn start_pipeline_inner(
         stream_service
             .stop_and_emit(&app, "pipeline_start_failed")
             .await;
-        stream_service
-            .release_owner("pipeline", Some(&run_id))
-            .await;
+        stream_service.release_pipeline_owner(&run_id).await;
         return Err(restore_on_start_error(
             error.into(),
             window_restore.as_ref(),
@@ -688,9 +682,7 @@ async fn start_pipeline_inner(
                 result.error.as_deref().unwrap_or("no failure diagnostic")
             );
         }
-        stream_service
-            .release_owner("pipeline", Some(&run_id_clone))
-            .await;
+        stream_service.release_pipeline_owner(&run_id_clone).await;
 
         if let Some(snapshot) = &window_restore {
             if let Err(error) =

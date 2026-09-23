@@ -12,6 +12,12 @@ use crate::modules::capture::services::bounds::{
 };
 use crate::{FRAME_CACHE, STREAM_FRAME};
 
+mod models;
+mod ownership;
+
+pub use models::{CaptureEngine, StreamFrame, StreamStatus, StreamTarget};
+use ownership::StreamOwner;
+
 #[cfg(target_os = "windows")]
 use crate::modules::capture::services::capture_dxgi::DxgiCapture;
 #[cfg(target_os = "windows")]
@@ -30,60 +36,7 @@ use windows_capture::settings::{
     MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
 };
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum CaptureEngine {
-    Gdi,
-    #[cfg(target_os = "windows")]
-    Dxgi,
-    #[default]
-    Graphics,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct StreamFrame {
-    pub bytes: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
-    pub target: StreamTarget,
-    pub bounds: Option<CaptureBounds>,
-    #[serde(skip)]
-    pub captured_at: Instant,
-    pub session_id: u64,
-    pub sequence: u64,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct StreamStatus {
-    pub is_streaming: bool,
-    pub fps: u32,
-    pub target_type: String,
-    pub target_index: usize,
-    pub start_time: Option<u64>,
-    pub engine: String,
-    pub capture_area: String,
-    pub owner: String,
-    pub owner_id: Option<String>,
-    pub session_id: u64,
-    pub frame_width: Option<u32>,
-    pub frame_height: Option<u32>,
-    pub client_width: Option<u32>,
-    pub client_height: Option<u32>,
-}
-
 static FRAME_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum StreamTarget {
-    Screen {
-        index: usize,
-    },
-    Window {
-        hwnd: usize,
-        #[serde(default)]
-        capture_area: CaptureArea,
-    },
-}
 
 #[derive(Debug, Clone, serde::Serialize)]
 struct StreamStoppedPayload {
@@ -512,7 +465,7 @@ pub struct StreamService {
     engine: Arc<Mutex<CaptureEngine>>,
     sender: broadcast::Sender<StreamFrame>,
     start_time: Arc<Mutex<Option<tokio::time::Instant>>>,
-    owner: Mutex<(String, Option<String>)>,
+    owner: Mutex<StreamOwner>,
 }
 
 impl StreamService {
@@ -529,7 +482,7 @@ impl StreamService {
             engine: Arc::new(Mutex::new(CaptureEngine::Graphics)),
             sender,
             start_time: Arc::new(Mutex::new(None)),
-            owner: Mutex::new(("none".to_string(), None)),
+            owner: Mutex::new(StreamOwner::None),
         }
     }
 
@@ -567,54 +520,25 @@ impl StreamService {
 
     pub async fn reject_if_pipeline_owned(&self) -> Result<(), String> {
         let owner = self.owner.lock().await;
-        if owner.0 == "pipeline" {
-            return Err(format!(
-                "Capture is owned by pipeline '{}'; stop it before using this tool",
-                owner.1.as_deref().unwrap_or("unknown")
-            ));
-        }
-        Ok(())
+        owner.reject_pipeline()
     }
 
     pub async fn acquire_pipeline_owner(&self, run_id: &str) -> Result<(), String> {
         let mut owner = self.owner.lock().await;
-        if owner.0 == "manual" {
-            return Err(
-                "Capture is owned by manual streaming; stop it before starting a pipeline"
-                    .to_string(),
-            );
-        }
-        if owner.0 == "pipeline" {
-            return Err(format!(
-                "Capture is owned by pipeline '{}'; stop it before starting another pipeline",
-                owner.1.as_deref().unwrap_or("unknown")
-            ));
-        }
-        *owner = ("pipeline".to_string(), Some(run_id.to_string()));
-        Ok(())
+        owner.acquire_pipeline(run_id)
     }
 
     pub async fn acquire_manual_owner(&self) -> Result<(), String> {
         let mut owner = self.owner.lock().await;
-        if owner.0 == "pipeline" {
-            return Err(format!(
-                "Capture is owned by pipeline '{}'; stop it before using this tool",
-                owner.1.as_deref().unwrap_or("unknown")
-            ));
-        }
-        *owner = ("manual".to_string(), None);
-        Ok(())
+        owner.acquire_manual()
     }
 
-    pub async fn set_owner(&self, kind: &str, id: Option<String>) {
-        *self.owner.lock().await = (kind.to_string(), id);
+    pub async fn release_manual_owner(&self) {
+        self.owner.lock().await.release_manual();
     }
 
-    pub async fn release_owner(&self, kind: &str, id: Option<&str>) {
-        let mut owner = self.owner.lock().await;
-        if owner.0 == kind && id.map_or(true, |value| owner.1.as_deref() == Some(value)) {
-            *owner = ("none".to_string(), None);
-        }
+    pub async fn release_pipeline_owner(&self, run_id: &str) {
+        self.owner.lock().await.release_pipeline(run_id);
     }
 
     pub async fn start(
@@ -1072,7 +996,7 @@ impl StreamService {
         let fps = *self.fps.lock().await;
         let start_time = *self.start_time.lock().await;
         let engine = self.engine.lock().await.clone();
-        let owner = self.owner.lock().await.clone();
+        let owner = self.owner.lock().await.status();
         let session_id = self.session_generation.load(Ordering::Acquire);
 
         let (target_type, target_index, capture_area) = match &target {
@@ -1121,7 +1045,7 @@ impl StreamService {
             start_time: start_time_ms,
             engine: engine_str,
             capture_area,
-            owner: owner.0,
+            owner: owner.0.to_string(),
             owner_id: owner.1,
             session_id,
             frame_width: cached_frame.map(|size| size.0),
@@ -1149,7 +1073,7 @@ mod ownership_tests {
         assert!(service.acquire_pipeline_owner("run-1").await.is_err());
         assert_eq!(service.status().await.owner, "manual");
 
-        service.release_owner("manual", None).await;
+        service.release_manual_owner().await;
         service.acquire_pipeline_owner("run-1").await.unwrap();
         assert_eq!(service.status().await.owner_id.as_deref(), Some("run-1"));
     }
