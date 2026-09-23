@@ -750,6 +750,37 @@ flowchart TD
 
 Note: Each level of children uses its own parent's timeout quota.
 
+### Patrol recovery redirects
+
+Patrol recovery policy is configured in Settings rather than pipeline
+metadata. `hint_only` publishes an advisory candidate and never changes the
+execution pointer. `redirection_only` may resume the same run at a VLM-selected
+normal node after the engine validates confidence, capture identity, node
+eligibility, redirect count, and route uniqueness.
+
+An accepted redirect starts a new execution epoch at the selected node:
+
+- failure and active child-routing state are cleared;
+- the selected node receives a fresh recognition-attempt counter and timeout;
+- subsequent child routing receives a fresh parent timeout quota;
+- accumulated hit counts are cleared, making nodes limited by `max_hit`
+  eligible again; and
+- action repetitions start normally from the first repetition.
+
+The run ID, completed step history, effective parameters, capture session,
+Patrol evidence, accepted redirect count, and accepted failure-to-target routes
+remain unchanged. The same route cannot be accepted twice, and
+`max_redirects` remains consumed across execution epochs.
+
+When a parent's children exhaust their shared quota, the failure belongs to
+the parent because its `timeout` owns that decision. Diagnostics also name the
+last child candidate that did not match, for example:
+
+```text
+Node 'ApplyRecovery': All child candidates timed out;
+last candidate 'VerifyRecovered' did not match
+```
+
 ---
 
 ## Node Label vs ID (Config Lookup)

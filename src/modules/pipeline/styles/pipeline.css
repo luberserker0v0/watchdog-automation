@@ -1096,6 +1096,9 @@
   font-size: 12px;
   color: #666;
   margin-left: 8px;
+  display: inline-block;
+  width: 120px;
+  text-align: right;
 }
 
 /* Header Layout */
