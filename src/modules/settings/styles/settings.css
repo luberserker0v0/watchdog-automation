@@ -83,6 +83,13 @@ input.settings-item-control {
   margin-top: 2px;
 }
 
+.settings-item-error { color:#b91c1c; font-size:11px; }
+.settings-action { padding:6px 10px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:#334155; cursor:pointer; }
+.shortcut-capture { display:flex; align-items:center; gap:8px; flex:1; flex-wrap:wrap; }
+.shortcut-capture-value { font-family:monospace; }
+.shortcut-capture-value.capturing { border-color:#6366f1; background:#eef2ff; color:#4338ca; }
+.settings-action:disabled { opacity:.5; cursor:not-allowed; }
+
 /* Toggle Switch */
 .settings-toggle {
   position: relative;

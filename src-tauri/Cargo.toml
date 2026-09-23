@@ -50,6 +50,7 @@ lazy_static = "1"
 tokio = { version = "1", features = ["full"] }
 thiserror = "1"
 paddleocr_rs_onnx = { path = "paddleocr_rs_onnx_patch", features = ["directml"] }
+tauri-plugin-notification = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-capture = "2.0.1"
@@ -63,6 +64,9 @@ windows = { version = "0.62.2", features = [
     "Win32_System_ProcessStatus",
 ] }
 windows-core = "0.62"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-global-shortcut = "2"
 
 [dependencies.ort]
 version = "=2.0.0-rc.13"

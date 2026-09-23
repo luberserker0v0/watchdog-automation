@@ -60,6 +60,12 @@ The pipeline arms one harmless missed click. A successful walkthrough reports
 `Retry required`, accepts a redirect to `ApplyRecovery`, retries the click, and
 finishes after the status becomes `Recovered`.
 
+This walkthrough passed against a live OpenAI-compatible VLM on 2026-09-22.
+The native log showed `policy='redirection_only'`, `accepted=true`, a second
+`ApplyRecovery` execution, and completion of the original run with seven
+recorded steps. The Execution Log displays a `REDIRECT` badge; `hint_only`
+runs display `HINT ONLY` and explicitly state that routing is unchanged.
+
 ### Frontend only
 
 ```powershell
@@ -67,6 +73,21 @@ npm run dev
 ```
 
 This starts Vite without the native Tauri backend. Screens, windows, streaming, filesystem access, and other Tauri commands will not work in a normal browser.
+
+## Task Notifier and Action Recorder
+
+Task Notifier uses the Tauri notification plugin. Enable it in Settings before
+expecting completion notifications. On Windows, proper application name and
+icon behavior requires an installed bundle; development notifications may use
+the PowerShell host identity and icon. This is a development-mode limitation,
+not the notification title supplied by WatchDog.
+
+Action Recorder currently implements native observation on Windows. Select a
+screen or foreground window in Capture, then start with the configured global
+shortcut or the Action Recorder view. The persistent bar remains visible while
+recording or paused. Windows injected-input flags exclude WatchDog-generated
+actions. See [Action Recorder](action-recorder.md) for controls, privacy, draft
+format, and current limitations.
 
 ## Tests and frontend builds
 
@@ -87,6 +108,9 @@ npm run build
 cargo test --manifest-path src-tauri\Cargo.toml
 cargo fmt --manifest-path src-tauri\Cargo.toml -- --check
 ```
+
+The 2026-09-23 verification run completed 140 frontend tests and 180 native
+Rust tests; one OCR model initialization test remained explicitly ignored.
 
 `npm run build` creates files under `dist\`; it does not rebuild any `.exe` file.
 

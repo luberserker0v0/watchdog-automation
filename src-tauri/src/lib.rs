@@ -89,6 +89,8 @@ fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .register_uri_scheme_protocol("watchdog", |_ctx, request| {
             let path = request.uri().path();
             if path == "/frame" {
@@ -135,6 +137,7 @@ fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
             Ok(())
         })
         .manage(StreamState(stream_service))
+        .manage(modules::recorder::service::RecorderService::default())
         .invoke_handler(tauri::generate_handler![
             modules::capture::commands::screen::get_screens,
             modules::capture::commands::screen::capture_screen,
@@ -168,6 +171,12 @@ fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
             modules::testing::node_test::list_node_metas,
             modules::testing::node_test::open_window,
             modules::testing::node_test::test_node,
+            modules::recorder::commands::get_recorder_status,
+            modules::recorder::commands::start_action_recording,
+            modules::recorder::commands::pause_action_recording,
+            modules::recorder::commands::resume_action_recording,
+            modules::recorder::commands::stop_action_recording,
+            modules::recorder::commands::clear_action_recording,
         ])
         .run(context)
         .expect("error while running tauri application");

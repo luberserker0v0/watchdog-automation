@@ -11,6 +11,7 @@ import {
 } from "../../../../api/pipeline";
 import { useLogStore } from "../../../capture/stores/useLogStore";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
+import { notifyTask } from "../../../notifications/services/taskNotifier";
 import { useStreamStore } from "../../../capture/stores/useStreamStore";
 import { PipelineBatchController, type PipelineStatusEvent, type PatrolRecoveryEvent, type PatrolReportEvent } from "../services/PipelineBatchController";
 import { ensurePatrolChatListener } from "./usePatrolChatStore";
@@ -486,6 +487,16 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           detail: `Pipeline ${finalStatus}${finalEntry?.error ? ` · ${finalEntry.error}` : ""}`,
           result: finalStatus === "completed" ? "success" : "error",
         });
+        if (finalStatus === "completed" && usePreferencesStore.getState().taskNotificationsEnabled) {
+          void notifyTask({
+            id: `pipeline:${runId}`,
+            type: "pipeline_completed",
+            title: "Pipeline completed",
+            body: `${entry.name} completed in ${Math.max(0, Math.round((finalEntry?.elapsedMs ?? 0) / 1000))}s with ${finalEntry?.stepCount ?? 0} steps.`,
+          }).then((sent) => {
+            if (!sent) useLogStore.getState().appendLog({ source: "pipeline", label: "Task Notifier", detail: `System notification was not delivered for ${entry.name}. Check notification permission in Settings.`, result: "info" });
+          });
+        }
         delete stepCountById[id];
         if (stopRequested) break;
       } catch (error) {

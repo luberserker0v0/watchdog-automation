@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ActiveView = "pipeline" | "nodeTest" | "patrolChat" | "settings";
+export type ActiveView = "pipeline" | "nodeTest" | "patrolChat" | "actionRecorder" | "settings";
 
 interface UiState {
   activeView: ActiveView;

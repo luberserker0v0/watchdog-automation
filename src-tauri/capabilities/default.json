@@ -7,6 +7,10 @@
     "core:default",
     "core:webview:allow-create-webview-window",
     "core:event:default",
-    "opener:default"
+    "opener:default",
+    "notification:default",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
   ]
 }

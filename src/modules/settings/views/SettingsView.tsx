@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { usePreferencesStore, type CaptureArea, type CaptureEngine, type PatrolRecoveryPolicy, type RecognitionDevice, type TimingGranularity } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
+import { ensureNotificationPermission, notifyTask } from "../../notifications/services/taskNotifier";
+import { useRecorderStore } from "../../recorder/stores/useRecorderStore";
+import ShortcutCaptureInput from "../components/ShortcutCaptureInput";
 import "../styles/settings.css";
 
 const FPS_OPTIONS = [1, 5, 10, 15, 30];
@@ -47,6 +50,19 @@ export default function SettingsView() {
   const setPatrolRecoveryPolicy = usePreferencesStore((s) => s.setPatrolRecoveryPolicy);
   const patrolMaxRedirects = usePreferencesStore((s) => s.patrolMaxRedirects);
   const setPatrolMaxRedirects = usePreferencesStore((s) => s.setPatrolMaxRedirects);
+  const taskNotificationsEnabled = usePreferencesStore((s) => s.taskNotificationsEnabled);
+  const setTaskNotificationsEnabled = usePreferencesStore((s) => s.setTaskNotificationsEnabled);
+  const recorderNotificationsEnabled = usePreferencesStore((s) => s.recorderNotificationsEnabled);
+  const setRecorderNotificationsEnabled = usePreferencesStore((s) => s.setRecorderNotificationsEnabled);
+  const recorderStartStopHotkey = usePreferencesStore((s) => s.recorderStartStopHotkey);
+  const setRecorderStartStopHotkey = usePreferencesStore((s) => s.setRecorderStartStopHotkey);
+  const recorderPauseHotkey = usePreferencesStore((s) => s.recorderPauseHotkey);
+  const setRecorderPauseHotkey = usePreferencesStore((s) => s.setRecorderPauseHotkey);
+  const recorderCaptureText = usePreferencesStore((s) => s.recorderCaptureText);
+  const setRecorderCaptureText = usePreferencesStore((s) => s.setRecorderCaptureText);
+  const [notificationStatus, setNotificationStatus] = useState("");
+  const recorderState = useRecorderStore((s) => s.status.state);
+  const hotkeyRegistrationError = useRecorderStore((s) => s.hotkeyError);
   const fps = useStreamStore((s) => s.fps);
   const setFps = useStreamStore((s) => s.setFps);
   const isStreaming = useStreamStore((s) => s.isStreaming);
@@ -231,6 +247,89 @@ export default function SettingsView() {
               <input id="llm-api-key" className="settings-item-control" type="password"
                 autoComplete="off" value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} />
               <span className="settings-item-hint">API key 僅保留於本次應用程式工作階段；URL 與模型名稱會儲存。</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h3 className="settings-section-title">Task notifications</h3>
+          <div className="settings-section-body">
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="task-notifications">Pipeline completion</label>
+              <label className="settings-toggle">
+                <input id="task-notifications" type="checkbox" checked={taskNotificationsEnabled}
+                  onChange={async (event) => {
+                    if (!event.target.checked) { setTaskNotificationsEnabled(false); return; }
+                    const granted = await ensureNotificationPermission();
+                    setTaskNotificationsEnabled(granted);
+                    setNotificationStatus(granted ? "System notifications are ready." : "Notification permission was not granted.");
+                  }} />
+                <span className="settings-toggle-slider" />
+              </label>
+              <span className="settings-item-hint">Notify after a pipeline completes and cleanup has finished.</span>
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label">Recorder state</label>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={recorderNotificationsEnabled}
+                  onChange={async (event) => {
+                    if (!event.target.checked) { setRecorderNotificationsEnabled(false); return; }
+                    const granted = await ensureNotificationPermission();
+                    setRecorderNotificationsEnabled(granted);
+                    setNotificationStatus(granted ? "System notifications are ready." : "Notification permission was not granted.");
+                  }} />
+                <span className="settings-toggle-slider" />
+              </label>
+              <span className="settings-item-hint">Notify when Action Recorder starts and stops.</span>
+            </div>
+            <div className="settings-item">
+              <span className="settings-item-label" />
+              <button className="settings-action" type="button" onClick={async () => {
+                const sent = await notifyTask({ id: `settings-test:${Date.now()}`, type: "pipeline_completed", title: "WatchDog notification test", body: "Task Notifier is ready." });
+                setNotificationStatus(sent ? "Test notification sent." : "Could not send a system notification.");
+              }}>Send test notification</button>
+              {notificationStatus && <span className="settings-item-hint" role="status">{notificationStatus}</span>}
+              <span className="settings-item-hint">Development notifications may show PowerShell branding on Windows. Installed WatchDog bundles use the application identity and icon.</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h3 className="settings-section-title">Action Recorder</h3>
+          <div className="settings-section-body">
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="recorder-toggle-hotkey">Start / Stop shortcut</label>
+              <ShortcutCaptureInput id="recorder-toggle-hotkey" label="Start / Stop shortcut"
+                value={recorderStartStopHotkey} disabled={recorderState !== "idle"}
+                onCapture={(shortcut) => {
+                  if (shortcut.toLowerCase() === recorderPauseHotkey.toLowerCase()) return "Shortcuts must be different.";
+                  setRecorderStartStopHotkey(shortcut);
+                  return null;
+                }} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="recorder-pause-hotkey">Pause / Resume shortcut</label>
+              <ShortcutCaptureInput id="recorder-pause-hotkey" label="Pause / Resume shortcut"
+                value={recorderPauseHotkey} disabled={recorderState !== "idle"}
+                onCapture={(shortcut) => {
+                  if (shortcut.toLowerCase() === recorderStartStopHotkey.toLowerCase()) return "Shortcuts must be different.";
+                  setRecorderPauseHotkey(shortcut);
+                  return null;
+                }} />
+              {hotkeyRegistrationError && <span className="settings-item-error">{hotkeyRegistrationError}</span>}
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="recorder-capture-text">Capture typed text</label>
+              <label className="settings-toggle">
+                <input id="recorder-capture-text" type="checkbox" checked={recorderCaptureText}
+                  onChange={(event) => setRecorderCaptureText(event.target.checked)} />
+                <span className="settings-toggle-slider" />
+              </label>
+              <span className="settings-item-hint">Off by default. Printable keys become a masked placeholder; enable only when recording non-sensitive text.</span>
+            </div>
+            <div className="settings-item">
+              <span className="settings-item-label">Platform support</span>
+              <span className="settings-item-text">Windows · macOS/Linux planned</span>
             </div>
           </div>
         </div>

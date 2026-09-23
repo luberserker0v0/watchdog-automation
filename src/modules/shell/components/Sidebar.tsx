@@ -11,6 +11,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "pipeline", icon: "🔗", label: "Pipeline" },
   { id: "nodeTest", icon: "🧪", label: "Node-Test" },
   { id: "patrolChat", icon: "💬", label: "Patrol Chat Room" },
+  { id: "actionRecorder", icon: "⏺", label: "Action Recorder" },
 ];
 
 export default function Sidebar() {

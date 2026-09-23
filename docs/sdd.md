@@ -63,6 +63,8 @@ imports are recorded in §8 and do not reverse the Rust dependency direction.
 | TEST | `src/modules/testing/`; backend `modules/testing/` | Node tests, emulator, batch workflow | Capture, authoring, plugins, runtime |
 | OBS | Runtime/capture UI; backend runtime evidence | Events, snapshots, logs, progress, debug images | Run and capture state |
 | SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts` | Persisted preferences and session flags | Browser storage, stream status |
+| NOT | `src/modules/notifications/`; Tauri notification plugin | Permission-aware, task-ID-deduplicated native notifications | Terminal pipeline status, recorder state, persisted opt-in |
+| RCD | `src/modules/recorder/`; backend `modules/recorder/` | Recorder state machine, Windows input hooks, review drafts, global controls | Capture selection and bounds, foreground state, settings |
 
 `src/modules/sample_target/` contains the sample target UI;
 `src/main-target.tsx` mounts it. Shell layout, shared utilities, and the sample
@@ -289,6 +291,44 @@ model name persist; the API key remains in memory for the app session, is
 passed to `start_pipeline` only when a run starts, and is omitted from stored
 preferences and logs.
 
+### 3.6 Task notification and action recording (NOT, RCD)
+
+`taskNotifier.ts` is the only frontend adapter for native notifications. It
+checks or requests permission, deduplicates messages by stable task ID, and
+contains delivery failures. Pipeline completion uses `pipeline:<run_id>` only
+after status is terminal and cleanup is complete, so live-event and polling
+paths converge on one notification. Recorder start and stop use session IDs and
+an independent opt-in.
+
+The recorder backend owns one `RecorderService` in Tauri managed state. Its
+platform-neutral commands expose status, start, pause, resume, stop, and clear.
+On Windows, a dedicated message-loop thread installs `WH_MOUSE_LL` and
+`WH_KEYBOARD_LL` hooks. Hook callbacks only copy small input records into a
+channel; a processor thread performs bounds checks, grouping, state mutation,
+and event publication. `LLMHF_INJECTED` and `LLKHF_INJECTED` observations are
+discarded.
+
+Each session binds to one `RecordingTarget`. Screen bounds come from monitor
+enumeration. Start activates and verifies a selected window so the in-app Start
+button is usable. Window bounds reuse capture-area mapping and require the exact
+foreground HWND before keyboard or committed pointer actions. A missing or
+non-foreground target pauses the session and emits an explicit reason.
+
+| Input sequence | Draft mapping |
+|----------------|---------------|
+| Short left press | `Click` with capture-relative coordinate |
+| Left press of at least 600 ms | `LongPress` with observed duration |
+| Pointer displacement of at least 8 px | `Swipe` with endpoints and duration |
+| Wheel message | `Scroll` at the relative pointer location |
+| Control or non-printable key | `ClickKey` with held modifiers |
+| Printable keys within 750 ms | One `InputText`; masked unless capture was explicitly enabled |
+
+The frontend registers two distinct global shortcuts and restores the last
+working pair if registration fails. `RecordingStatusBar` stays mounted above
+every main view. `ActionRecorderView` formats the draft and permits removal,
+copy, export, and clear; it never mutates or executes a pipeline. macOS and
+Linux retain the command model and report unsupported at start.
+
 ## 4. Data and interface contracts
 
 | Contract | Owner | Invariant |
@@ -302,10 +342,14 @@ preferences and logs.
 | `patrol-report` event | PIPE / OBS | A completed background sample carries task and optional action-attempt identity, run/capture identity, task-specific outcome, match, and reason; the frontend formats it independently in the Execution Log |
 | `patrol-chat-event`, image cache commands | PIPE / OBS | Ordered session trace contains formatted text and image IDs, excludes credentials and inline image data; previews load on demand |
 | `ValidationError` | AUTHOR | Type and message distinguish authoring failures |
+| `RecorderStatus`, `RecordingSession`, `RecordedActionDraft` | RCD | One session at a time; actions use capture-relative coordinates and existing action types; drafts remain observational until copied or exported |
+| Native task notification | NOT | A stable event ID produces at most one delivery after permission; failure cannot alter pipeline or recorder state |
 
 The Tauri command list in `src-tauri/src/lib.rs` implements SRS
-`REQ-IF-010`–`017`; `src/api/` is its frontend wrapper. Events include
-`pipeline-status`, `patrol-report`, `patrol-recovery`, `patrol-chat-event`, and `update_capture` (`REQ-IF-018/019`), and the frame
+`REQ-IF-010`–`017` and `REQ-IF-022`; `src/api/` is its frontend wrapper. Events include
+`pipeline-status`, `patrol-report`, `patrol-recovery`, `patrol-chat-event`,
+`recorder-status`, `recorder-action`, `recorder-error`, and `update_capture`
+(`REQ-IF-018/019/022`), and the frame
 protocol is `watchdog:///frame` (`REQ-IF-020`). Schemas under `schemas/`
 describe authoring files. OS interfaces stay behind capture repositories and
 action plugins.
@@ -326,8 +370,10 @@ action plugins.
   same run at one engine-generated candidate when confidence, capture identity,
   node validity, redirect limit, and route-deduplication checks pass.
 - An accepted redirect clears failure and child state, resets hit quotas,
-  retains step history and the run ID, restarts periodic Patrol timing, and
-  sends the selected node through ordinary recognition and action safety.
+  resets the node-attempt and timeout epoch, retains step history and the run
+  ID, restarts periodic Patrol timing, and sends the selected node through
+  ordinary recognition and action safety. Parameters, capture identity,
+  redirect count, and accepted-route history remain intact.
   Rejection or an invalid VLM response preserves the original failure.
 
 ## 6. Traceability and verification
@@ -336,9 +382,12 @@ SRS Appendix D is the responsibility map; §2 maps it to code. SRS §7 is a
 candidate functional contract; SRS §9 records inspected alignment and
 verification limits. SRS Appendix F starts the REQ → test-case matrix for
 high-risk examples; complete STK → REQ → design → test traceability remains
-open. Current passing checks are `npm run build`, `npm test`,
-`cargo check --all-features`, and `cargo test --lib`. Windows capture, real
-foreground input, window restoration, OCR, and VLM exchange still need live
+open. Current passing checks are `npm run build`, `npm test`, `cargo check`,
+`cargo test --no-run`, and `cargo test`. Windows capture, real
+foreground input, OCR, VLM action classification, hint recovery, and accepted
+redirection have live executable-level evidence. Window restoration refusal,
+malformed-response retry, redirect-rejection branches, installed notification
+delivery, and global input recording still need live
 executable-level verification.
 
 ## 7. Design decisions

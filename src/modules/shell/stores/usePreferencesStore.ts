@@ -27,6 +27,11 @@ interface PreferencesState {
   patrolMinMargin: number;
   patrolRecoveryPolicy: PatrolRecoveryPolicy;
   patrolMaxRedirects: number;
+  taskNotificationsEnabled: boolean;
+  recorderNotificationsEnabled: boolean;
+  recorderStartStopHotkey: string;
+  recorderPauseHotkey: string;
+  recorderCaptureText: boolean;
   capturePanelVisible: boolean;
   previewWindowSize: [number, number];
   setMode: (mode: CaptureMode) => void;
@@ -47,6 +52,11 @@ interface PreferencesState {
   setPatrolMinMargin: (margin: number) => void;
   setPatrolRecoveryPolicy: (policy: PatrolRecoveryPolicy) => void;
   setPatrolMaxRedirects: (count: number) => void;
+  setTaskNotificationsEnabled: (enabled: boolean) => void;
+  setRecorderNotificationsEnabled: (enabled: boolean) => void;
+  setRecorderStartStopHotkey: (hotkey: string) => void;
+  setRecorderPauseHotkey: (hotkey: string) => void;
+  setRecorderCaptureText: (enabled: boolean) => void;
   setCapturePanelVisible: (visible: boolean) => void;
   setPreviewWindowSize: (size: [number, number]) => void;
 }
@@ -80,6 +90,11 @@ export const usePreferencesStore = create<PreferencesState>()(
       patrolMinMargin: 0.1,
       patrolRecoveryPolicy: "hint_only",
       patrolMaxRedirects: 1,
+      taskNotificationsEnabled: false,
+      recorderNotificationsEnabled: false,
+      recorderStartStopHotkey: "CommandOrControl+Alt+F9",
+      recorderPauseHotkey: "CommandOrControl+Alt+F10",
+      recorderCaptureText: false,
       capturePanelVisible: true,
       previewWindowSize: [1200, 800],
       setMode: (mode) => set({ mode }),
@@ -100,6 +115,11 @@ export const usePreferencesStore = create<PreferencesState>()(
       setPatrolMinMargin: (margin) => set({ patrolMinMargin: Number.isFinite(margin) ? Math.min(1, Math.max(0, margin)) : 0.1 }),
       setPatrolRecoveryPolicy: (patrolRecoveryPolicy) => set({ patrolRecoveryPolicy }),
       setPatrolMaxRedirects: (count) => set({ patrolMaxRedirects: Number.isFinite(count) ? Math.min(10, Math.max(1, Math.round(count))) : 1 }),
+      setTaskNotificationsEnabled: (taskNotificationsEnabled) => set({ taskNotificationsEnabled }),
+      setRecorderNotificationsEnabled: (recorderNotificationsEnabled) => set({ recorderNotificationsEnabled }),
+      setRecorderStartStopHotkey: (recorderStartStopHotkey) => set({ recorderStartStopHotkey }),
+      setRecorderPauseHotkey: (recorderPauseHotkey) => set({ recorderPauseHotkey }),
+      setRecorderCaptureText: (recorderCaptureText) => set({ recorderCaptureText }),
       setCapturePanelVisible: (capturePanelVisible) => set({ capturePanelVisible }),
       setPreviewWindowSize: (size) => set({ previewWindowSize: normalizePreviewWindowSize(size) }),
     }),
@@ -107,7 +127,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       name: "watchdog:settings",
       // saveToDisk and saveDebugImages are session-only: they reset to off
       // on every window open, so they are never written to storage.
-      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, capturePanelVisible, previewWindowSize }) => ({
+      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, taskNotificationsEnabled, recorderNotificationsEnabled, recorderStartStopHotkey, recorderPauseHotkey, recorderCaptureText, capturePanelVisible, previewWindowSize }) => ({
         mode,
         showFps,
         captureEngine,
@@ -123,6 +143,11 @@ export const usePreferencesStore = create<PreferencesState>()(
         patrolMinMargin,
         patrolRecoveryPolicy,
         patrolMaxRedirects,
+        taskNotificationsEnabled,
+        recorderNotificationsEnabled,
+        recorderStartStopHotkey,
+        recorderPauseHotkey,
+        recorderCaptureText,
         capturePanelVisible,
         previewWindowSize,
       }),
@@ -142,6 +167,11 @@ export const usePreferencesStore = create<PreferencesState>()(
           patrolMinMargin: Number.isFinite(stored.patrolMinMargin) ? Math.min(1, Math.max(0, stored.patrolMinMargin!)) : 0.1,
           patrolRecoveryPolicy: stored.patrolRecoveryPolicy === "redirection_only" ? "redirection_only" : "hint_only",
           patrolMaxRedirects: Number.isFinite(stored.patrolMaxRedirects) ? Math.min(10, Math.max(1, Math.round(stored.patrolMaxRedirects!))) : 1,
+          taskNotificationsEnabled: stored.taskNotificationsEnabled === true,
+          recorderNotificationsEnabled: stored.recorderNotificationsEnabled === true,
+          recorderStartStopHotkey: stored.recorderStartStopHotkey || "CommandOrControl+Alt+F9",
+          recorderPauseHotkey: stored.recorderPauseHotkey || "CommandOrControl+Alt+F10",
+          recorderCaptureText: stored.recorderCaptureText === true,
           capturePanelVisible: stored.capturePanelVisible ?? true,
           previewWindowSize: normalizePreviewWindowSize(stored.previewWindowSize),
         };

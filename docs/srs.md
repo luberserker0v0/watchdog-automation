@@ -5,7 +5,7 @@
 - **Language:** English
 - **Scope:** whole product (capture, pipeline engine, node testing, settings, target application)
 - **Status:** reverse-engineered draft; requirements and priorities need product approval
-- **Audit basis:** working tree inspected and automated checks run 2026-09-21; not a release baseline
+- **Audit basis:** working tree inspected and automated checks run through 2026-09-23; not a release baseline
 - **Companions:** SDD (observed design), pipeline format documentation and schemas
 
 This draft was reconstructed from the implementation. A `shall` statement is a
@@ -63,8 +63,9 @@ inferred from the product and require confirmation by its owner.
 |-----------|------|
 | `docs/pipeline-meta.md` | Detailed pipeline format description |
 | `docs/pipeline-layout.md` | Graph presentation positions (never affects execution) |
+| `docs/action-recorder.md` | Action Recorder controls, privacy, draft behavior, and platform limits |
 | `schemas/watchdog-metadata.schema.json`, `schemas/watchdog-layout.schema.json` | Machine-readable contracts checked by the backend when parsing pipeline files |
-| `src-tauri/resources/pipelines/sample/` | Shipped sample pipeline (covered by a Rust test that compiles but could not be executed on the review machine) |
+| `src-tauri/resources/pipelines/sample/` | Shipped sample pipeline covered by executed Rust validation tests |
 
 `docs/development.md` describes toolchain, build, and troubleshooting. These
 references do not override observed runtime behavior when they differ.
@@ -85,6 +86,7 @@ references do not override observed runtime behavior when they differ.
 | ROI | Region of interest: fixed rectangle or a prior node's recognized box |
 | HWND | Native window handle identifying a capture/action target |
 | Capture owner | Single holder (`none` / `manual` / `pipeline+run_id`) of the streaming session |
+| Action recording | A bounded operator session that observes physical input and produces a reviewable action draft without editing or executing a pipeline |
 | DirectML | GPU execution provider for the ONNX OCR runtime (NVIDIA/AMD/Intel) |
 | IPC | Tauri inter-process command/event bridge between the React frontend and the Rust backend |
 | Mermaid | `flowchart TD` topology source (`-->` next edges, `-->\|error\|` / `-.->` error edges) |
@@ -136,6 +138,10 @@ flowchart LR
   reports do not control pipeline routing or input.
 - **Settings:** capture engine/area, OCR device, timing granularity, patrol
   options, and persisted versus session-only preferences.
+- **Task notification:** optional native notification after pipeline completion
+  and cleanup, plus optional Action Recorder start/stop confirmation.
+- **Action Recorder:** Windows input observation bound to one selected capture
+  target, with global controls, a persistent status bar, and reviewable output.
 
 ### 5.3 Users
 
@@ -185,6 +191,8 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | STK-008 | As a target-app owner, my application is never instrumented or modified. | E | §5.1 perspective, REQ-IF-032 |
 | STK-009 | As an operator, I can run checked pipelines as a batch with per-pipeline logs. | D | REQ-TEST-005 |
 | STK-010 | As an operator, capture-affecting settings always open as off, so that runs never surprise-write to disk. | E | REQ-SET-002 |
+| STK-011 | As an operator, I receive an optional native notification after a pipeline has fully completed, so that I do not need to watch the application continuously. | D | REQ-NOT-001, REQ-NOT-002 |
+| STK-012 | As a pipeline author, I can capture real input as a safe draft, so that repetitive action coordinates and gestures do not need to be transcribed manually. | D | REQ-RCD-001…REQ-RCD-009 |
 
 ---
 
@@ -317,6 +325,24 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-SET-004 | Frame-cadence selection shall be disabled while streaming or under the event-driven engine. | D | test |
 | REQ-SET-005 | Timing granularity shall select off, summary, or detailed execution logging. | E | test |
 | REQ-SET-006 | Settings shall exclusively control engine patrol enablement, cycle seconds (default 20), K hops, score threshold, minimum margin, recovery policy (`hint_only` default or `redirection_only`), maximum redirects per run (default 1), OpenAI-compatible chat-completions URL, vision model name, and session-only API key. Enablement and non-secret options shall persist; the key shall not be persisted in browser storage. | E | test |
+| REQ-SET-007 | Settings shall persist Task Notifier enablement, Action Recorder notification enablement, distinct Start/Stop and Pause/Resume shortcuts, and typed-text capture enablement. Typed-text capture and both notification options shall default off. | E | test |
+
+#### 7.1.9 Task notification and action recording
+
+| ID | Requirement | Pty | Verify |
+|----|-------------|-----|--------|
+| REQ-NOT-001 | When enabled, Task Notifier shall issue exactly one native notification for a pipeline run after `completed` state and `cleanup_complete`; event and polling delivery shall not duplicate it. | E | test |
+| REQ-NOT-002 | Notification denial or delivery failure shall not change the pipeline result and shall remain recoverable through Settings and the application log. | E | test |
+| REQ-NOT-003 | Action Recorder start and stop notifications shall be independently optional; the persistent in-app recording bar shall remain the authoritative state indicator. | D | test |
+| REQ-RCD-001 | Action Recorder shall implement `idle`, `recording`, `paused`, and `stopping` states and allow one recording session at a time. | E | test |
+| REQ-RCD-002 | Start/Stop shall use one configurable global shortcut and Pause/Resume a distinct configurable global shortcut. Settings shall capture the next valid key combination, allow Escape to cancel, and temporarily unregister active recorder shortcuts while listening. Recorder control shortcuts shall not appear in the draft. | E | test |
+| REQ-RCD-003 | A recording shall bind to the selected screen or window capture context. Start shall activate and verify a selected window; later window keyboard and committed pointer input shall be accepted only while that window is foreground. Target loss shall pause recording with a visible reason. | E | test |
+| REQ-RCD-004 | On Windows, the recorder shall translate left clicks, long presses, drags, wheel input, key commands, and printable typing into existing pipeline action types using capture-relative coordinates. | E | test |
+| REQ-RCD-005 | Input marked by Windows as injected shall be discarded so WatchDog-generated automation does not enter a recording. | E | test |
+| REQ-RCD-006 | Printable text shall be masked by default. When explicit typed-text capture is enabled, the UI shall warn that recorded text requires review and may contain sensitive data. | E | test |
+| REQ-RCD-007 | The application shall show a persistent recording bar across views with state, target, elapsed time, action count, pause/resume, and stop controls. | E | test |
+| REQ-RCD-008 | The Action Recorder view shall present formatted draft actions, warnings, relative timing, removal, copy, export, and clear controls. A draft shall not modify or execute a pipeline automatically. | E | test |
+| REQ-RCD-009 | macOS and Linux shall retain the recorder command boundary but return a structured unsupported result until a platform input observer is implemented. | D | review |
 
 ### 7.2 Interface requirements
 
@@ -349,6 +375,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-IF-019 | The system shall emit `update_capture` events synchronizing the frontend capture view with backend stream ownership. | E | test |
 | REQ-IF-020 | The system shall serve the live stream through the `watchdog:///frame` protocol. | E | test |
 | REQ-IF-021 | `get_patrol_chat_image` shall retrieve a session-cached image by opaque ID for an opened message; `clear_patrol_chat_images` shall clear the cache. An evicted image shall produce an explicit unavailable result. | E | test |
+| REQ-IF-022 | The system shall expose Action Recorder commands for status, start, pause, resume, stop, and clear, and shall emit `recorder-status`, `recorder-action`, and `recorder-error` events. | E | test |
 
 #### 7.2.3 OS and runtime interfaces
 
@@ -359,6 +386,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-IF-032 | The system shall drive global mouse/keyboard input through the OS input stack. | E | test |
 | REQ-IF-033 | The system shall run OCR through the ONNX runtime with DirectML acceleration and CPU fallback (see REQ-ENV-003). | E | test |
 | REQ-IF-034 | The capture UI shall enumerate virtual desktops and filter its window list by desktop without switching the current desktop. | E | test |
+| REQ-IF-035 | The desktop application shall use native notification and global-shortcut adapters behind Tauri permissions; notification and shortcut failures shall remain feature-local. | E | test |
 
 ### 7.3 Usability requirements
 
@@ -452,24 +480,27 @@ passed a native acceptance test.
 | REQ-PIPE-025 | Optional node freeze waits compare fresh frames on the active capture session; pre wait refreshes recognition before input and post wait precedes post delay. | `runtime/engine/freeze.rs`; `runtime/engine/runner.rs`; `schemas/watchdog-metadata.schema.json` | Implemented; native run verification pending |
 | REQ-CON-004, REQ-IF-015 | `save_pipeline` accepts original Mermaid and metadata sources, validates them, and confines writes to the custom root. The graph-only API is rejected. | `authoring/editor.rs`; `src/api/pipeline.ts` | Implemented; path tests require execution |
 | REQ-IF-002, REQ-IF-003 | Metadata and layout parsers validate against bundled Draft 2020-12 schemas before Serde conversion. | `authoring/parser/meta.rs`; `authoring/parser/layout.rs` | Implemented; bundled sample schema check passed |
-| REQ-PIPE-020, REQ-SET-006 | Settings control patrol and VLM options. A successful node visit queues a clean reference image in the current run's directory; a new run begins with description-only candidates. The API key is session-only. | `runtime/patrol.rs`; `runtime/runner.rs`; `settings/views/SettingsView.tsx` | Implemented; live VLM and native Windows tests pending |
-| REQ-PIPE-021, REQ-PIPE-022 | Periodic Patrol chooses one task: unresolved action verification first, otherwise state matching. State matching contains no action history and expands an inconclusive local search to nearby candidates. | `runtime/patrol.rs`; `runtime/engine/runner.rs` | Implemented; live VLM timing test pending |
-| REQ-PIPE-023 | Periodic reports remain advisory. Failure stops periodic work, completes the final action/state check, applies the recovery policy, then either resumes an accepted redirect or publishes terminal failure. | `runtime/engine/runner.rs`; `runtime/patrol.rs` | Implemented; live recovery event-order test pending |
-| REQ-PIPE-024, REQ-PIPE-027 | Pipeline status exposes bounded dispatch and grouped attempt evidence. Exact before frames stay in a bounded private cache; only a valid action-effect result for a declared direct visual successor confirms an attempt. | `runtime/engine/patrol_state.rs`; `runtime/engine/runner.rs`; `runtime/patrol.rs` | Implemented; live VLM verification pending |
+| REQ-PIPE-020, REQ-SET-006 | Settings control patrol and VLM options. A successful node visit queues a clean reference image in the current run's directory; a new run begins with description-only candidates. The API key is session-only. | `runtime/patrol.rs`; `runtime/runner.rs`; `settings/views/SettingsView.tsx` | Unit and live VLM paths passed; bounded eviction remains an automated check |
+| REQ-PIPE-021, REQ-PIPE-022 | Periodic Patrol chooses one task: unresolved action verification first, otherwise state matching. State matching contains no action history and expands an inconclusive local search to nearby candidates. | `runtime/patrol.rs`; `runtime/engine/runner.rs` | Unit and live slow-response/state-match paths passed |
+| REQ-PIPE-023 | Periodic reports remain advisory. Failure stops periodic work, completes the final action/state check, applies the recovery policy, then either resumes an accepted redirect or publishes terminal failure. | `runtime/engine/runner.rs`; `runtime/patrol.rs` | Unit pass; live hint failure and accepted-redirect completion passed |
+| REQ-PIPE-024, REQ-PIPE-027 | Pipeline status exposes bounded dispatch and grouped attempt evidence. Exact before frames stay in a bounded private cache; only a valid action-effect result for a declared direct visual successor confirms an attempt. | `runtime/engine/patrol_state.rs`; `runtime/engine/runner.rs`; `runtime/patrol.rs` | Unit and live before/after VLM classification passed |
 | REQ-PIPE-028 | State-match, action-effect, and recovery responses use strict local parsing and semantic validation, one same-task format retry, then an inconclusive result. | `runtime/patrol.rs` | Parser tests passed; live malformed-response walkthrough pending |
-| REQ-PIPE-029 | The engine supplies bounded recovery candidates. Hint policy preserves failure; redirection policy validates confidence, capture identity, node eligibility, run limit, and route uniqueness before starting a new execution epoch. | `runtime/patrol.rs`; `runtime/engine/runner.rs`; `runtime/engine/routing.rs`; `settings/views/SettingsView.tsx` | Unit policy tests passed; live VLM recovery pending |
-| REQ-OBS-006, REQ-IF-018, REQ-IF-021 | The Patrol Chat Room shows the session trace with formatted, collapsed messages and on-demand images. Its listener collects events while the view is closed; the backend emits exact request and response content without API keys. | `runtime/chat.rs`; `runtime/views/PatrolChatRoom.tsx` | Implemented; live VLM and native event verification pending |
+| REQ-PIPE-029 | The engine supplies bounded recovery candidates. Hint policy preserves failure; redirection policy validates confidence, capture identity, node eligibility, run limit, and route uniqueness before starting a new execution epoch. | `runtime/patrol.rs`; `runtime/engine/runner.rs`; `runtime/engine/routing.rs`; `settings/views/SettingsView.tsx` | Unit tests plus live hint and accepted redirect passed; live rejection cases pending |
+| REQ-OBS-006, REQ-IF-018, REQ-IF-021 | The Patrol Chat Room shows the session trace with formatted, collapsed messages and on-demand images. Its listener collects events while the view is closed; the backend emits exact request and response content without API keys. | `runtime/chat.rs`; `runtime/views/PatrolChatRoom.tsx` | Live VLM/event display passed; image eviction/unavailable preview remains automated only |
+| REQ-NOT-001…003, REQ-SET-007 | Task Notifier requests permission on explicit enablement, deduplicates by task ID, and sends pipeline completion only after terminal cleanup. Recorder start/stop uses the same service. | `notifications/services/taskNotifier.ts`; `pipeline/runtime/stores/usePipelineStore.ts`; `settings/views/SettingsView.tsx` | Frontend service and settings tests passed; installed-build notification walkthrough pending |
+| REQ-RCD-001…009, REQ-IF-022, REQ-IF-035 | The Rust recorder owns session state and Windows low-level hooks; injected input is excluded, events map to capture-relative action drafts, and the frontend provides hotkeys, status bar, review, copy, export, removal, and clear. Non-Windows start returns unsupported. | `modules/recorder/`; `api/recorder.ts`; `recorder/stores/useRecorderStore.ts`; `recorder/views/ActionRecorderView.tsx` | Rust gesture/coordinate tests and frontend review/settings tests passed; native hook walkthrough pending |
 | REQ-MNT-002, REQ-MNT-003 | Main-app startup bounds dated logs and periodically clears generated visions within the user-data root. Cleanup errors are logged and do not block startup. | `core/maintenance.rs`; `lib.rs` | Implemented; startup filesystem test pending |
 
-The frontend production build and all 127 frontend tests pass. The Windows
+The frontend production build and all 130 frontend tests pass. The Windows
 build now delay-loads Common Controls so the Rust unit-test harness does not
 resolve an unused Tauri dialog entry point before tests start; the application
-binary still links successfully with Tauri's manifest. All 173 enabled Rust
+binary still links successfully with Tauri's manifest. All 176 enabled Rust
 library tests pass; the OCR runtime/model test remains intentionally ignored.
 These automated checks cover pure routing, configuration, state, and filesystem
-behavior. Live capture, real foreground activation and input, window
-restoration refusal, OCR model loading, and a VLM exchange still require
-executable-level checks.
+behavior. Live capture, foreground input, OCR, VLM action classification, hint
+recovery, and accepted redirection have executable-level evidence. Window
+restoration refusal, malformed-response retry, and rejected redirects still
+require executable-level checks.
 
 ---
 
@@ -479,11 +510,11 @@ executable-level checks.
 
 | Area | IDs | Section |
 |------|-----|---------|
-| Stakeholder needs | `STK-001`…`010` | §6 |
+| Stakeholder needs | `STK-001`…`012` | §6 |
 | Capture / authoring / execution | `REQ-CAP-001`…`010`; `REQ-AUTHOR-001`…`011`; `REQ-PIPE-001`…`002`, `004`…`026` | §7.1; `REQ-PIPE-003` retired |
 | Recognition / actions / testing | `REQ-REC-001`…`009`; `REQ-ACT-001`…`009`; `REQ-TEST-001`…`007` | §7.1 |
-| Observability / settings | `REQ-OBS-001`…`006`; `REQ-SET-001`…`006` | §7.1 |
-| Interfaces | `REQ-IF-001`…`008` (files); `010`…`021` (IPC); `030`…`034` (OS/runtime) | §7.2 |
+| Observability / settings / operator tools | `REQ-OBS-001`…`006`; `REQ-SET-001`…`007`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009` | §7.1 |
+| Interfaces | `REQ-IF-001`…`008` (files); `010`…`022` (IPC); `030`…`035` (OS/runtime) | §7.2 |
 | Usability / reliability / performance | `REQ-USE-001`…`004`; `REQ-REL-001`…`002`; `REQ-PERF-001`…`004` | §7.3–7.5 |
 | Supportability / constraints | `REQ-MNT-001`…`003`; `REQ-CON-001`…`007` | §7.6, §7.8 |
 | Environment / assumptions | `REQ-ENV-001`…`004`; `ASM-001`…`004` | §5.4–5.5; assumptions are not requirements |
@@ -527,6 +558,8 @@ Frontend and backend code may both contribute to one capability.
 | TEST | Node and batch testing | Build isolated test contexts and run node or batch tests through the production capture, recognition, action, and execution contracts. |
 | OBS | Observability | Publish and display run status, step history, timing, logs, progress, and debug evidence. Execution produces evidence; UI presents it. |
 | SET | Settings and preferences | Manage operator choices, persistence, session-only flags, and settings controls. Supply effective settings to the capabilities that consume them. |
+| NOT | Task notification | Request permission and deliver deduplicated native task completion messages without affecting task outcomes. |
+| RCD | Action recording | Observe physical operator input, bind it to a capture target, and produce a non-executing review draft. |
 
 `IF` identifies file, IPC, OS, and runtime contracts; each interface is
 implemented by the capability that provides it. `USE`, `PERF`, `REL`, and
@@ -633,9 +666,27 @@ completes without capture, recognition, or actions at that node.
   route, exhausted limit, or invalid response, **when** the engine validates
   the proposal, **then** it rejects the redirect and preserves the failure.
 
+#### E.11 Completion notification (`REQ-NOT-001`, `REQ-NOT-002`)
+
+- **Given** Task Notifier is enabled and the same completed run arrives through
+  both a status event and polling, **when** cleanup becomes complete, **then**
+  one native notification identifies the pipeline, duration, and step count.
+- **Given** permission is denied or native delivery fails, **then** the run
+  remains completed and the application records a notification diagnostic.
+
+#### E.12 Action recording safety (`REQ-RCD-002`…`REQ-RCD-006`)
+
+- **Given** a recording is bound to a foreground window, **when** the operator
+  clicks, drags, scrolls, and types, **then** the draft uses capture-relative
+  existing action types and masks printable text by default.
+- **Given** input carries a Windows injected flag or belongs to either recorder
+  shortcut, **then** the draft omits it.
+- **Given** the target is no longer foreground or available, **then** recording
+  pauses with a visible reason instead of accepting further target input.
+
 ### Appendix F — Example-to-test traceability
 
-Results below are from 2026-09-21. A **unit pass** verifies the named policy or
+Results below are current through 2026-09-23. A **unit pass** verifies the named policy or
 data transition. A **live check pending** identifies behavior that requires a
 real window, capture session, model, or OS refusal.
 
@@ -648,9 +699,11 @@ real window, capture session, model, or OS refusal.
 | E.5 Cleanup visibility | `runtime::engine::cleanup_status_tests::cleanup_failure_is_separate_from_execution_result_in_status_and_event` | Unit pass | Force Windows placement restoration to fail and inspect the UI event. |
 | E.6 Startup retention | `core::maintenance::tests::keeps_current_and_newest_dated_logs`; `clears_visions_only_when_interval_is_due`; `vision_cleanup_never_follows_a_nested_link` | Unit pass; live check deferred | Restart and folder inspection were deferred. Link traversal runs when Windows permits symlink creation. |
 | E.7 Terminal Patrol cutoff | `runtime::engine::runner::parameter_tests::terminal_run_cancels_unfinished_patrol_work`; frontend `usePipelineStore` late-report test | Automated and live pass after fixing the completed-run ordering defect | Successful pipeline recheck confirmed that no Patrol report appears after Completed. |
-| E.8 Patrol task selection | `runtime::engine::runner::parameter_tests::patrol_prioritizes_a_sent_unresolved_action_with_a_newer_same_session_frame`; typed task-specific request builders | Unit pass | Live before/after VLM classification pending. |
+| E.8 Patrol task selection | `runtime::engine::runner::parameter_tests::patrol_prioritizes_a_sent_unresolved_action_with_a_newer_same_session_frame`; typed task-specific request builders | Unit and live pass | Wrong-password and controlled missed-click runs produced before/after action classifications. |
 | E.9 Invalid VLM response | `runtime::patrol::tests::parses_model_scores_with_or_without_markdown_fence`; `action_effect_response_is_strict_and_successor_bounded` | Parser and semantic validation pass | Live two-response format-retry walkthrough pending. |
-| E.10 Patrol recovery | `runtime::patrol::tests::recovery_candidates_prioritize_recent_nodes_and_exclude_failure`; `recovery_response_is_policy_and_candidate_bounded`; `runtime::engine::routing::tests::recovery_redirect_clears_failure_children_and_hit_counts`; frontend Settings and recovery-log tests | Unit pass | Live hint and accepted/rejected redirect walkthrough pending. |
+| E.10 Patrol recovery | `runtime::patrol::tests::recovery_candidates_prioritize_recent_nodes_and_exclude_failure`; `recovery_response_is_policy_and_candidate_bounded`; `runtime::engine::routing::tests::recovery_redirect_clears_failure_children_and_hit_counts`; frontend Settings and recovery-log tests | Unit, live hint, and live accepted-redirect pass | The 2026-09-22 `patrol-redirection` run accepted `VerifyRecovered → ApplyRecovery`, retried the click, and completed the same run. Low-confidence, changed-session, repeated-route, and exhausted-limit rejection walkthroughs remain pending. |
+| E.11 Completion notification | `taskNotifier.test.ts`; pipeline terminal cleanup gate in `usePipelineStore.ts` | Unit pass | Installed Windows notification identity and delivery walkthrough pending. |
+| E.12 Action recording safety | `recorder::service::tests`; `useRecorderStore.test.ts`; `ActionRecorderView.test.tsx`; Settings tests | Unit and UI pass | Native global hook, injected-event, foreground-loss, and coordinate walkthrough pending. |
 
-Verification commands: `npm test` (127 passed), `npm run build`,
-`cargo check --all-features`, and `cargo test --lib` (173 passed, 1 ignored).
+Verification commands: `npm test` (140 passed), `npm run build`, `cargo check`,
+`cargo test --no-run`, and `cargo test` (180 passed, 1 ignored).

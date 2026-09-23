@@ -41,6 +41,9 @@ html, body, #root {
   overflow: hidden;
 }
 
+.app-main { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.app-main > .app-content { flex:1; }
+
 .split-layout {
   display: flex;
   height: 100%;
