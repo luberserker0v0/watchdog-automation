@@ -211,6 +211,10 @@ impl PluginRegistry {
     ) -> Result<(), PluginError> {
         match action {
             Action::DoNothing => Ok(()),
+            Action::Wait { duration } => {
+                tokio::time::sleep(std::time::Duration::from_millis(*duration)).await;
+                Ok(())
+            }
             Action::Click { .. } => {
                 if let Some(plugin) = self.actions.get("Click") {
                     plugin.execute(action, box_region, prev_regions).await

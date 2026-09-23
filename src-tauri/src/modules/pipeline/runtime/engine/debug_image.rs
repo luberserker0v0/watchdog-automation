@@ -57,6 +57,7 @@ fn format_recognition_label(recognition: &Recognition) -> String {
 fn format_action_label(action: &Action) -> String {
     match action {
         Action::DoNothing => "DoNothing".to_string(),
+        Action::Wait { duration } => format!("Wait {duration}ms"),
         Action::Click { .. } => "Click".to_string(),
         Action::LongPress { .. } => "LongPress".to_string(),
         Action::Swipe { .. } => "Swipe".to_string(),
@@ -331,7 +332,7 @@ fn draw_action_symbol(
         Action::InputText { .. } => draw_text_icon(img),
         Action::StopTask => draw_stop_icon(img),
         Action::Custom { .. } => draw_custom_icon(img),
-        Action::DoNothing => {}
+        Action::DoNothing | Action::Wait { .. } => {}
     }
     targets
 }

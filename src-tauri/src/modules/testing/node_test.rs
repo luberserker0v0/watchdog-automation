@@ -1208,6 +1208,7 @@ mod fixture_tests {
             for action in &node.actions {
                 actions.insert(match action {
                     Action::DoNothing => "DoNothing",
+                    Action::Wait { .. } => "Wait",
                     Action::Click {
                         target,
                         target_offset,
@@ -1258,6 +1259,7 @@ mod fixture_tests {
                 "Scroll",
                 "StopTask",
                 "Swipe",
+                "Wait",
             ])
         );
         assert_eq!(

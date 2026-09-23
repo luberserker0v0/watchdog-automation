@@ -282,7 +282,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 
 | ID | Requirement | Pty | Verify |
 |----|-------------|-----|--------|
-| REQ-ACT-001 | The system shall provide DoNothing, Click, LongPress, Swipe, Scroll, ClickKey, InputText, StopTask, and Custom actions. | E | test |
+| REQ-ACT-001 | The system shall provide DoNothing, Wait, Click, LongPress, Swipe, Scroll, ClickKey, InputText, StopTask, and Custom actions. | E | test |
 | REQ-ACT-002 | Spatial targets shall resolve from recognized box (`true`), explicit coordinates, explicit rectangles, or prior-node boxes, plus optional offsets — all mapped into physical screen pixels. | E | test |
 | REQ-ACT-003 | For a window target, each input action shall attempt to restore and verify target foreground immediately before input, including in isolated action tests (see REQ-CON-001). | E | test |
 | REQ-ACT-004 | Targets outside the encoded capture frame shall fail rather than clamp (see REQ-CON-002). | E | test |
@@ -291,6 +291,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-ACT-007 | DoNothing and StopTask shall execute as no-ops. | E | test |
 | REQ-ACT-008 | Custom actions shall dispatch by registered name with author-supplied JSON parameters. | E | test |
 | REQ-ACT-009 | `{{key}}` placeholders in action parameters shall substitute per-node user values. | E | test |
+| REQ-ACT-010 | Wait shall express an explicit inter-action interval in milliseconds. Pipeline execution shall exclude paused time from that interval and allow stop requests to cancel it. | E | test |
 
 #### 7.1.6 Node testing
 
@@ -338,11 +339,11 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-RCD-001 | Action Recorder shall implement `idle`, `recording`, `paused`, and `stopping` states and allow one recording session at a time. | E | test |
 | REQ-RCD-002 | Start/Stop shall use one configurable global shortcut and Pause/Resume a distinct configurable global shortcut. Settings shall capture the next valid key combination, allow Escape to cancel, and temporarily unregister active recorder shortcuts while listening. Recorder control shortcuts shall not appear in the draft. | E | test |
 | REQ-RCD-003 | A recording shall bind to the selected screen or window capture context. Start shall activate and verify a selected window; later window keyboard and committed pointer input shall be accepted only while that window is foreground. Target loss shall pause recording with a visible reason. | E | test |
-| REQ-RCD-004 | On Windows, the recorder shall translate left clicks, long presses, drags, wheel input, key commands, and printable typing into existing pipeline action types using capture-relative coordinates. | E | test |
+| REQ-RCD-004 | On Windows, the recorder shall observe low-level keyboard and mouse input and translate left clicks, long presses, drags, wheel input, key commands, and printable typing into pipeline action types using capture-relative coordinates. Ordinary pointer movement shall remain unrecorded. | E | test |
 | REQ-RCD-005 | Input marked by Windows as injected shall be discarded so WatchDog-generated automation does not enter a recording. | E | test |
 | REQ-RCD-006 | Printable text shall be masked by default. When explicit typed-text capture is enabled, the UI shall warn that recorded text requires review and may contain sensitive data. | E | test |
 | REQ-RCD-007 | The application shall show a persistent recording bar across views with state, target, elapsed time, action count, pause/resume, and stop controls. | E | test |
-| REQ-RCD-008 | The Action Recorder view shall present formatted draft actions, warnings, relative timing, removal, copy, export, and clear controls. A draft shall not modify or execute a pipeline automatically. | E | test |
+| REQ-RCD-008 | The Action Recorder view shall present formatted draft actions, warnings, active relative timing, derived inter-action waits, removal, copy, export, and clear controls. Pause duration shall not enter recorded timing. Copied pipeline actions and exported `pipeline_actions` shall contain explicit Wait actions for positive recorded gaps. A draft shall not modify or execute a pipeline automatically. | E | test |
 | REQ-RCD-009 | macOS and Linux shall retain the recorder command boundary but return a structured unsupported result until a platform input observer is implemented. | D | review |
 
 ### 7.2 Interface requirements
@@ -476,6 +477,7 @@ passed a native acceptance test.
 |----------------|---------|-----------------|--------|
 | REQ-AUTHOR-003 | Runtime merges defaults, instance values, and explicit run values; the loaded graph exposes effective defaults to the UI. | `authoring/parser/mod.rs`; `runtime/runner.rs` | Implemented; Rust tests require execution |
 | REQ-ACT-003, REQ-CON-001, REQ-CAP-007 | Standalone actions require a context matching the active stream. Pipeline and isolated node actions restore and verify window foreground before each dispatch; a failed activation refuses input. | `runtime/runner.rs`; `testing/node_test.rs`; `runtime/engine/runner.rs` | Implemented; native activation and input tests required |
+| REQ-ACT-001, REQ-ACT-010, REQ-RCD-008 | Metadata supports explicit Wait actions. Pipeline waits are cancellable and pause-aware; recorder copy/export derives waits from active-time offsets without counting long-press or swipe duration twice. | `authoring/models/action.rs`; `runtime/engine/runner.rs`; `recorder/service.rs`; `recorder/utils/recordingTiming.ts`; `schemas/watchdog-metadata.schema.json` | Rust serialization and frontend timing tests passed; native recorder timing walkthrough pending |
 | REQ-IF-034 | Virtual desktops are used only to filter the capture window list. Pipeline desktop switching and `REQ-PIPE-003` are retired. | `capture/components/DesktopFilter.tsx`; `capture/stores/useWindowStore.test.ts`; `runtime/runner.rs` | Frontend filter test passed; native enumeration still requires verification |
 | REQ-PIPE-018, REQ-PIPE-019 | Window restore returns a result. Startup appends cleanup failure to its diagnostic; run status/events carry a separate cleanup error and completion signal. | `capture/repositories/window/mod.rs`; `runtime/runner.rs`; `runtime/engine/mod.rs` | Implemented; native restoration test required |
 | REQ-PIPE-009 | Pipeline `post_delay` is cancellable and runs after action attempts even when an action fails. | `runtime/engine/runner.rs` | Implemented; Rust test requires execution |
@@ -494,11 +496,11 @@ passed a native acceptance test.
 | REQ-MNT-002, REQ-MNT-003 | Main-app startup bounds dated logs and periodically clears generated visions within the user-data root. Cleanup errors are logged and do not block startup. | `core/maintenance.rs`; `lib.rs` | Implemented; startup filesystem test pending |
 | REQ-MNT-004 | Backend dependencies follow `core → capture → authoring → plugins → runtime → testing`; frontend integration uses shell and observability contracts. Capture ownership, Patrol services, authoring validation, plugin coordinates/OCR, runtime helpers, testing metadata, pipeline API clients, and feature styles have dedicated modules. | `src/architecture.test.ts`; `modules/capture/services/stream/`; `modules/pipeline/runtime/patrol/`; `modules/pipeline/runtime/engine/runner/`; `src/api/pipeline/` | Architecture test and full compile pass; large coordinator follow-ups are recorded in SDD §8 |
 
-The frontend production build and all 143 frontend tests pass. The Windows
+The frontend production build and all 147 frontend tests pass. The Windows
 build now delay-loads Common Controls so the Rust unit-test harness does not
 resolve an unused Tauri dialog entry point before tests start; the application
 binary still links successfully with Tauri's manifest. The Rust suite reports
-179 passing library tests and one intentionally ignored OCR runtime/model test,
+181 passing library tests and one intentionally ignored OCR runtime/model test,
 plus the passing preview capability integration test.
 These automated checks cover pure routing, configuration, state, and filesystem
 behavior. Live capture, foreground input, OCR, VLM action classification, hint
@@ -516,7 +518,7 @@ require executable-level checks.
 |------|-----|---------|
 | Stakeholder needs | `STK-001`…`012` | §6 |
 | Capture / authoring / execution | `REQ-CAP-001`…`010`; `REQ-AUTHOR-001`…`011`; `REQ-PIPE-001`…`002`, `004`…`026` | §7.1; `REQ-PIPE-003` retired |
-| Recognition / actions / testing | `REQ-REC-001`…`009`; `REQ-ACT-001`…`009`; `REQ-TEST-001`…`007` | §7.1 |
+| Recognition / actions / testing | `REQ-REC-001`…`009`; `REQ-ACT-001`…`010`; `REQ-TEST-001`…`007` | §7.1 |
 | Observability / settings / operator tools | `REQ-OBS-001`…`006`; `REQ-SET-001`…`008`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009` | §7.1 |
 | Interfaces | `REQ-IF-001`…`008` (files); `010`…`022` (IPC); `030`…`035` (OS/runtime) | §7.2 |
 | Usability / reliability / performance | `REQ-USE-001`…`004`; `REQ-REL-001`…`002`; `REQ-PERF-001`…`004` | §7.3–7.5 |

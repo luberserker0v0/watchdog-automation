@@ -171,7 +171,7 @@ evidence. The node's input path follows this sequence:
 |-------|-----------|----------------------------|
 | 1 | Optional `pre_wait_freezes` on the active capture target/session. | Timeout or stop ends the wait; failure follows the node's error handling. |
 | 2 | Cancellable `pre_delay`; fresh-frame recognition and action-target mapping. | Failed refreshed recognition follows the error route. |
-| 3 | Ordered action list, repeated with configured pacing. | Action error is recorded; window input is guarded immediately before dispatch (§3.3). |
+| 3 | Ordered action list, including explicit cancellable, pause-aware `Wait` intervals, repeated with configured pacing. | Action error is recorded; window input is guarded immediately before dispatch (§3.3). |
 | 4 | Optional `post_wait_freezes` after dispatched input. | Timeout follows node error handling. |
 | 5 | Cancellable `post_delay`. | Runs after action attempts, including action or post-wait errors. |
 
@@ -327,6 +327,12 @@ non-foreground target pauses the session and emits an explicit reason.
 | Control or non-printable key | `ClickKey` with held modifiers |
 | Printable keys within 750 ms | One `InputText`; masked unless capture was explicitly enabled |
 
+Ordinary pointer movement is not observed. Each draft action stores an active
+session offset. Pause transitions freeze this clock. The frontend derives the
+idle interval before each action, subtracting the current `LongPress` or
+`Swipe` duration so gesture time is not counted twice, and inserts explicit
+`Wait` actions when copying or exporting metadata-compatible actions.
+
 The frontend registers two distinct global shortcuts and restores the last
 working pair if registration fails. `RecordingStatusBar` stays mounted above
 every main view. `ActionRecorderView` formats the draft and permits removal,
@@ -346,7 +352,7 @@ Linux retain the command model and report unsupported at start.
 | `patrol-report` event | PIPE / OBS | A completed background sample carries task and optional action-attempt identity, run/capture identity, task-specific outcome, match, and reason; the frontend formats it independently in the Execution Log |
 | `patrol-chat-event`, image cache commands | PIPE / OBS | Ordered session trace contains formatted text and image IDs, excludes credentials and inline image data; previews load on demand |
 | `ValidationError` | AUTHOR | Type and message distinguish authoring failures |
-| `RecorderStatus`, `RecordingSession`, `RecordedActionDraft` | RCD | One session at a time; actions use capture-relative coordinates and existing action types; drafts remain observational until copied or exported |
+| `RecorderStatus`, `RecordingSession`, `RecordedActionDraft` | RCD | One session at a time; actions use capture-relative coordinates; offsets count active recording time; copied/exported pipeline actions express positive gaps as Wait actions; drafts remain observational until copied or exported |
 | Native task notification | NOT | A stable event ID produces at most one delivery after permission; failure cannot alter pipeline or recorder state |
 
 The Tauri command list in `src-tauri/src/lib.rs` implements SRS

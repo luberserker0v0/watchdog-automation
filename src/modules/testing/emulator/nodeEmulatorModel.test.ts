@@ -81,6 +81,7 @@ describe("node emulator metadata model", () => {
     draft.recognition = { ...draft.recognition, type: "OCR", expected: "^Card 1$", threshold: "0.75", roi: "1,2,30,40", roiOffset: "5,6,7,8", candidateOrder: "right_to_left", candidateIndex: "2" };
     draft.actions = [
       action("DoNothing"),
+      action("Wait", { duration: "650" }),
       action("Click", { targetKind: "point", target: "10,20", targetOffset: "1,2,3,4" }),
       action("LongPress", { targetKind: "node", target: "Other", duration: "900" }),
       action("Swipe", { targetKind: "region", target: "1,2,3,4", endKind: "point", end: "50,60", duration: "300" }),
@@ -96,7 +97,8 @@ describe("node emulator metadata model", () => {
     const result = buildNodeEmulator(draft);
     expect(result.errors).toEqual({});
     const node = result.value!.metadata.nodes.AllFields;
-    expect(node.actions?.map((item) => item.type)).toEqual(["DoNothing", "Click", "LongPress", "Swipe", "Scroll", "ClickKey", "InputText", "StopTask", "Custom"]);
+    expect(node.actions?.map((item) => item.type)).toEqual(["DoNothing", "Wait", "Click", "LongPress", "Swipe", "Scroll", "ClickKey", "InputText", "StopTask", "Custom"]);
+    expect(node.actions?.[1]).toEqual({ type: "Wait", duration: 650 });
     expect(node.params?.map((item) => item.type)).toEqual(["text", "password", "number", "dropdown", "switch", "color"]);
     expect(node).toMatchObject({ kind: "Normal", desc: "Runs the flow", timeout: 11, error_timeout: 12, rate_limit: 13, pre_delay: 14, pre_wait_freezes: 250, post_delay: 15, post_wait_freezes: 500, max_hit: 16, repeat: 2, repeat_delay: 17, attach: { owner: "tester" } });
     expect(result.value!.paramValues).toMatchObject({ number: 3.5, enabled: true, choice: "one" });

@@ -2,6 +2,7 @@ import type { Action } from "../../../api/pipeline";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useRecorderStore } from "../stores/useRecorderStore";
+import { recordedDelayBefore, toPipelineActions } from "../utils/recordingTiming";
 import "../styles/recorder.css";
 
 type RecorderIconName = "record" | "stop" | "pause" | "play" | "copy" | "export" | "trash" | "remove";
@@ -22,6 +23,7 @@ function RecorderIcon({ name }: { name: RecorderIconName }) {
 
 function actionSummary(action: Action): string {
   switch (action.type) {
+    case "Wait": return `Wait ${action.duration}ms`;
     case "Click": return `Click at ${JSON.stringify(action.target)}`;
     case "LongPress": return `Long press at ${JSON.stringify(action.target)} for ${action.duration}ms`;
     case "Swipe": return `Swipe ${JSON.stringify(action.begin)} → ${JSON.stringify(action.end)} in ${action.duration}ms`;
@@ -55,11 +57,11 @@ export default function ActionRecorderView() {
     try { await action(); } finally { setPending(null); }
   };
   const copy = async () => {
-    await navigator.clipboard.writeText(JSON.stringify(actions.map((item) => item.action), null, 2));
+    await navigator.clipboard.writeText(JSON.stringify(toPipelineActions(actions), null, 2));
     setFeedback("copied");
   };
   const exportDraft = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, actions }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 2, actions, pipeline_actions: toPipelineActions(actions) }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -96,9 +98,9 @@ export default function ActionRecorderView() {
         <div className="recorder-empty">{t("recorder.empty")}</div>
       ) : (
         <div className="recorder-timeline">
-          {actions.map((item) => (
+          {actions.map((item, index) => (
             <article className="recorded-action" key={item.id}>
-              <div className="recorded-action-time">+{(item.offset_ms / 1000).toFixed(2)}s</div>
+              <div className="recorded-action-time">+{(item.offset_ms / 1000).toFixed(2)}s{index > 0 && <> · wait {(recordedDelayBefore(actions, index) / 1000).toFixed(2)}s</>}</div>
               <div className="recorded-action-content"><strong>{actionSummary(item.action)}</strong><button className="recorded-action-remove" onClick={() => removeAction(item.id)} title={t("common.remove")}><RecorderIcon name="remove" /><span>{t("common.remove")}</span></button><div className="recorded-action-source">{item.source}</div>{item.warning && <p className="recorded-action-warning">{item.warning}</p>}</div>
             </article>
           ))}

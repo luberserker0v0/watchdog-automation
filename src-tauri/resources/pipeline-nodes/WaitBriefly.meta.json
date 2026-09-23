@@ -1,0 +1,22 @@
+{
+  "nodes": {
+    "WaitBriefly": {
+      "target": {
+        "type": "window",
+        "title": "^Target UI - Dashboard$",
+        "capture_area": "client"
+      },
+      "recognition": {
+        "type": "DirectHit"
+      },
+      "actions": [
+        {
+          "type": "Wait",
+          "duration": 500
+        }
+      ],
+      "enabled": true,
+      "max_hit": 1
+    }
+  }
+}

@@ -6,6 +6,13 @@ pub enum Action {
     #[serde(rename = "DoNothing")]
     DoNothing,
 
+    /// Pause before the next action in the same ordered action list.
+    ///
+    /// Pipeline execution handles this variant specially so the wait remains
+    /// responsive to pause and stop requests.
+    #[serde(rename = "Wait")]
+    Wait { duration: u64 },
+
     #[serde(rename = "Click")]
     Click {
         #[serde(default = "default_true")]

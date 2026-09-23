@@ -338,6 +338,7 @@ fn trim<T>(values: &mut Vec<T>, limit: usize) {
 pub(crate) fn summarize_action(action: &Action) -> (&'static str, String) {
     match action {
         Action::DoNothing => ("DoNothing", String::new()),
+        Action::Wait { duration } => ("Wait", format!("duration_ms={duration}")),
         Action::Click { target, target_offset } => {
             ("Click", format!("target={target:?}, offset={target_offset:?}"))
         }

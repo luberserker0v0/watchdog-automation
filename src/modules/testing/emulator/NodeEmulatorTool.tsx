@@ -19,7 +19,7 @@ import {
 } from "./nodeEmulatorModel";
 
 const RECOGNITION_TYPES: Recognition["type"][] = ["DirectHit", "TemplateMatch", "OCR", "ColorMatch", "Custom"];
-const ACTION_TYPES: Action["type"][] = ["DoNothing", "Click", "LongPress", "Swipe", "Scroll", "ClickKey", "InputText", "StopTask", "Custom"];
+const ACTION_TYPES: Action["type"][] = ["DoNothing", "Wait", "Click", "LongPress", "Swipe", "Scroll", "ClickKey", "InputText", "StopTask", "Custom"];
 const PARAM_TYPES: ParamType[] = ["text", "password", "number", "dropdown", "switch", "color"];
 const TARGET_KINDS: EmulatorTargetKind[] = ["recognized", "node", "point", "region"];
 const CANDIDATE_ORDERS: CandidateOrder[] = ["native", "top_to_bottom", "bottom_to_top", "left_to_right", "right_to_left", "confidence_desc"];
@@ -99,7 +99,7 @@ function ActionEditor({
         <TargetFields prefix={`${path}.begin`} kind={action.targetKind} value={action.target} offset={action.targetOffset} onKind={(targetKind) => onChange({ targetKind })} onValue={(target) => onChange({ target })} onOffset={(targetOffset) => onChange({ targetOffset })} errors={errors} />
         <TargetFields prefix={`${path}.end`} kind={action.endKind} value={action.end} offset={action.endOffset} onKind={(endKind) => onChange({ endKind })} onValue={(end) => onChange({ end })} onOffset={(endOffset) => onChange({ endOffset })} errors={errors} />
       </>}
-      {(action.type === "LongPress" || action.type === "Swipe") && <label>Duration (ms)<input type="number" min="0" value={action.duration} placeholder={action.type === "LongPress" ? "1000" : "200"} onChange={(event) => onChange({ duration: event.target.value })} /><ErrorText errors={errors} path={`${path}.duration`} /></label>}
+      {(action.type === "Wait" || action.type === "LongPress" || action.type === "Swipe") && <label>Duration (ms)<input type="number" min="0" value={action.duration} placeholder={action.type === "LongPress" ? "1000" : action.type === "Swipe" ? "200" : "500"} onChange={(event) => onChange({ duration: event.target.value })} /><ErrorText errors={errors} path={`${path}.duration`} /></label>}
       {action.type === "Scroll" && <div className="node-emulator-grid"><label>dx<input type="number" value={action.dx} onChange={(event) => onChange({ dx: event.target.value })} /><ErrorText errors={errors} path={`${path}.dx`} /></label><label>dy<input type="number" value={action.dy} onChange={(event) => onChange({ dy: event.target.value })} /><ErrorText errors={errors} path={`${path}.dy`} /></label></div>}
       {action.type === "ClickKey" && <label>Key codes<input value={action.keys} placeholder="13 or 17,67" onChange={(event) => onChange({ keys: event.target.value })} /><ErrorText errors={errors} path={`${path}.key`} /></label>}
       {action.type === "InputText" && <label>Input text<input value={action.inputText} onChange={(event) => onChange({ inputText: event.target.value })} /></label>}

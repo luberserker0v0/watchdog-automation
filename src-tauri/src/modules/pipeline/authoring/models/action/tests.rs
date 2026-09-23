@@ -12,6 +12,16 @@ fn test_do_nothing_serde() {
 }
 
 #[test]
+fn test_wait_serde() {
+    let action = Action::Wait { duration: 650 };
+    let json = serde_json::to_string(&action).unwrap();
+    assert_eq!(json, r#"{"type":"Wait","duration":650}"#);
+
+    let deserialized: Action = serde_json::from_str(&json).unwrap();
+    assert!(matches!(deserialized, Action::Wait { duration: 650 }));
+}
+
+#[test]
 fn test_click_serde() {
     let action = Action::Click {
         target: Target::recognized(),

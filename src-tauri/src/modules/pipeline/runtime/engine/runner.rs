@@ -17,6 +17,7 @@ use super::routing;
 use super::step;
 use super::{ChildrenKind, EngineResult, ExecutionContext, PipelineState, RunHandle, StepResult};
 use crate::modules::capture::services::stream::{StreamFrame, StreamService, StreamTarget};
+use crate::modules::pipeline::authoring::models::action::Action;
 use crate::modules::pipeline::authoring::models::node::Node;
 use crate::modules::pipeline::plugins::PluginRegistry;
 use crate::modules::pipeline::runtime::chat::{cache_image, ChatContent, PatrolChatSink};
@@ -1223,6 +1224,39 @@ impl PipelineRunSession {
                                 )
                             })
                         });
+                        if let Action::Wait { duration } = action {
+                            if !cancellable_delay(&handle, Duration::from_millis(*duration)).await {
+                                if let Some(evidence_id) = evidence_id {
+                                    if let Ok(mut state) = handle.patrol_state.lock() {
+                                        state.finish_action(
+                                            evidence_id,
+                                            DispatchOutcome::Blocked("pipeline_stopped".into()),
+                                            handle.start_time.elapsed().as_millis() as u64,
+                                        );
+                                    }
+                                }
+                                was_stopped = true;
+                                break 'pipeline;
+                            }
+                            actions_fired += 1;
+                            if let Some(evidence_id) = evidence_id {
+                                if let Ok(mut state) = handle.patrol_state.lock() {
+                                    state.finish_action(
+                                        evidence_id,
+                                        DispatchOutcome::Sent,
+                                        handle.start_time.elapsed().as_millis() as u64,
+                                    );
+                                }
+                            }
+                            log::info!(
+                                "[pipeline] node='{}' waited {}ms (repeat {}, action {})",
+                                current_node.id,
+                                duration,
+                                repetition,
+                                action_index
+                            );
+                            continue;
+                        }
                         if let StreamTarget::Window { hwnd, .. } = &expected_stream_target {
                             let hwnd = *hwnd;
                             let foreground_result = tokio::task::spawn_blocking(move || {

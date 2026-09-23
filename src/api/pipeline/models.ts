@@ -55,6 +55,7 @@ export type Target =
 
 export type Action =
   | { type: "DoNothing" }
+  | { type: "Wait"; duration: number }
   | {
       type: "Click";
       target?: Target;

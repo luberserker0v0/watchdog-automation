@@ -63,6 +63,17 @@ The review view formats each action with its relative time and warnings. A user
 can remove unwanted actions, copy the pipeline action array, export the full
 draft, or clear the stopped session.
 
+Ordinary pointer movement is not recorded. Dragging remains a `Swipe` with its
+start point, end point, and duration.
+
+Timing uses active recording time, so Pause/Resume does not add a replay gap.
+Copying produces an ordered pipeline action array with an explicit
+`{"type":"Wait","duration":...}` action for each positive idle interval
+between retained actions. The exported version 2 draft preserves the original
+offset evidence and includes the same expanded array as `pipeline_actions`.
+For `LongPress` and `Swipe`, gesture duration is subtracted when calculating
+the preceding idle interval so playback does not count that duration twice.
+
 ## Text privacy
 
 **Capture typed text** is off by default. Printable typing then becomes one

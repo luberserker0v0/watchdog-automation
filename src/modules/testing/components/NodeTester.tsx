@@ -80,6 +80,7 @@ function formatAction(action: Action): string {
     : "";
   switch (action.type) {
     case "DoNothing": return "DoNothing";
+    case "Wait": return `Wait (${action.duration}ms)`;
     case "Click": return `Click (target=${formatTarget(action.target ?? true)}${offset(action.target_offset)})`;
     case "LongPress": return `LongPress (target=${formatTarget(action.target ?? true)}${offset(action.target_offset)}, duration=${action.duration ?? 1000}ms)`;
     case "Swipe": return `Swipe (begin=${formatTarget(action.begin ?? true)}${offset(action.begin_offset)}, end=${formatTarget(action.end ?? true)}${offset(action.end_offset)}, duration=${action.duration ?? 200}ms)`;

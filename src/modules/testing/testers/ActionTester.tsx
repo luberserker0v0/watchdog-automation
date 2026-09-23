@@ -7,6 +7,7 @@ import InputTextActionTester from "./InputTextActionTester";
 import ClickKeyActionTester from "./ClickKeyActionTester";
 import DoNothingTester from "./DoNothingTester";
 import CustomActionTester from "./CustomActionTester";
+import WaitActionTester from "./WaitActionTester";
 
 interface Props {
   actions: Action[];
@@ -22,6 +23,7 @@ function actionLabel(action: Action): string {
     case "InputText": return `InputText → "${action.input_text}"`;
     case "ClickKey": return "ClickKey";
     case "DoNothing": return "DoNothing";
+    case "Wait": return `Wait ${action.duration}ms`;
     case "StopTask": return "StopTask";
     case "Custom": return `Custom: ${action.action}`;
     default: return "Unknown";
@@ -44,6 +46,8 @@ function ActionPanel({ action, context }: { action: Action; context: ActionTestC
       return <ClickKeyActionTester action={action} context={context} />;
     case "DoNothing":
       return <DoNothingTester />;
+    case "Wait":
+      return <WaitActionTester action={action} context={context} />;
     case "StopTask":
       return (
         <div className="tester-panel">

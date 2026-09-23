@@ -707,38 +707,61 @@
     },
     "action": {
       "title": "Action",
-      "description": "Supported object types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Default action type: DoNothing. Actions execute in array order after a match; target-based actions map capture-local coordinates to physical screen coordinates.",
+      "description": "Supported object types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Default action type: DoNothing. Actions execute in array order after a match; target-based actions map capture-local coordinates to physical screen coordinates.",
       "default": {
         "type": "DoNothing"
       },
       "oneOf": [
         {
           "title": "Do nothing",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected DoNothing: perform no input.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected DoNothing: perform no input.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "DoNothing",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: DoNothing, which performs no input. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `DoNothing` — perform no input.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: DoNothing, which performs no input. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `DoNothing` — perform no input.\n\n**Default:** `DoNothing`."
             }
           },
           "required": [
             "type"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected DoNothing:** perform no input."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected DoNothing:** perform no input."
+        },
+        {
+          "title": "Wait",
+          "description": "Supported action type Wait: wait for a fixed duration before continuing to the next action. Pipeline waits are cancellable and pause-aware.",
+          "markdownDescription": "**Supported action type**\n\n`Wait` pauses for `duration` milliseconds before continuing. Pipeline waits are cancellable and pause-aware.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "Wait",
+              "description": "Supported value: Wait. Select the Wait action.",
+              "markdownDescription": "**Supported value**\n\n`Wait`"
+            },
+            "duration": {
+              "$ref": "#/$defs/milliseconds",
+              "description": "Supported value: required non-negative wait duration in milliseconds.",
+              "markdownDescription": "**Supported value**\n\nRequired non-negative wait duration in milliseconds."
+            }
+          },
+          "required": [
+            "type",
+            "duration"
+          ]
         },
         {
           "title": "Click",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Click: click the resolved target center after target_offset.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Click: click the resolved target center after target_offset.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "Click",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Click, which clicks the resolved target center. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Click` — click the resolved target center.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Click, which clicks the resolved target center. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Click` — click the resolved target center.\n\n**Default:** `DoNothing`."
             },
             "target": { "$ref": "#/$defs/actionTarget", "default": true, "description": "Click target. Supported value forms: true | string | [integer, integer] | [integer, integer, integer, integer]. true uses the current recognized box; string references a node ID; [x,y] is a fixed point; [x,y,width,height] is a fixed area. Default: true.", "markdownDescription": "**Supported action targets**\n\n- `true` — current recognized box\n- `\"NodeId\"` — saved box from another node\n- `[x, y]` — fixed point\n- `[x, y, width, height]` — fixed area\n\n**Default:** `true`" },
             "target_offset": {
@@ -756,18 +779,18 @@
           "required": [
             "type"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Click:** click the resolved target center after target_offset."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Click:** click the resolved target center after target_offset."
         },
         {
           "title": "Long press",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected LongPress: hold the resolved target center for duration milliseconds.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected LongPress: hold the resolved target center for duration milliseconds.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "LongPress",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: LongPress, which holds the resolved target center. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `LongPress` — hold the resolved target center.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: LongPress, which holds the resolved target center. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `LongPress` — hold the resolved target center.\n\n**Default:** `DoNothing`."
             },
             "target": { "$ref": "#/$defs/actionTarget", "default": true, "description": "Long-press target. Supported value forms: true | string | [integer, integer] | [integer, integer, integer, integer]. true uses the current recognized box; string references a node ID; [x,y] is a fixed point; [x,y,width,height] is a fixed area. Default: true.", "markdownDescription": "**Supported action targets**\n\n- `true` — current recognized box\n- `\"NodeId\"` — saved box from another node\n- `[x, y]` — fixed point\n- `[x, y, width, height]` — fixed area\n\n**Default:** `true`" },
             "target_offset": {
@@ -791,18 +814,18 @@
           "required": [
             "type"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected LongPress:** hold the resolved target center for duration milliseconds."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected LongPress:** hold the resolved target center for duration milliseconds."
         },
         {
           "title": "Swipe",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Swipe: drag from begin center to end center over duration milliseconds.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Swipe: drag from begin center to end center over duration milliseconds.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "Swipe",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Swipe, which drags from the resolved begin center to the end center. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Swipe` — drag from the resolved `begin` center to the `end` center.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Swipe, which drags from the resolved begin center to the end center. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Swipe` — drag from the resolved `begin` center to the `end` center.\n\n**Default:** `DoNothing`."
             },
             "begin": { "$ref": "#/$defs/actionTarget", "default": true, "description": "Swipe start target. Supported value forms: true | string | [integer, integer] | [integer, integer, integer, integer]. true uses the current recognized box; string references a node ID; [x,y] is a fixed point; [x,y,width,height] is a fixed area. Default: true.", "markdownDescription": "**Supported action targets**\n\n- `true` — current recognized box\n- `\"NodeId\"` — saved box from another node\n- `[x, y]` — fixed point\n- `[x, y, width, height]` — fixed area\n\n**Default:** `true`" },
             "begin_offset": {
@@ -838,18 +861,18 @@
           "required": [
             "type"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Swipe:** drag from begin center to end center over duration milliseconds."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Swipe:** drag from begin center to end center over duration milliseconds."
         },
         {
           "title": "Scroll",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Scroll: move to the target, then emit dx/dy wheel deltas.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Scroll: move to the target, then emit dx/dy wheel deltas.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "Scroll",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Scroll, which emits wheel deltas at the resolved target. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Scroll` — emit wheel deltas at the resolved target.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Scroll, which emits wheel deltas at the resolved target. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Scroll` — emit wheel deltas at the resolved target.\n\n**Default:** `DoNothing`."
             },
             "target": { "$ref": "#/$defs/actionTarget", "default": true, "description": "Scroll target. Supported value forms: true | string | [integer, integer] | [integer, integer, integer, integer]. true uses the current recognized box; string references a node ID; [x,y] is a fixed point; [x,y,width,height] is a fixed area. Default: true.", "markdownDescription": "**Supported action targets**\n\n- `true` — current recognized box\n- `\"NodeId\"` — saved box from another node\n- `[x, y]` — fixed point\n- `[x, y, width, height]` — fixed area\n\n**Default:** `true`" },
             "target_offset": {
@@ -879,18 +902,18 @@
           "required": [
             "type"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Scroll:** move to the target, then emit dx/dy wheel deltas."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Scroll:** move to the target, then emit dx/dy wheel deltas."
         },
         {
           "title": "Press keyboard key",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected ClickKey: press native platform key codes in listed order.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected ClickKey: press native platform key codes in listed order.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "ClickKey",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: ClickKey, which presses native key codes. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `ClickKey` — press native key codes.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: ClickKey, which presses native key codes. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `ClickKey` — press native key codes.\n\n**Default:** `DoNothing`."
             },
             "key": {
               "type": "array",
@@ -911,18 +934,18 @@
             "type",
             "key"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected ClickKey:** press native platform key codes in listed order."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected ClickKey:** press native platform key codes in listed order."
         },
         {
           "title": "Input text",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected InputText: type text into the focused control after parameter substitution.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected InputText: type text into the focused control after parameter substitution.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "InputText",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: InputText, which types text after parameter substitution. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `InputText` — type text after parameter substitution.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: InputText, which types text after parameter substitution. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `InputText` — type text after parameter substitution.\n\n**Default:** `DoNothing`."
             },
             "input_text": {
               "type": "string",
@@ -934,35 +957,35 @@
             "type",
             "input_text"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected InputText:** type text into the focused control after parameter substitution."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected InputText:** type text into the focused control after parameter substitution."
         },
         {
           "title": "Stop pipeline",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected StopTask: stop the current pipeline successfully.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected StopTask: stop the current pipeline successfully.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "StopTask",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: StopTask, which terminates the pipeline successfully. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `StopTask` — terminate the pipeline successfully.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: StopTask, which terminates the pipeline successfully. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `StopTask` — terminate the pipeline successfully.\n\n**Default:** `DoNothing`."
             }
           },
           "required": [
             "type"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected StopTask:** stop the current pipeline successfully."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected StopTask:** stop the current pipeline successfully."
         },
         {
           "title": "Custom action",
-          "description": "Supported action types: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Custom: invoke a registered action with action-specific JSON parameters.",
+          "description": "Supported action types: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected Custom: invoke a registered action with action-specific JSON parameters.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "type": {
               "const": "Custom",
-              "description": "Supported values for action type: DoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Custom, which invokes the registered action named by action. Default: DoNothing.",
-              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Custom` — invoke the registered action named by `action`.\n\n**Default:** `DoNothing`."
+              "description": "Supported values for action type: DoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom. Selected: Custom, which invokes the registered action named by action. Default: DoNothing.",
+              "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Selected:** `Custom` — invoke the registered action named by `action`.\n\n**Default:** `DoNothing`."
             },
             "action": {
               "type": "string",
@@ -980,10 +1003,10 @@
             "type",
             "action"
           ],
-          "markdownDescription": "**Supported action types**\n\nDoNothing | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Custom:** invoke a registered action with action-specific JSON parameters."
+          "markdownDescription": "**Supported action types**\n\nDoNothing | Wait | Click | LongPress | Swipe | Scroll | ClickKey | InputText | StopTask | Custom.\n\n**Selected Custom:** invoke a registered action with action-specific JSON parameters."
         }
       ],
-      "markdownDescription": "**Supported action types**\n\n- `DoNothing` — perform no input\n- `Click` — click a target\n- `LongPress` — hold a target\n- `Swipe` — drag between targets\n- `Scroll` — emit wheel deltas\n- `ClickKey` — press key codes\n- `InputText` — type text\n- `StopTask` — stop the pipeline\n- `Custom` — invoke a registered action\n\n**Default action type:** `DoNothing`"
+      "markdownDescription": "**Supported action types**\n\n- `DoNothing` — perform no input\n- `Wait` — pause before the next action\n- `Click` — click a target\n- `LongPress` — hold a target\n- `Swipe` — drag between targets\n- `Scroll` — emit wheel deltas\n- `ClickKey` — press key codes\n- `InputText` — type text\n- `StopTask` — stop the pipeline\n- `Custom` — invoke a registered action\n\n**Default action type:** `DoNothing`"
     },
     "parameter": {
       "title": "Developer input parameter",
@@ -1201,7 +1224,7 @@
           },
           "default": [],
           "description": "Supported value: array of action objects executed in order after recognition and pre_delay. Default action type when adding an action: DoNothing. Default actions array: empty, which performs no actions.",
-          "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Default action type:** `DoNothing`  \n**Default actions array:** `[]` (perform no actions)"
+          "markdownDescription": "**Supported action types**\n\n`DoNothing` | `Wait` | `Click` | `LongPress` | `Swipe` | `Scroll` | `ClickKey` | `InputText` | `StopTask` | `Custom`\n\n**Default action type:** `DoNothing`  \n**Default actions array:** `[]` (perform no actions)"
         },
         "params": {
           "type": "array",

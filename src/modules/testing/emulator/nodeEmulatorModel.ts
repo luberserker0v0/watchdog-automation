@@ -271,6 +271,7 @@ function buildAction(draft: EmulatorActionDraft, index: number, errors: Record<s
   const targetOffset = () => optionalOffset(draft.targetOffset, `${path}.target_offset`, errors);
   switch (draft.type) {
     case "DoNothing": return { type: "DoNothing" };
+    case "Wait": return { type: "Wait", duration: integer(draft.duration || "500", `${path}.duration`, errors) };
     case "Click": return { type: "Click", target: target(), target_offset: targetOffset() };
     case "LongPress": return {
       type: "LongPress",

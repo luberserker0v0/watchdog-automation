@@ -54,6 +54,8 @@ struct Inner {
     config: Option<RecordingConfig>,
     session: Option<RecordingSession>,
     started: Option<Instant>,
+    paused_at: Option<Instant>,
+    paused_total: Duration,
     reason: Option<String>,
     next_action_id: u64,
 }
@@ -65,6 +67,8 @@ impl Default for Inner {
             config: None,
             session: None,
             started: None,
+            paused_at: None,
+            paused_total: Duration::ZERO,
             reason: None,
             next_action_id: 1,
         }
@@ -115,6 +119,8 @@ impl RecorderService {
             let session_id = format!("recording-{started_unix_ms}");
             inner.state = RecorderState::Recording;
             inner.started = Some(Instant::now());
+            inner.paused_at = None;
+            inner.paused_total = Duration::ZERO;
             inner.reason = None;
             inner.next_action_id = 1;
             inner.config = Some(config.clone());
@@ -167,6 +173,7 @@ impl RecorderService {
         match inner.state {
             RecorderState::Recording => {
                 inner.state = RecorderState::Paused;
+                inner.paused_at = Some(Instant::now());
                 inner.reason = Some("Paused by user".to_string());
             }
             RecorderState::Paused => {}
@@ -182,6 +189,9 @@ impl RecorderService {
         let mut inner = self.inner.lock().unwrap_or_else(|error| error.into_inner());
         match inner.state {
             RecorderState::Paused => {
+                if let Some(paused_at) = inner.paused_at.take() {
+                    inner.paused_total += paused_at.elapsed();
+                }
                 inner.state = RecorderState::Recording;
                 inner.reason = None;
             }
@@ -204,8 +214,9 @@ impl RecorderService {
                     .ok_or_else(|| "No recording session is available".to_string());
             }
             inner.state = RecorderState::Stopping;
-            if let (Some(started), Some(session)) = (inner.started, inner.session.as_mut()) {
-                session.duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+            let duration_ms = active_elapsed_ms(&inner, Instant::now());
+            if let Some(session) = inner.session.as_mut() {
+                session.duration_ms = duration_ms;
             }
         }
         let stopping = self.status();
@@ -231,6 +242,8 @@ impl RecorderService {
         inner.state = RecorderState::Idle;
         inner.config = None;
         inner.started = None;
+        inner.paused_at = None;
+        inner.paused_total = Duration::ZERO;
         inner.reason = None;
         let session = inner
             .session
@@ -259,6 +272,8 @@ impl RecorderService {
         inner.config = None;
         inner.session = None;
         inner.started = None;
+        inner.paused_at = None;
+        inner.paused_total = Duration::ZERO;
     }
 }
 
@@ -276,11 +291,14 @@ fn status_from(inner: &Arc<Mutex<Inner>>) -> RecorderStatus {
 }
 
 fn status_from_locked(inner: &Inner) -> RecorderStatus {
-    let elapsed_ms = inner
-        .started
-        .map(|started| started.elapsed().as_millis().min(u64::MAX as u128) as u64)
-        .or_else(|| inner.session.as_ref().map(|session| session.duration_ms))
-        .unwrap_or(0);
+    let elapsed_ms = if inner.started.is_some() {
+        active_elapsed_ms(inner, Instant::now())
+    } else {
+        inner
+            .session
+            .as_ref()
+            .map_or(0, |session| session.duration_ms)
+    };
     RecorderStatus {
         state: inner.state,
         session_id: inner.session.as_ref().map(|session| session.id.clone()),
@@ -294,6 +312,21 @@ fn status_from_locked(inner: &Inner) -> RecorderStatus {
         reason: inner.reason.clone(),
         supported: cfg!(target_os = "windows"),
     }
+}
+
+fn active_elapsed_ms(inner: &Inner, at: Instant) -> u64 {
+    let Some(started) = inner.started else {
+        return 0;
+    };
+    let current_pause = inner
+        .paused_at
+        .map(|paused_at| at.saturating_duration_since(paused_at))
+        .unwrap_or_default();
+    at.saturating_duration_since(started)
+        .saturating_sub(inner.paused_total)
+        .saturating_sub(current_pause)
+        .as_millis()
+        .min(u64::MAX as u128) as u64
 }
 
 fn target_bounds(target: &RecordingTarget) -> Result<CaptureBounds, String> {
@@ -371,14 +404,7 @@ fn append_action(
     if guard.state != RecorderState::Recording {
         return;
     }
-    let offset_ms = guard
-        .started
-        .map(|started| {
-            at.saturating_duration_since(started)
-                .as_millis()
-                .min(u64::MAX as u128) as u64
-        })
-        .unwrap_or(0);
+    let offset_ms = active_elapsed_ms(&guard, at);
     let draft = RecordedActionDraft {
         id: guard.next_action_id,
         offset_ms,
@@ -407,14 +433,7 @@ fn append_text_action(
     if guard.state != RecorderState::Recording {
         return;
     }
-    let offset_ms = guard
-        .started
-        .map(|started| {
-            at.saturating_duration_since(started)
-                .as_millis()
-                .min(u64::MAX as u128) as u64
-        })
-        .unwrap_or(0);
+    let offset_ms = active_elapsed_ms(&guard, at);
     let warning = if capture_text {
         Some("Review recorded text before saving; keyboard layout and IME composition are not reconstructed.".to_string())
     } else {
@@ -468,6 +487,7 @@ fn pause_for_target(inner: &Arc<Mutex<Inner>>, app: &AppHandle, error: String) {
         return;
     }
     guard.state = RecorderState::Paused;
+    guard.paused_at = Some(Instant::now());
     guard.reason = Some(format!("Target unavailable: {error}"));
     let status = status_from_locked(&guard);
     drop(guard);
@@ -643,5 +663,20 @@ mod tests {
             pointer_action([10, 10], [30, 20], 250),
             Action::Swipe { duration: 250, .. }
         ));
+    }
+
+    #[test]
+    fn active_elapsed_excludes_completed_and_current_pauses() {
+        let started = Instant::now();
+        let inner = Inner {
+            started: Some(started),
+            paused_total: Duration::from_secs(2),
+            paused_at: Some(started + Duration::from_secs(7)),
+            ..Inner::default()
+        };
+        assert_eq!(
+            active_elapsed_ms(&inner, started + Duration::from_secs(10)),
+            5_000
+        );
     }
 }
