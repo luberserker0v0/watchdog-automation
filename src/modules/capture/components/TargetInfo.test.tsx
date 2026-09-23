@@ -5,7 +5,7 @@ import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { useWindowStore } from "../stores/useWindowStore";
-import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
+import { resetRuntimeIntegrationForTests } from "../../shell/stores/useRuntimeIntegrationStore";
 import TargetInfo from "./TargetInfo";
 
 describe("TargetInfo capture dimensions", () => {
@@ -18,7 +18,7 @@ describe("TargetInfo capture dimensions", () => {
       selectedIndex: 0,
       windows: [{ index: 0, title: "Target", app_name: "Target", width: 1296, height: 759, hwnd: 42 }],
     });
-    usePipelineStore.setState({ activeId: null, resizeIssue: null });
+    resetRuntimeIntegrationForTests();
   });
 
   afterEach(() => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
 import { useOverlayStore } from "../../stores/useOverlayStore";
-import { useLogStore } from "../../stores/useLogStore";
+import { useLogStore } from "../../../observability/stores/useLogStore";
 import { getWindowDetails, type WindowDetailInfo } from "../../../../api/window";
 import { saveRegionCapture } from "../../../../api/screen";
 import { useCaptureFrameStore } from "../../stores/useCaptureFrameStore";

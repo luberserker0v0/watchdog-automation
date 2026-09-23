@@ -3,7 +3,7 @@ import { testNode, type NodeExecutionMode, type NodeTestResult } from "../../../
 import type { Action, CandidateOrder, ParamType, PipelineTarget, Recognition } from "../../../api/pipeline";
 import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useDebugStore } from "../../capture/stores/useDebugStore";
-import { useLogStore } from "../../capture/stores/useLogStore";
+import { useLogStore } from "../../observability/stores/useLogStore";
 import { useOverlayStore } from "../../capture/stores/useOverlayStore";
 import { resolveRecognitionOverlayRoi } from "../../capture/utils/recognitionOverlay";
 import {

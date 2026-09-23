@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { listNodeMetas, openWindow, testNode, type NodeMetaInfo, type NodeParamValue } from "../../../../api/nodeTest";
-import { useLogStore } from "../../../capture/stores/useLogStore";
-import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
-import type { Recognition, Action, PipelineTarget } from "../../../../api/pipeline";
-import ParamsForm from "./ParamsForm";
-import { defaultNodeParams } from "./nodeTestParams";
+import { listNodeMetas, openWindow, testNode, type NodeMetaInfo, type NodeParamValue } from "../../../api/nodeTest";
+import { useLogStore } from "../../observability/stores/useLogStore";
+import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
+import type { Recognition, Action, PipelineTarget } from "../../../api/pipeline";
+import ParamsForm from "../../pipeline/authoring/components/ParamsForm";
+import { defaultNodeParams } from "../models/nodeTestParams";
 
 const PAGE_ORDER = ["Login", "Dashboard", "Settings", "Screen", "Other"] as const;
 const TIMING_LABELS: Record<string, string> = {

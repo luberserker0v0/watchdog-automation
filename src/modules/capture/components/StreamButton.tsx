@@ -1,6 +1,6 @@
 import { useStreamStore } from "../stores/useStreamStore";
-import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
 import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
+import { useRuntimeIntegrationStore } from "../../shell/stores/useRuntimeIntegrationStore";
 import { refreshOpenPreviewContext } from "../services/previewWindowManager";
 
 export default function StreamButton() {
@@ -11,7 +11,7 @@ export default function StreamButton() {
   const stop = useStreamStore((s) => s.stop);
   const captureOwner = useStreamStore((s) => s.captureOwner);
   const captureOwnerId = useStreamStore((s) => s.captureOwnerId);
-  const isPipelineRunning = usePipelineStore((s) => s.isExecuting);
+  const isPipelineRunning = useRuntimeIntegrationStore((s) => s.pipelineExecuting);
   const showFps = usePreferencesStore((s) => s.showFps);
 
   const isDisabled = isPipelineRunning || captureOwner === "pipeline";

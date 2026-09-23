@@ -17,7 +17,7 @@ import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useScreenStore } from "../../capture/stores/useScreenStore";
 import { useWindowStore } from "../../capture/stores/useWindowStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
-import { useLogStore } from "../../capture/stores/useLogStore";
+import { useLogStore } from "../../observability/stores/useLogStore";
 import { notifyTask } from "../../notifications/services/taskNotifier";
 
 const IDLE_STATUS: RecorderStatus = {

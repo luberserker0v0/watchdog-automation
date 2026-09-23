@@ -10,11 +10,12 @@ import NodeTestView from "./modules/testing/views/NodeTestView";
 import ExecutionLog from "./modules/pipeline/runtime/components/ExecutionLog";
 import PatrolChatRoom from "./modules/pipeline/runtime/views/PatrolChatRoom";
 import { ensurePatrolChatListener } from "./modules/pipeline/runtime/stores/usePatrolChatStore";
-import PreviewPage from "./modules/capture/views/PreviewPage";
+import PreviewPage from "./modules/shell/views/PreviewPage";
 import SettingsView from "./modules/settings/views/SettingsView";
 import ActionRecorderView from "./modules/recorder/views/ActionRecorderView";
 import RecordingStatusBar from "./modules/recorder/components/RecordingStatusBar";
 import RecorderCoordinator from "./modules/recorder/components/RecorderCoordinator";
+import RuntimeIntegrationCoordinator from "./modules/shell/components/RuntimeIntegrationCoordinator";
 import { useCaptureController } from "./modules/capture/hooks/useCaptureController";
 import "./modules/shell/styles/sidebar.css";
 import "./App.css";
@@ -94,6 +95,7 @@ function App() {
         <MainContent />
       </div>
       <RecorderCoordinator />
+      <RuntimeIntegrationCoordinator />
     </div>
   );
 }

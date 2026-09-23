@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { testRecognition, type CandidateOrder, type Recognition, type MatchResult } from "../../../api/pipeline";
-import { useLogStore } from "../../capture/stores/useLogStore";
+import { useLogStore } from "../../observability/stores/useLogStore";
 
 interface Props {
   recognition: Recognition & { type: "OCR" };

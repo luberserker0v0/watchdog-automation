@@ -9,7 +9,7 @@ import {
   startPipeline,
   stopPipeline,
 } from "../../../../api/pipeline";
-import { useLogStore } from "../../../capture/stores/useLogStore";
+import { useLogStore } from "../../../observability/stores/useLogStore";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
 import { notifyTask } from "../../../notifications/services/taskNotifier";
 import { useStreamStore } from "../../../capture/stores/useStreamStore";

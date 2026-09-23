@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useLogStore } from "../../../capture/stores/useLogStore";
+import { useLogStore } from "../../../observability/stores/useLogStore";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
 import { appendPatrolRecovery, appendPatrolReport, usePipelineStore } from "./usePipelineStore";
 

@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { NodeMetaInfo } from "../../../../api/nodeTest";
-import { useLogStore } from "../../../capture/stores/useLogStore";
+import type { NodeMetaInfo } from "../../../api/nodeTest";
+import { useLogStore } from "../../observability/stores/useLogStore";
 import NodeTester, { nodeTestPage } from "./NodeTester";
 
 const api = vi.hoisted(() => ({
@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   testNode: vi.fn(),
 }));
 
-vi.mock("../../../../api/nodeTest", () => api);
+vi.mock("../../../api/nodeTest", () => api);
 
 const inputNode: NodeMetaInfo = {
   id: "InputAccount",

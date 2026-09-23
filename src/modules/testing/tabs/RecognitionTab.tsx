@@ -4,7 +4,7 @@ import { useCaptureFrameStore } from "../../capture/stores/useCaptureFrameStore"
 import { useDebugStore } from "../../capture/stores/useDebugStore";
 import { useOverlayStore } from "../../capture/stores/useOverlayStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
-import { useLogStore } from "../../capture/stores/useLogStore";
+import { useLogStore } from "../../observability/stores/useLogStore";
 import { testRecognition, type CandidateOrder, type Recognition, type MatchResult } from "../../../api/pipeline";
 
 type RecogType = "DirectHit" | "TemplateMatch" | "OCR" | "ColorMatch";

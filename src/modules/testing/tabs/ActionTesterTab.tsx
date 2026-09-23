@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDebugStore } from "../../capture/stores/useDebugStore";
-import { useLogStore } from "../../capture/stores/useLogStore";
+import { useLogStore } from "../../observability/stores/useLogStore";
 import {
   testAction,
   type Action,

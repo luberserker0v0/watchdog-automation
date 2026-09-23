@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { testAction, type Action, type ActionTestContext } from "../../../api/pipeline";
-import { useLogStore } from "../../capture/stores/useLogStore";
+import { useLogStore } from "../../observability/stores/useLogStore";
 
 interface Props {
   context: ActionTestContext;

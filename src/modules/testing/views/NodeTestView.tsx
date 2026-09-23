@@ -1,4 +1,4 @@
-import NodeTester from "../../pipeline/authoring/components/NodeTester";
+import NodeTester from "../components/NodeTester";
 
 export default function NodeTestView() {
   return (

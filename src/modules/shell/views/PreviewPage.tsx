@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { CaptureMode } from "../../shell/stores/usePreferencesStore";
-import DebugWorkbench from "../components/DebugWorkbench";
-import TargetInfo from "../components/TargetInfo";
-import { useDetachedPreviewBridge } from "../hooks/useDetachedPreviewBridge";
-import { useOverlayInteraction } from "../hooks/useOverlayInteraction";
-import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
-import { useOverlayStore } from "../stores/useOverlayStore";
+import type { CaptureMode } from "../stores/usePreferencesStore";
+import DebugWorkbench from "../../testing/components/DebugWorkbench";
+import TargetInfo from "../../capture/components/TargetInfo";
+import { useDetachedPreviewBridge } from "../../capture/hooks/useDetachedPreviewBridge";
+import { useOverlayInteraction } from "../../capture/hooks/useOverlayInteraction";
+import { useCaptureFrameStore } from "../../capture/stores/useCaptureFrameStore";
+import { useOverlayStore } from "../../capture/stores/useOverlayStore";
 import type { ActionTestContext } from "../../../api/pipeline";
 
 function PreviewFrame({ mode }: { mode: CaptureMode }) {

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { useLogStore } from "../../../capture/stores/useLogStore";
+import { useLogStore } from "../../../observability/stores/useLogStore";
 import ExecutionLog from "./ExecutionLog";
 
 beforeEach(() => useLogStore.setState({ entries: [], nextId: 1 }));

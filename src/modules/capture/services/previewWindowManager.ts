@@ -2,8 +2,8 @@ import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { PhysicalSize } from "@tauri-apps/api/window";
 import type { PipelineTarget } from "../../../api/pipeline";
-import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
 import { normalizePreviewWindowSize, usePreferencesStore, type CaptureArea } from "../../shell/stores/usePreferencesStore";
+import { useRuntimeIntegrationStore } from "../../shell/stores/useRuntimeIntegrationStore";
 import { useUiStore } from "../../shell/stores/useUiStore";
 import { useCaptureFrameStore } from "../stores/useCaptureFrameStore";
 import { useOverlayStore } from "../stores/useOverlayStore";
@@ -84,10 +84,7 @@ function computeTargetInfo(): TargetInfoPayload {
   const stream = useStreamStore.getState();
   const mode = preferences.mode;
   const frame = useCaptureFrameStore.getState().frames[mode];
-  const activePipelineId = usePipelineStore.getState().activeId;
-  const activeTarget = activePipelineId
-    ? usePipelineStore.getState().pipelinesById[activePipelineId]?.graph?.target
-    : undefined;
+  const expectedWindowSize = useRuntimeIntegrationStore.getState().expectedWindowSize;
   const imageDimensions = useOverlayStore.getState().imageDimensions;
   const frameSize = stream.frameSize
     ?? (imageDimensions ? [imageDimensions.width, imageDimensions.height] as [number, number] : null);
@@ -127,7 +124,7 @@ function computeTargetInfo(): TargetInfoPayload {
     targetIndex,
     captureArea,
     target,
-    expectedSize: activeTarget?.type === "window" ? activeTarget.window_size ?? null : null,
+    expectedSize: expectedWindowSize,
     frameSize,
     clientSize: stream.clientSize
       ?? (mode === "window" && preferences.windowCaptureArea === "client" ? frameSize : null),

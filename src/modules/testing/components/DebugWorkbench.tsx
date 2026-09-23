@@ -1,11 +1,11 @@
 import type { ComponentType } from "react";
 import type { ActionTestContext, PipelineTarget } from "../../../api/pipeline";
 import type { CaptureMode } from "../../shell/stores/usePreferencesStore";
-import { useDebugStore, type DebugToolId } from "../stores/useDebugStore";
-import ActionTesterTab from "../../testing/tabs/ActionTesterTab";
-import InspectorTab from "./tabs/InspectorTab";
-import RecognitionTab from "../../testing/tabs/RecognitionTab";
-import NodeEmulatorTool from "../../testing/emulator/NodeEmulatorTool";
+import { useDebugStore, type DebugToolId } from "../../capture/stores/useDebugStore";
+import ActionTesterTab from "../tabs/ActionTesterTab";
+import InspectorTab from "../../capture/components/tabs/InspectorTab";
+import RecognitionTab from "../tabs/RecognitionTab";
+import NodeEmulatorTool from "../emulator/NodeEmulatorTool";
 
 export interface DebugToolContext {
   captureMode: CaptureMode;

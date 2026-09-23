@@ -5,7 +5,7 @@ import { useOverlayStore } from "../stores/useOverlayStore";
 import { useScreenStore } from "../stores/useScreenStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { useWindowStore } from "../stores/useWindowStore";
-import { usePipelineStore } from "../../pipeline/runtime/stores/usePipelineStore";
+import { useRuntimeIntegrationStore } from "../../shell/stores/useRuntimeIntegrationStore";
 
 const ENGINE_LABELS: Record<string, string> = { gdi: "GDI", dxgi: "DXGI", graphics: "Graphics" };
 
@@ -116,12 +116,8 @@ export default function TargetInfo(props: TargetInfoProps) {
   const streamFrameSize = useStreamStore((state) => state.frameSize);
   const streamClientSize = useStreamStore((state) => state.clientSize);
   const isStreaming = useStreamStore((state) => state.isStreaming);
-  const pipelineExpectedSize = usePipelineStore((state) => {
-    if (!state.activeId) return null;
-    const target = state.pipelinesById[state.activeId]?.graph?.target;
-    return target?.type === "window" ? target.window_size ?? null : null;
-  });
-  const resizeIssue = usePipelineStore((state) => state.resizeIssue);
+  const pipelineExpectedSize = useRuntimeIntegrationStore((state) => state.expectedWindowSize);
+  const resizeBeforeSize = useRuntimeIntegrationStore((state) => state.resizeBeforeSize);
   const effectiveMode = props.mode ?? currentMode;
   const hasFrame = useCaptureFrameStore((state) => state.frames[effectiveMode].previewUrl !== null);
   const fallbackFrameSize: [number, number] | null = hasFrame && imageDimensions
@@ -130,7 +126,7 @@ export default function TargetInfo(props: TargetInfoProps) {
   const frameSize = props.frameSize ?? (isStreaming ? streamFrameSize : fallbackFrameSize);
   const clientSize = props.clientSize ?? streamClientSize ?? (isStreaming
     ? null
-    : resizeIssue?.before ?? (
+    : resizeBeforeSize ?? (
       effectiveMode === "window" && windowCaptureArea === "client" ? fallbackFrameSize : null
     ));
   const expectedSize = props.expectedSize ?? pipelineExpectedSize;

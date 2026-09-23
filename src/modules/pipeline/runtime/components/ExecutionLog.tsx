@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLogStore } from "../../../capture/stores/useLogStore";
+import { useLogStore } from "../../../observability/stores/useLogStore";
 
 export default function ExecutionLog() {
   const [collapsed, setCollapsed] = useState(false);
