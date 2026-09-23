@@ -3,8 +3,10 @@ import { useScreenStore } from "../stores/useScreenStore";
 import { useWindowStore } from "../stores/useWindowStore";
 import { useStreamStore } from "../stores/useStreamStore";
 import { refreshOpenPreviewContext } from "../services/previewWindowManager";
+import { useTranslation } from "react-i18next";
 
 export default function CaptureButton() {
+  const { t } = useTranslation();
   const mode = usePreferencesStore((s) => s.mode);
   const screenCapture = useScreenStore((s) => s.capture);
   const windowCapture = useWindowStore((s) => s.capture);
@@ -26,9 +28,9 @@ export default function CaptureButton() {
       <button
         onClick={() => void handleCapture()}
         disabled={isStreaming || pipelineControlled}
-        title={pipelineControlled ? "Pipeline controls capture" : isStreaming ? "請先停止串流" : "截圖偵錯"}
+        title={pipelineControlled ? t("capture.pipelineControlled") : isStreaming ? t("capture.stopFirst") : t("capture.debugCapture")}
       >
-        截圖偵錯
+        {t("capture.debugCapture")}
       </button>
     </div>
   );

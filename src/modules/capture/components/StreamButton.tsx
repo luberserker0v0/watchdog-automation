@@ -2,8 +2,10 @@ import { useStreamStore } from "../stores/useStreamStore";
 import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useRuntimeIntegrationStore } from "../../shell/stores/useRuntimeIntegrationStore";
 import { refreshOpenPreviewContext } from "../services/previewWindowManager";
+import { useTranslation } from "react-i18next";
 
 export default function StreamButton() {
+  const { t } = useTranslation();
   const isStreaming = useStreamStore((s) => s.isStreaming);
   const actualFps = useStreamStore((s) => s.actualFps);
   const elapsedTime = useStreamStore((s) => s.elapsedTime);
@@ -27,7 +29,7 @@ export default function StreamButton() {
   };
 
   const dotClass = isStreaming ? "on" : "off";
-  const btnLabel = isStreaming ? "連線中" : "連線";
+  const btnLabel = isStreaming ? t("capture.connected") : t("capture.connect");
 
   return (
     <div className="stream-group">
@@ -46,7 +48,7 @@ export default function StreamButton() {
         <span className="stream-duration">{elapsedTime}</span>
       )}
       {captureOwner === "pipeline" && (
-        <span className="stream-duration" title={captureOwnerId ?? undefined}>Pipeline controlled</span>
+        <span className="stream-duration" title={captureOwnerId ?? undefined}>{t("capture.pipelineControlled")}</span>
       )}
     </div>
   );

@@ -13,8 +13,10 @@ import CapturePreviewCard from "../components/CapturePreviewCard";
 import ExpandButton from "../components/ExpandButton";
 import { refreshOpenPreviewContext } from "../services/previewWindowManager";
 import "../styles/capture.css";
+import { useTranslation } from "react-i18next";
 
 export default function CaptureView() {
+  const { t } = useTranslation();
   const mode = usePreferencesStore((s) => s.mode);
   const capturePanelOpen = useUiStore((state) => state.capturePanelOpen);
   const setCapturePanelOpen = useUiStore((state) => state.setCapturePanelOpen);
@@ -32,8 +34,8 @@ export default function CaptureView() {
             type="button"
             className="capture-collapse-button"
             onClick={() => setCapturePanelOpen(false)}
-            title="Collapse capture panel"
-            aria-label="Collapse capture panel"
+            title={t("capture.collapse")}
+            aria-label={t("capture.collapse")}
           >
             ›
           </button>
@@ -44,7 +46,7 @@ export default function CaptureView() {
         </div>
         {mode === "window" && (
           <details className="capture-advanced">
-            <summary>Window options</summary>
+            <summary>{t("capture.windowOptions")}</summary>
             <div className="capture-advanced-content">
               <DesktopFilter />
               <WindowStateFilter />
@@ -63,6 +65,7 @@ export default function CaptureView() {
 }
 
 function CaptureRail({ onExpand }: { onExpand: () => void }) {
+  const { t } = useTranslation();
   const mode = usePreferencesStore((state) => state.mode);
   const isStreaming = useStreamStore((state) => state.isStreaming);
   const captureOwner = useStreamStore((state) => state.captureOwner);
@@ -76,19 +79,19 @@ function CaptureRail({ onExpand }: { onExpand: () => void }) {
   };
 
   return (
-    <aside className="capture-rail" aria-label="Capture controls">
-      <button type="button" className="capture-rail-button capture-rail-expand" onClick={onExpand} title="Expand capture panel" aria-label="Expand capture panel">‹</button>
-      <span className="capture-rail-mode" title={mode === "screen" ? "Screen capture" : "Window capture"} aria-label={mode === "screen" ? "Screen capture" : "Window capture"}>
+    <aside className="capture-rail" aria-label={t("capture.controls")}>
+      <button type="button" className="capture-rail-button capture-rail-expand" onClick={onExpand} title={t("capture.expand")} aria-label={t("capture.expand")}>‹</button>
+      <span className="capture-rail-mode" title={mode === "screen" ? t("capture.screen") : t("capture.window")} aria-label={mode === "screen" ? t("capture.screen") : t("capture.window")}>
         {mode === "screen" ? "🖥" : "🪟"}
       </span>
-      <span className={`capture-rail-status ${isStreaming ? "streaming" : "idle"}`} title={pipelineControlled ? "Pipeline controls capture" : isStreaming ? "Streaming" : "Idle"} />
+      <span className={`capture-rail-status ${isStreaming ? "streaming" : "idle"}`} title={pipelineControlled ? t("capture.pipelineControlled") : isStreaming ? t("capture.streaming") : t("capture.idle")} />
       <button
         type="button"
         className={`capture-rail-button ${isStreaming ? "active" : ""}`}
         disabled={pipelineControlled}
         onClick={() => void toggleStream()}
-        title={pipelineControlled ? "Pipeline controls capture" : isStreaming ? "Stop streaming" : "Start streaming"}
-        aria-label={isStreaming ? "Stop streaming" : "Start streaming"}
+        title={pipelineControlled ? t("capture.pipelineControlled") : isStreaming ? t("capture.stop") : t("capture.start")}
+        aria-label={isStreaming ? t("capture.stop") : t("capture.start")}
       >
         {isStreaming ? "■" : "▶"}
       </button>

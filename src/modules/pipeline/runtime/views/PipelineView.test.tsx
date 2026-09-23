@@ -46,13 +46,13 @@ describe("PipelineView workspace", () => {
     const user = userEvent.setup();
     const view = render(<PipelineView />);
 
-    expect(view.getByRole("region", { name: "Pipeline graph" })).toBeVisible();
+    expect(view.getByRole("region", { name: "Graph" })).toBeVisible();
     await user.click(view.getByRole("button", { name: "Hide graph" }));
-    expect(view.queryByRole("region", { name: "Pipeline graph" })).toBeNull();
+    expect(view.queryByRole("region", { name: "Graph" })).toBeNull();
     expect(view.getByRole("button", { name: "Show graph" })).toBeVisible();
 
     await user.click(view.getByRole("button", { name: "Show graph" }));
-    expect(view.getByRole("region", { name: "Pipeline graph" })).toBeVisible();
+    expect(view.getByRole("region", { name: "Graph" })).toBeVisible();
   });
 
   it("provides a graph focus-mode switch", async () => {

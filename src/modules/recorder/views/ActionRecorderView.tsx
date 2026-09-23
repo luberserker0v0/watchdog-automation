@@ -1,5 +1,6 @@
 import type { Action } from "../../../api/pipeline";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useRecorderStore } from "../stores/useRecorderStore";
 import "../styles/recorder.css";
 
@@ -32,6 +33,7 @@ function actionSummary(action: Action): string {
 }
 
 export default function ActionRecorderView() {
+  const { t } = useTranslation();
   const status = useRecorderStore((state) => state.status);
   const actions = useRecorderStore((state) => state.actions);
   const error = useRecorderStore((state) => state.error);
@@ -71,33 +73,33 @@ export default function ActionRecorderView() {
   return (
     <div className="recorder-view">
       <header className="recorder-header">
-        <div className="recorder-heading"><div className={`recorder-heading-mark ${isActive ? "active" : ""}`}><RecorderIcon name="record" /></div><div><h2>Action Recorder</h2><p>Capture input as a reviewable pipeline action draft.</p></div>{actions.length > 0 && <span className="recorder-action-count">{actions.length} {actions.length === 1 ? "action" : "actions"}</span>}</div>
+        <div className="recorder-heading"><div className={`recorder-heading-mark ${isActive ? "active" : ""}`}><RecorderIcon name="record" /></div><div><h2>{t("recorder.title")}</h2><p>{t("recorder.subtitle")}</p></div>{actions.length > 0 && <span className="recorder-action-count">{t("recorder.action", { count: actions.length })}</span>}</div>
         <div className="recorder-toolbar" aria-label="Recorder controls">
           <div className="recorder-control-group recorder-session-controls">
             <button className={`recorder-control ${isActive ? "danger" : "primary"}`} disabled={isStopping || pending !== null} onClick={() => void run("toggle", toggle)} title={isActive ? "Stop and finalize this recording" : "Start recording the selected capture target"}>
-              <RecorderIcon name={isActive ? "stop" : "record"} /><span>{pending === "toggle" ? (isActive ? "Stopping…" : "Starting…") : isActive ? "Stop" : "Start recording"}</span>
+              <RecorderIcon name={isActive ? "stop" : "record"} /><span>{pending === "toggle" ? (isActive ? t("recorder.stopping") : t("recorder.starting")) : isActive ? t("common.stop") : t("recorder.start")}</span>
             </button>
             {(status.state === "recording" || status.state === "paused") && <button className="recorder-control secondary" disabled={pending !== null} onClick={() => void run("pause", togglePause)} title={status.state === "paused" ? "Continue this recording" : "Pause without ending this recording"}>
-              <RecorderIcon name={status.state === "paused" ? "play" : "pause"} /><span>{pending === "pause" ? "Updating…" : status.state === "paused" ? "Resume" : "Pause"}</span>
+              <RecorderIcon name={status.state === "paused" ? "play" : "pause"} /><span>{pending === "pause" ? t("recorder.updating") : status.state === "paused" ? t("common.resume") : t("common.pause")}</span>
             </button>}
           </div>
           <div className="recorder-control-group recorder-draft-controls">
-            <button className={`recorder-control quiet ${feedback === "copied" ? "confirmed" : ""}`} disabled={!actions.length} onClick={() => void copy()} title="Copy only the pipeline action array"><RecorderIcon name="copy" /><span>{feedback === "copied" ? "Copied!" : "Copy JSON"}</span></button>
-            <button className={`recorder-control quiet ${feedback === "exported" ? "confirmed" : ""}`} disabled={!actions.length} onClick={exportDraft} title="Download the complete recording draft to the system Downloads folder"><RecorderIcon name="export" /><span>{feedback === "exported" ? "Saved to Downloads" : "Export"}</span></button>
+            <button className={`recorder-control quiet ${feedback === "copied" ? "confirmed" : ""}`} disabled={!actions.length} onClick={() => void copy()} title="Copy only the pipeline action array"><RecorderIcon name="copy" /><span>{feedback === "copied" ? t("recorder.copied") : t("recorder.copy")}</span></button>
+            <button className={`recorder-control quiet ${feedback === "exported" ? "confirmed" : ""}`} disabled={!actions.length} onClick={exportDraft} title={t("recorder.exportNote")}><RecorderIcon name="export" /><span>{feedback === "exported" ? t("recorder.exported") : t("recorder.export")}</span></button>
             <button className="recorder-control quiet destructive" disabled={status.state !== "idle" || !actions.length || pending !== null} onClick={() => void run("clear", clear)} title={status.state !== "idle" ? "Stop recording before clearing the draft" : "Clear all recorded actions"}><RecorderIcon name="trash" /><span>{pending === "clear" ? "Clearing…" : "Clear"}</span></button>
           </div>
         </div>
       </header>
-      <div className="recorder-export-note">Export saves a timestamped JSON draft to your system Downloads folder.</div>
+      <div className="recorder-export-note">{t("recorder.exportNote")}</div>
       {(error || hotkeyError) && <div className="recorder-alert">{error || hotkeyError}</div>}
       {!actions.length ? (
-        <div className="recorder-empty">Select a capture target, then use Start recording or the configured global shortcut.</div>
+        <div className="recorder-empty">{t("recorder.empty")}</div>
       ) : (
         <div className="recorder-timeline">
           {actions.map((item) => (
             <article className="recorded-action" key={item.id}>
               <div className="recorded-action-time">+{(item.offset_ms / 1000).toFixed(2)}s</div>
-              <div className="recorded-action-content"><strong>{actionSummary(item.action)}</strong><button className="recorded-action-remove" onClick={() => removeAction(item.id)} title="Remove this action"><RecorderIcon name="remove" /><span>Remove</span></button><div className="recorded-action-source">{item.source}</div>{item.warning && <p className="recorded-action-warning">{item.warning}</p>}</div>
+              <div className="recorded-action-content"><strong>{actionSummary(item.action)}</strong><button className="recorded-action-remove" onClick={() => removeAction(item.id)} title={t("common.remove")}><RecorderIcon name="remove" /><span>{t("common.remove")}</span></button><div className="recorded-action-source">{item.source}</div>{item.warning && <p className="recorded-action-warning">{item.warning}</p>}</div>
             </article>
           ))}
         </div>

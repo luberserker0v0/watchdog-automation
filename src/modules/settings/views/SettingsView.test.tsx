@@ -21,23 +21,23 @@ beforeEach(() => {
 it("enables patrol with one switch and exposes search settings", async () => {
   const user = userEvent.setup();
   render(<SettingsView />);
-  const hops = screen.getByLabelText("鄰近搜尋距離 K") as HTMLInputElement;
-  const cycle = screen.getByLabelText("巡檢週期（秒）") as HTMLInputElement;
+  const hops = screen.getByLabelText("Neighbor search distance K") as HTMLInputElement;
+  const cycle = screen.getByLabelText("Patrol interval (seconds)") as HTMLInputElement;
   expect(cycle.value).toBe("20");
   expect(cycle.disabled).toBe(true);
   expect(hops.disabled).toBe(true);
   expect(screen.queryByLabelText("巡檢模式")).toBeNull();
-  await user.click(screen.getByLabelText("啟用巡檢"));
+  await user.click(screen.getByLabelText("Enable Patrol"));
   expect(hops.disabled).toBe(false);
-  await user.selectOptions(screen.getByLabelText("失敗復原方式"), "redirection_only");
-  expect(screen.getByLabelText("每次執行最多重新導向次數")).toBeTruthy();
+  await user.selectOptions(screen.getByLabelText("Failure recovery"), "redirection_only");
+  expect(screen.getByLabelText("Maximum redirects per run")).toBeTruthy();
   expect(usePreferencesStore.getState().patrolRecoveryPolicy).toBe("redirection_only");
   await user.clear(cycle);
   await user.type(cycle, "30");
   await user.tab();
   expect(usePreferencesStore.getState().patrolCycleSeconds).toBe(30);
   expect(usePreferencesStore.getState().patrolEnabled).toBe(true);
-  await user.click(screen.getByLabelText("啟用巡檢"));
+  await user.click(screen.getByLabelText("Enable Patrol"));
   expect(usePreferencesStore.getState().patrolEnabled).toBe(false);
 });
 
@@ -63,4 +63,12 @@ it("shows related folder purposes and opens an allowlisted folder", async () => 
   expect(screen.getByText("C:\\Users\\tester\\.watch_dog\\logs")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Open logs folder" }));
   expect(openRelatedFolder).toHaveBeenCalledWith("logs");
+});
+
+it("switches the GUI to Traditional Chinese and persists the choice", async () => {
+  const user = userEvent.setup();
+  render(<SettingsView />);
+  await user.selectOptions(screen.getByLabelText("Language"), "zh-TW");
+  expect(await screen.findByRole("heading", { name: "設定" })).toBeTruthy();
+  expect(localStorage.getItem("watchdog:language")).toBe("zh-TW");
 });

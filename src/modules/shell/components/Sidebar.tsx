@@ -1,20 +1,22 @@
 import { useUiStore, type ActiveView } from "../stores/useUiStore";
 import { usePreferencesStore } from "../stores/usePreferencesStore";
+import { useTranslation } from "react-i18next";
 
 interface NavItem {
   id: ActiveView;
   icon: string;
-  label: string;
+  labelKey: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "pipeline", icon: "🔗", label: "Pipeline" },
-  { id: "nodeTest", icon: "🧪", label: "Node-Test" },
-  { id: "patrolChat", icon: "💬", label: "Patrol Chat Room" },
-  { id: "actionRecorder", icon: "⏺", label: "Action Recorder" },
+  { id: "pipeline", icon: "🔗", labelKey: "nav.pipeline" },
+  { id: "nodeTest", icon: "🧪", labelKey: "nav.nodeTest" },
+  { id: "patrolChat", icon: "💬", labelKey: "nav.patrol" },
+  { id: "actionRecorder", icon: "⏺", labelKey: "nav.recorder" },
 ];
 
 export default function Sidebar() {
+  const { t } = useTranslation();
   const activeView = useUiStore((s) => s.activeView);
   const setActiveView = useUiStore((s) => s.setActiveView);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
@@ -29,24 +31,26 @@ export default function Sidebar() {
         <button
           className="sidebar-toggle"
           onClick={toggleSidebar}
-          title={sidebarOpen ? "收合" : "展開"}
+          title={sidebarOpen ? t("nav.collapse") : t("nav.expand")}
         >
           <span className="sidebar-toggle-icon">{sidebarOpen ? "◀" : "▶"}</span>
         </button>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.map((item) => {
+            const label = t(item.labelKey);
+            return (
             <button
               key={item.id}
               className={`sidebar-nav-item ${activeView === item.id ? "active" : ""}`}
               onClick={() => setActiveView(item.id)}
-              title={item.label}
-              aria-label={item.label}
+              title={label}
+              aria-label={label}
             >
               <span className="sidebar-nav-icon">{item.icon}</span>
-              {sidebarOpen && <span className="sidebar-nav-label">{item.label}</span>}
+              {sidebarOpen && <span className="sidebar-nav-label">{label}</span>}
             </button>
-          ))}
+          );})}
         </nav>
       </div>
 
@@ -57,19 +61,19 @@ export default function Sidebar() {
             setCapturePanelVisible(!capturePanelVisible);
             if (!capturePanelVisible) setCapturePanelOpen(false);
           }}
-          title={capturePanelVisible ? "Hide Capture" : "Show Capture"}
+          title={capturePanelVisible ? t("nav.hideCapture") : t("nav.showCapture")}
           aria-pressed={capturePanelVisible}
         >
           <span className="sidebar-nav-icon">🖥</span>
-          {sidebarOpen && <span className="sidebar-nav-label">Capture</span>}
+          {sidebarOpen && <span className="sidebar-nav-label">{t("nav.capture")}</span>}
         </button>
         <button
           className={`sidebar-nav-item ${activeView === "settings" ? "active" : ""}`}
           onClick={() => setActiveView("settings")}
-          title="設定"
+          title={t("nav.settings")}
         >
           <span className="sidebar-nav-icon">⚙</span>
-          {sidebarOpen && <span className="sidebar-nav-label">設定</span>}
+          {sidebarOpen && <span className="sidebar-nav-label">{t("nav.settings")}</span>}
         </button>
       </div>
     </aside>

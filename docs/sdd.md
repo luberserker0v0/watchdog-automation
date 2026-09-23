@@ -63,7 +63,7 @@ of importing pipeline state into capture or testing composition.
 | PIPE | `src/modules/pipeline/runtime/`; backend `modules/pipeline/runtime/` | Plan, run lifecycle, status, step evidence, runtime UI | Authoring, capture, plugins |
 | TEST | `src/modules/testing/`; backend `modules/testing/` | Node tests, emulator, batch workflow | Capture, authoring, plugins, runtime |
 | OBS | `src/modules/observability/`; backend runtime evidence | Shared execution log, events, snapshots, progress, debug images | Run and capture state |
-| SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts` | Persisted preferences and session flags | Browser storage, stream status |
+| SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts`; `src/i18n/` | Persisted preferences, session flags, and English/Traditional Chinese localization | Browser storage, stream status, i18next |
 | NOT | `src/modules/notifications/`; Tauri notification plugin | Permission-aware, task-ID-deduplicated native notifications | Terminal pipeline status, recorder state, persisted opt-in |
 | RCD | `src/modules/recorder/`; backend `modules/recorder/` | Recorder state machine, Windows input hooks, review drafts, global controls | Capture selection and bounds, foreground state, settings |
 

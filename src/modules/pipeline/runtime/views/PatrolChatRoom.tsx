@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { loadPatrolChatImage, usePatrolChatStore, type PatrolChatContent, type PatrolChatEvent } from "../stores/usePatrolChatStore";
 import "./patrol-chat-room.css";
 
@@ -57,6 +58,7 @@ function Message({ message }: { message: PatrolChatEvent }) {
 }
 
 export default function PatrolChatRoom() {
+  const { t } = useTranslation();
   const messages = usePatrolChatStore((state) => state.messages);
   const runStatuses = usePatrolChatStore((state) => state.runStatuses);
   const selectedRunId = usePatrolChatStore((state) => state.selectedRunId);
@@ -73,20 +75,20 @@ export default function PatrolChatRoom() {
     if (autoScroll && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [visible.length, autoScroll, activeRun]);
 
-  return <section className="patrol-chat-room" aria-label="Patrol Chat Room">
+  return <section className="patrol-chat-room" aria-label={t("patrol.title")}>
     <header className="patrol-chat-toolbar">
-      <div><h2>Patrol Chat Room</h2><p>Automatic Patrol and VLM activity · read only{activeRun !== "all" && activeRun && ` · ${activeRun}: ${runStatuses[activeRun] ?? "Recorded"}`}</p></div>
+      <div><h2>{t("patrol.title")}</h2><p>{t("patrol.subtitle")}{activeRun !== "all" && activeRun && ` · ${activeRun}: ${runStatuses[activeRun] ?? "Recorded"}`}</p></div>
       <div className="patrol-chat-controls">
-        <label>Run <select aria-label="Run" value={selectedRunId} onChange={(event) => selectRun(event.target.value)}>
-          <option value="latest">Latest run</option><option value="all">All runs</option>
+        <label>{t("patrol.run")} <select aria-label={t("patrol.run")} value={selectedRunId} onChange={(event) => selectRun(event.target.value)}>
+          <option value="latest">{t("patrol.latest")}</option><option value="all">{t("patrol.all")}</option>
           {runs.map((run) => <option key={run} value={run}>{run} · {runStatuses[run] ?? "Recorded"}</option>)}
         </select></label>
-        <label><input type="checkbox" checked={autoScroll} onChange={(event) => setAutoScroll(event.target.checked)} /> Auto-scroll</label>
-        <button type="button" onClick={() => void clear()}>Clear session</button>
+        <label><input type="checkbox" checked={autoScroll} onChange={(event) => setAutoScroll(event.target.checked)} /> {t("patrol.autoScroll")}</label>
+        <button type="button" onClick={() => void clear()}>{t("patrol.clear")}</button>
       </div>
     </header>
     <div className="patrol-chat-timeline" ref={scrollRef}>
-      {visible.length === 0 && <div className="patrol-chat-empty">No Patrol exchange yet. Enable Patrol in Settings and start a pipeline.</div>}
+      {visible.length === 0 && <div className="patrol-chat-empty">{t("patrol.empty")}</div>}
       {visible.map((message, index) => <div key={message.id}>
         {(index === 0 || visible[index - 1].sample_id !== message.sample_id) && <div className="patrol-chat-sample">Run {message.run_id} · {message.node_id} · frame {message.frame}</div>}
         <Message message={message} />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useTranslation } from "react-i18next";
 import { listPipelines, type PipelineInfo } from "../../../../api/pipeline";
 import MermaidGraph from "../../authoring/components/MermaidGraph";
 import NodeDetailModal from "../components/NodeDetailModal";
@@ -19,6 +20,7 @@ function formatTime(ms: number) {
 }
 
 function PipelineExecutionHeader() {
+  const { t } = useTranslation();
   const summary = usePipelineStore(useShallow((state) => {
     const entries = state.pipelineIds.map((id) => state.pipelinesById[id]);
     const active = state.activeId ? state.pipelinesById[state.activeId] : undefined;
@@ -37,17 +39,17 @@ function PipelineExecutionHeader() {
 
   return (
     <div className="pipeline-header">
-      <h2>Pipeline</h2>
+      <h2>{t("pipeline.title")}</h2>
       <div className="pipeline-execution-controls">
-        <button className="pipeline-btn pipeline-btn-primary" onClick={start} disabled={summary.isExecuting || summary.checked === 0}>▶ Start</button>
+        <button className="pipeline-btn pipeline-btn-primary" onClick={start} disabled={summary.isExecuting || summary.checked === 0}>▶ {t("common.start")}</button>
         <button className="pipeline-btn pipeline-btn-secondary" onClick={pause} disabled={!summary.isExecuting || summary.activeStatus === "stopping"}>
-          {summary.activeStatus === "paused" ? "▶ Resume" : "⏸ Pause"}
+          {summary.activeStatus === "paused" ? `▶ ${t("common.resume")}` : `⏸ ${t("common.pause")}`}
         </button>
-        <button className="pipeline-btn pipeline-btn-danger" onClick={stop} disabled={!summary.isExecuting || summary.activeStatus === "stopping"}>■ Stop</button>
+        <button className="pipeline-btn pipeline-btn-danger" onClick={stop} disabled={!summary.isExecuting || summary.activeStatus === "stopping"}>■ {t("common.stop")}</button>
         <span className="pipeline-status-text">
           {summary.isExecuting
             ? `${summary.completed}/${summary.total}  ${formatTime(summary.elapsedMs)}`
-            : `${summary.completed}/${summary.total} completed`}
+            : t("pipeline.completed", { completed: summary.completed, total: summary.total })}
         </span>
       </div>
     </div>
@@ -55,6 +57,7 @@ function PipelineExecutionHeader() {
 }
 
 function PipelinePicker() {
+  const { t } = useTranslation();
   const [available, setAvailable] = useState<PipelineInfo[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
@@ -92,7 +95,7 @@ function PipelinePicker() {
           }
         }}
       >
-        <option value="">+ Add pipeline...</option>
+        <option value="">{t("pipeline.add")}</option>
         {available.filter((pipeline) => !paths.includes(pipeline.path)).map((pipeline) => (
           <option key={pipeline.path} value={pipeline.path}>
             {pipeline.source === "built-in" ? "🔧 " : "📁 "}{pipeline.name}
@@ -116,6 +119,7 @@ function PipelineList({ onPreview }: { onPreview: (id: string) => void }) {
 const EMPTY_HIT_COUNTS: Record<string, number> = {};
 
 function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
+  const { t } = useTranslation();
   const [focusMode, setFocusMode] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
@@ -149,10 +153,10 @@ function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
     return undefined;
   }));
   return (
-    <section className="pipeline-graph-pane" aria-label="Pipeline graph">
+    <section className="pipeline-graph-pane" aria-label={t("pipeline.graph")}>
       <div className="pipeline-pane-header">
         <div className="pipeline-pane-title">
-          <span className="pipeline-pane-eyebrow">Graph</span>
+          <span className="pipeline-pane-eyebrow">{t("pipeline.graph")}</span>
           <strong title={graph.name}>{graph.name}</strong>
         </div>
         <div className="pipeline-pane-actions">
@@ -164,10 +168,10 @@ function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
               onChange={(event) => setFocusMode(event.target.checked)}
             />
             <span className="pipeline-focus-toggle" aria-hidden="true"><span /></span>
-            <span className="pipeline-focus-label">Focus current</span>
+            <span className="pipeline-focus-label">{t("pipeline.focus")}</span>
           </label>
-          <button type="button" className="pipeline-pane-action" onClick={onCollapse} title="Hide graph">
-            Hide graph
+          <button type="button" className="pipeline-pane-action" onClick={onCollapse} title={t("pipeline.hideGraph")}>
+            {t("pipeline.hideGraph")}
           </button>
         </div>
       </div>
@@ -202,7 +206,7 @@ function PipelineGraphPanel({ onCollapse }: { onCollapse: () => void }) {
           childrenChildId={graph.childrenChildId}
         />
         ) : (
-          <div className="pipeline-graph-empty">Select or add a pipeline to view its graph.</div>
+          <div className="pipeline-graph-empty">{t("pipeline.emptyGraph")}</div>
         )}
         {detailNode && (
           <NodeDetailModal
@@ -227,6 +231,7 @@ function Preview({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 export default function PipelineView() {
+  const { t } = useTranslation();
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [graphCollapsed, setGraphCollapsed] = useState(false);
   const pipelineCount = usePipelineStore((state) => state.pipelineIds.length);
@@ -236,15 +241,15 @@ export default function PipelineView() {
     <div className="pipeline-view">
       <PipelineExecutionHeader />
       <div className={`pipeline-workspace ${graphCollapsed ? "graph-collapsed" : ""}`}>
-        <section className="pipeline-browser-pane" aria-label="Loaded pipelines">
+        <section className="pipeline-browser-pane" aria-label={t("pipeline.pipelines")}>
           <div className="pipeline-pane-header">
             <div className="pipeline-pane-title">
-              <span className="pipeline-pane-eyebrow">Pipelines</span>
-              <strong>{pipelineCount} loaded</strong>
+              <span className="pipeline-pane-eyebrow">{t("pipeline.pipelines")}</span>
+              <strong>{t("pipeline.loaded", { count: pipelineCount })}</strong>
             </div>
             {graphCollapsed && (
               <button type="button" className="pipeline-pane-action" onClick={() => setGraphCollapsed(false)}>
-                Show graph
+                {t("pipeline.showGraph")}
               </button>
             )}
           </div>

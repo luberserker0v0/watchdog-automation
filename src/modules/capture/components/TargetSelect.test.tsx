@@ -23,12 +23,12 @@ it("offers the correct reload action for each capture mode", async () => {
   useWindowStore.setState({ fetchWindows: reloadWindows });
 
   const { rerender } = render(<TargetSelect />);
-  await user.click(screen.getByRole("button", { name: "重新載入螢幕" }));
+  await user.click(screen.getByRole("button", { name: "Reload screens" }));
   expect(reloadScreens).toHaveBeenCalledOnce();
 
   act(() => actMode("window"));
   rerender(<TargetSelect />);
-  await user.click(screen.getByRole("button", { name: "重新載入視窗" }));
+  await user.click(screen.getByRole("button", { name: "Reload windows using current filters" }));
   expect(reloadWindows).toHaveBeenCalledOnce();
 });
 

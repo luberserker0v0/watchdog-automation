@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { changeAppLanguage, type AppLanguage } from "../../../i18n";
 import { usePreferencesStore, type CaptureArea, type CaptureEngine, type PatrolRecoveryPolicy, type RecognitionDevice, type TimingGranularity } from "../../shell/stores/usePreferencesStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
 import { ensureNotificationPermission, notifyTask } from "../../notifications/services/taskNotifier";
@@ -9,13 +11,14 @@ import "../styles/settings.css";
 
 const FPS_OPTIONS = [1, 5, 10, 15, 30];
 
-const ENGINE_OPTIONS: { value: CaptureEngine; label: string; description: string }[] = [
-  { value: "graphics", label: "最快模式 (Graphics Capture)", description: "Win10 1903+，事件驅動，最高效能" },
-  { value: "dxgi", label: "高效模式 (DXGI)", description: "Win10 1803+，高速串流" },
-  { value: "gdi", label: "相容模式 (GDI)", description: "相容所有 Windows 版本" },
+const ENGINE_OPTIONS: { value: CaptureEngine; labelKey: string }[] = [
+  { value: "graphics", labelKey: "settings.engineGraphics" },
+  { value: "dxgi", labelKey: "settings.engineDxgi" },
+  { value: "gdi", labelKey: "settings.engineGdi" },
 ];
 
 export default function SettingsView() {
+  const { t, i18n } = useTranslation();
   const saveToDisk = usePreferencesStore((s) => s.saveToDisk);
   const setSaveToDisk = usePreferencesStore((s) => s.setSaveToDisk);
   const saveDebugImages = usePreferencesStore((s) => s.saveDebugImages);
@@ -71,14 +74,27 @@ export default function SettingsView() {
   return (
     <div className="settings-view">
       <div className="settings-header">
-        <h2>設定</h2>
+        <h2>{t("settings.title")}</h2>
       </div>
       <div className="settings-body">
         <div className="settings-section">
-          <h3 className="settings-section-title">串流設定</h3>
+          <h3 className="settings-section-title">{t("language.title")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
-              <label className="settings-item-label">FPS max</label>
+              <label className="settings-item-label" htmlFor="app-language">{t("language.title")}</label>
+              <select id="app-language" className="settings-item-control" value={i18n.resolvedLanguage === "zh-TW" ? "zh-TW" : "en"}
+                onChange={(event) => void changeAppLanguage(event.target.value as AppLanguage)}>
+                <option value="en">{t("language.english")}</option>
+                <option value="zh-TW">{t("language.traditionalChinese")}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div className="settings-section">
+          <h3 className="settings-section-title">{t("settings.stream")}</h3>
+          <div className="settings-section-body">
+            <div className="settings-item">
+              <label className="settings-item-label">{t("settings.fpsMax")}</label>
               <select
                 className="settings-item-control"
                 value={fps}
@@ -93,12 +109,12 @@ export default function SettingsView() {
               </select>
               {captureEngine === "graphics" && (
                 <span className="settings-item-hint">
-                  Graphics 模式以螢幕刷新率運行
+                  {t("settings.graphicsRefresh")}
                 </span>
               )}
             </div>
             <div className="settings-item">
-              <label className="settings-item-label">顯示 FPS</label>
+              <label className="settings-item-label">{t("settings.showFps")}</label>
               <label className="settings-toggle">
                 <input
                   type="checkbox"
@@ -112,10 +128,10 @@ export default function SettingsView() {
         </div>
 
         <div className="settings-section">
-          <h3 className="settings-section-title">截圖設定</h3>
+          <h3 className="settings-section-title">{t("settings.screenshot")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
-              <label className="settings-item-label">截圖引擎</label>
+              <label className="settings-item-label">{t("settings.engine")}</label>
               <select
                 className="settings-item-control"
                 value={captureEngine}
@@ -124,32 +140,32 @@ export default function SettingsView() {
               >
                 {ENGINE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="settings-item">
-              <label className="settings-item-label">視窗截圖範圍</label>
+              <label className="settings-item-label">{t("settings.captureArea")}</label>
               <select
                 className="settings-item-control"
                 value={windowCaptureArea}
                 onChange={(e) => setWindowCaptureArea(e.target.value as CaptureArea)}
                 disabled={isStreaming}
               >
-                <option value="frame">完整視窗（包含標題列）</option>
-                <option value="client">內容區域（不含標題列）</option>
+                <option value="frame">{t("capture.frame")}</option>
+                <option value="client">{t("capture.client")}</option>
               </select>
             </div>
             {isStreaming && (
               <div className="settings-item">
                 <span className="settings-item-text" style={{ fontSize: "12px", opacity: 0.6 }}>
-                  串流中無法切換引擎
+                  {t("settings.streamingLocked")}
                 </span>
               </div>
             )}
             <div className="settings-item">
-              <label className="settings-item-label">儲存至硬碟</label>
+              <label className="settings-item-label">{t("settings.saveDisk")}</label>
               <label className="settings-toggle">
                 <input
                   type="checkbox"
@@ -159,12 +175,12 @@ export default function SettingsView() {
                 <span className="settings-toggle-slider" />
               </label>
               <span className="settings-item-hint">
-                每次開啟視窗時此設定皆為關閉
+                {t("settings.sessionOnly")}
               </span>
             </div>
             {saveToDisk && (
               <div className="settings-item">
-                <label className="settings-item-label">儲存路徑</label>
+                <label className="settings-item-label">{t("settings.path")}</label>
                 <span className="settings-item-text">
                   %USERPROFILE%/.watch_dog/visions/
                 </span>
@@ -174,56 +190,56 @@ export default function SettingsView() {
         </div>
 
         <div className="settings-section">
-          <h3 className="settings-section-title">LLM / VLM 巡檢設定</h3>
+          <h3 className="settings-section-title">{t("settings.patrol")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-enabled">啟用巡檢</label>
+              <label className="settings-item-label" htmlFor="patrol-enabled">{t("settings.patrolEnabled")}</label>
               <label className="settings-toggle">
                 <input id="patrol-enabled" type="checkbox" checked={patrolEnabled}
                   onChange={(e) => setPatrolEnabled(e.target.checked)} />
                 <span className="settings-toggle-slider" />
               </label>
-              <span className="settings-item-hint">啟用後會依設定週期在背景使用 VLM 分析畫面，並在流程失敗前執行復原分析。成功造訪節點後會儲存參考畫面。</span>
+              <span className="settings-item-hint">{t("settings.patrolHint")}</span>
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-cycle">巡檢週期（秒）</label>
+              <label className="settings-item-label" htmlFor="patrol-cycle">{t("settings.cycle")}</label>
               <input id="patrol-cycle" className="settings-item-control" type="number" min={1} max={3600} step={1}
                 value={cycleDraft} onChange={(e) => setCycleDraft(e.target.value)}
                 onBlur={() => {
                   setPatrolCycleSeconds(cycleDraft.trim() === "" ? 20 : Number(cycleDraft));
                   setCycleDraft(String(usePreferencesStore.getState().patrolCycleSeconds));
                 }} disabled={!patrolEnabled} />
-              <span className="settings-item-hint">從流程開始計時；預設 20 秒後首次巡檢。之後每次巡檢會等待前次 VLM 回覆與完整週期，兩者都完成後立即開始；VLM 請求另有 120 秒逾時限制。</span>
+              <span className="settings-item-hint">{t("settings.cycleHint")}</span>
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-k-hops">鄰近搜尋距離 K</label>
+              <label className="settings-item-label" htmlFor="patrol-k-hops">{t("settings.kHops")}</label>
               <input id="patrol-k-hops" className="settings-item-control" type="number" min={1} max={4} step={1}
                 value={patrolKHops} onChange={(e) => setPatrolKHops(Number(e.target.value))} disabled={!patrolEnabled} />
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-threshold">最低匹配分數</label>
+              <label className="settings-item-label" htmlFor="patrol-threshold">{t("settings.threshold")}</label>
               <input id="patrol-threshold" className="settings-item-control" type="number" min={0} max={1} step={0.01}
                 value={patrolThreshold} onChange={(e) => setPatrolThreshold(Number(e.target.value))} disabled={!patrolEnabled} />
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-margin">最低分數差距</label>
+              <label className="settings-item-label" htmlFor="patrol-margin">{t("settings.margin")}</label>
               <input id="patrol-margin" className="settings-item-control" type="number" min={0} max={1} step={0.01}
                 value={patrolMinMargin} onChange={(e) => setPatrolMinMargin(Number(e.target.value))} disabled={!patrolEnabled} />
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-recovery-policy">失敗復原方式</label>
+              <label className="settings-item-label" htmlFor="patrol-recovery-policy">{t("settings.recovery")}</label>
               <select id="patrol-recovery-policy" className="settings-item-control"
                 value={patrolRecoveryPolicy}
                 onChange={(e) => setPatrolRecoveryPolicy(e.target.value as PatrolRecoveryPolicy)}
                 disabled={!patrolEnabled}>
-                <option value="hint_only">僅提供提示</option>
-                <option value="redirection_only">僅重新導向</option>
+                <option value="hint_only">{t("settings.hints")}</option>
+                <option value="redirection_only">{t("settings.redirect")}</option>
               </select>
-              <span className="settings-item-hint">提示模式保留原始失敗結果；重新導向模式經引擎驗證後，從 Patrol 指定的候選節點繼續執行。</span>
+              <span className="settings-item-hint">{t("settings.recoveryHint")}</span>
             </div>
             {patrolRecoveryPolicy === "redirection_only" && (
               <div className="settings-item">
-                <label className="settings-item-label" htmlFor="patrol-max-redirects">每次執行最多重新導向次數</label>
+                <label className="settings-item-label" htmlFor="patrol-max-redirects">{t("settings.maxRedirects")}</label>
                 <input id="patrol-max-redirects" className="settings-item-control" type="number" min={1} max={10} step={1}
                   value={patrolMaxRedirects}
                   onChange={(e) => setPatrolMaxRedirects(Number(e.target.value))}
@@ -235,25 +251,25 @@ export default function SettingsView() {
               <input id="llm-endpoint" className="settings-item-control" type="url"
                 placeholder="https://provider.example/v1/chat/completions"
                 value={llmEndpoint} onChange={(e) => setLlmEndpoint(e.target.value)} />
-              <span className="settings-item-hint">巡檢模式會將完整擷取畫面與參考影像傳送至此端點。</span>
+              <span className="settings-item-hint">{t("settings.endpointHint")}</span>
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="llm-model">視覺模型</label>
+              <label className="settings-item-label" htmlFor="llm-model">{t("settings.model")}</label>
               <input id="llm-model" className="settings-item-control" type="text"
                 placeholder="Vision-capable model name"
                 value={llmModel} onChange={(e) => setLlmModel(e.target.value)} />
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="llm-api-key">API key</label>
+              <label className="settings-item-label" htmlFor="llm-api-key">{t("settings.apiKey")}</label>
               <input id="llm-api-key" className="settings-item-control" type="password"
                 autoComplete="off" value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} />
-              <span className="settings-item-hint">API key 僅保留於本次應用程式工作階段；URL 與模型名稱會儲存。</span>
+              <span className="settings-item-hint">{t("settings.apiKeyHint")}</span>
             </div>
           </div>
         </div>
 
         <div className="settings-section">
-          <h3 className="settings-section-title">Task notifications</h3>
+          <h3 className="settings-section-title">{t("settings.notifications")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
               <label className="settings-item-label" htmlFor="task-notifications">Pipeline completion</label>
@@ -296,7 +312,7 @@ export default function SettingsView() {
         </div>
 
         <div className="settings-section">
-          <h3 className="settings-section-title">Action Recorder</h3>
+          <h3 className="settings-section-title">{t("settings.recorder")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
               <label className="settings-item-label" htmlFor="recorder-toggle-hotkey">Start / Stop shortcut</label>
@@ -336,39 +352,39 @@ export default function SettingsView() {
         </div>
 
         <div className="settings-section">
-          <h3 className="settings-section-title">除錯設定</h3>
+          <h3 className="settings-section-title">{t("settings.debug")}</h3>
           <div className="settings-section-body">
             <div className="settings-item">
-              <label className="settings-item-label">OCR 辨識裝置</label>
+              <label className="settings-item-label">{t("settings.recognitionDevice")}</label>
               <select
                 className="settings-item-control"
                 value={recognitionDevice}
                 onChange={(e) => setRecognitionDevice(e.target.value as RecognitionDevice)}
               >
-                <option value="cpu">CPU（相容模式）</option>
+                <option value="cpu">{t("settings.cpu")}</option>
                 <option value="directml">GPU（DirectML）</option>
               </select>
               <span className="settings-item-hint">
-                DirectML 支援 NVIDIA、AMD 與 Intel；無法初始化時自動退回 CPU
+                {t("settings.directmlHint")}
               </span>
             </div>
             <div className="settings-item">
-              <label className="settings-item-label">執行時間分析</label>
+              <label className="settings-item-label">{t("settings.timing")}</label>
               <select
                 className="settings-item-control"
                 value={timingGranularity}
                 onChange={(e) => setTimingGranularity(e.target.value as TimingGranularity)}
               >
-                <option value="off">關閉</option>
-                <option value="summary">總時間</option>
-                <option value="detailed">詳細階段時間</option>
+                <option value="off">{t("settings.timingOff")}</option>
+                <option value="summary">{t("settings.timingSummary")}</option>
+                <option value="detailed">{t("settings.timingDetailed")}</option>
               </select>
               <span className="settings-item-hint">
-                詳細模式記錄截圖、辨識、延遲與動作時間；計時開銷極低
+                {t("settings.timingHint")}
               </span>
             </div>
             <div className="settings-item">
-              <label className="settings-item-label">儲存除錯影像</label>
+              <label className="settings-item-label">{t("settings.debugImages")}</label>
               <label className="settings-toggle">
                 <input
                   type="checkbox"
@@ -378,12 +394,12 @@ export default function SettingsView() {
                 <span className="settings-toggle-slider" />
               </label>
               <span className="settings-item-hint">
-                開啟後，每次節點辨識嘗試都會各自儲存影像，包含成功、重試與逾時；每次開啟視窗時此設定皆為關閉
+                {t("settings.debugImagesHint")}
               </span>
             </div>
             {saveDebugImages && (
               <div className="settings-item">
-                <label className="settings-item-label">儲存路徑</label>
+                <label className="settings-item-label">{t("settings.path")}</label>
                 <span className="settings-item-text">
                   %USERPROFILE%/.watch_dog/visions/debug/
                 </span>

@@ -326,6 +326,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-SET-005 | Timing granularity shall select off, summary, or detailed execution logging. | E | test |
 | REQ-SET-006 | Settings shall exclusively control engine patrol enablement, cycle seconds (default 20), K hops, score threshold, minimum margin, recovery policy (`hint_only` default or `redirection_only`), maximum redirects per run (default 1), OpenAI-compatible chat-completions URL, vision model name, and session-only API key. Enablement and non-secret options shall persist; the key shall not be persisted in browser storage. | E | test |
 | REQ-SET-007 | Settings shall persist Task Notifier enablement, Action Recorder notification enablement, distinct Start/Stop and Pause/Resume shortcuts, and typed-text capture enablement. Typed-text capture and both notification options shall default off. | E | test |
+| REQ-SET-008 | The GUI shall support English and Traditional Chinese through one shared localization service. Settings shall switch language without restarting, persist the selection across application windows, update the document language, and fall back to English for unavailable translations. | E | test |
 
 #### 7.1.9 Task notification and action recording
 
@@ -516,7 +517,7 @@ require executable-level checks.
 | Stakeholder needs | `STK-001`…`012` | §6 |
 | Capture / authoring / execution | `REQ-CAP-001`…`010`; `REQ-AUTHOR-001`…`011`; `REQ-PIPE-001`…`002`, `004`…`026` | §7.1; `REQ-PIPE-003` retired |
 | Recognition / actions / testing | `REQ-REC-001`…`009`; `REQ-ACT-001`…`009`; `REQ-TEST-001`…`007` | §7.1 |
-| Observability / settings / operator tools | `REQ-OBS-001`…`006`; `REQ-SET-001`…`007`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009` | §7.1 |
+| Observability / settings / operator tools | `REQ-OBS-001`…`006`; `REQ-SET-001`…`008`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009` | §7.1 |
 | Interfaces | `REQ-IF-001`…`008` (files); `010`…`022` (IPC); `030`…`035` (OS/runtime) | §7.2 |
 | Usability / reliability / performance | `REQ-USE-001`…`004`; `REQ-REL-001`…`002`; `REQ-PERF-001`…`004` | §7.3–7.5 |
 | Supportability / constraints | `REQ-MNT-001`…`004`; `REQ-CON-001`…`007` | §7.6, §7.8 |
