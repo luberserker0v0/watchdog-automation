@@ -420,6 +420,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-MNT-001 | New recognizers and actions shall register through the plugin registry without engine changes. | E | review |
 | REQ-MNT-002 | On main-app startup, retain at most 30 dated application log files, including the current open log. Unrelated files in the logs directory shall be left untouched. | E | test |
 | REQ-MNT-003 | On main-app startup, clear generated contents of the visions directory when seven days have elapsed since the last successful cleanup, or on the first startup without a cleanup marker. Cleanup shall not touch user resources or follow directory links outside the visions root; failures shall be logged without blocking startup. | E | test |
+| REQ-MNT-004 | Production code shall be organized into cohesive responsibility modules with documented dependency direction and narrow facades. Feature implementation details shall default to private or capability-local visibility. Production files should remain near 500 lines; larger executable files require a documented refactoring follow-up, while cohesive static data may be exempt. | D | review |
 
 ### 7.7 Security
 
@@ -490,12 +491,14 @@ passed a native acceptance test.
 | REQ-NOT-001…003, REQ-SET-007 | Task Notifier requests permission on explicit enablement, deduplicates by task ID, and sends pipeline completion only after terminal cleanup. Recorder start/stop uses the same service. | `notifications/services/taskNotifier.ts`; `pipeline/runtime/stores/usePipelineStore.ts`; `settings/views/SettingsView.tsx` | Frontend service and settings tests passed; installed-build notification walkthrough pending |
 | REQ-RCD-001…009, REQ-IF-022, REQ-IF-035 | The Rust recorder owns session state and Windows low-level hooks; injected input is excluded, events map to capture-relative action drafts, and the frontend provides hotkeys, status bar, review, copy, export, removal, and clear. Non-Windows start returns unsupported. | `modules/recorder/`; `api/recorder.ts`; `recorder/stores/useRecorderStore.ts`; `recorder/views/ActionRecorderView.tsx` | Rust gesture/coordinate tests and frontend review/settings tests passed; native hook walkthrough pending |
 | REQ-MNT-002, REQ-MNT-003 | Main-app startup bounds dated logs and periodically clears generated visions within the user-data root. Cleanup errors are logged and do not block startup. | `core/maintenance.rs`; `lib.rs` | Implemented; startup filesystem test pending |
+| REQ-MNT-004 | Backend dependencies follow `core → capture → authoring → plugins → runtime → testing`; frontend integration uses shell and observability contracts. Capture ownership, Patrol services, authoring validation, plugin coordinates/OCR, runtime helpers, testing metadata, pipeline API clients, and feature styles have dedicated modules. | `src/architecture.test.ts`; `modules/capture/services/stream/`; `modules/pipeline/runtime/patrol/`; `modules/pipeline/runtime/engine/runner/`; `src/api/pipeline/` | Architecture test and full compile pass; large coordinator follow-ups are recorded in SDD §8 |
 
-The frontend production build and all 130 frontend tests pass. The Windows
+The frontend production build and all 143 frontend tests pass. The Windows
 build now delay-loads Common Controls so the Rust unit-test harness does not
 resolve an unused Tauri dialog entry point before tests start; the application
-binary still links successfully with Tauri's manifest. All 176 enabled Rust
-library tests pass; the OCR runtime/model test remains intentionally ignored.
+binary still links successfully with Tauri's manifest. The Rust suite reports
+179 passing library tests and one intentionally ignored OCR runtime/model test,
+plus the passing preview capability integration test.
 These automated checks cover pure routing, configuration, state, and filesystem
 behavior. Live capture, foreground input, OCR, VLM action classification, hint
 recovery, and accepted redirection have executable-level evidence. Window
@@ -516,7 +519,7 @@ require executable-level checks.
 | Observability / settings / operator tools | `REQ-OBS-001`…`006`; `REQ-SET-001`…`007`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009` | §7.1 |
 | Interfaces | `REQ-IF-001`…`008` (files); `010`…`022` (IPC); `030`…`035` (OS/runtime) | §7.2 |
 | Usability / reliability / performance | `REQ-USE-001`…`004`; `REQ-REL-001`…`002`; `REQ-PERF-001`…`004` | §7.3–7.5 |
-| Supportability / constraints | `REQ-MNT-001`…`003`; `REQ-CON-001`…`007` | §7.6, §7.8 |
+| Supportability / constraints | `REQ-MNT-001`…`004`; `REQ-CON-001`…`007` | §7.6, §7.8 |
 | Environment / assumptions | `REQ-ENV-001`…`004`; `ASM-001`…`004` | §5.4–5.5; assumptions are not requirements |
 
 ### Appendix B — Error-code glossary

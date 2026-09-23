@@ -2,7 +2,7 @@
 
 - **Product:** watch-dog (`0.1.0`)
 - **Status:** observed implementation design; source-inspected, not system-certified
-- **Audit basis:** working tree inspected and automated checks run 2026-09-21; not a release baseline
+- **Audit basis:** working tree inspected and automated checks run 2026-09-23; not a release baseline
 - **Requirements source:** `docs/srs.md` (candidate `REQ-*` and inferred `STK-*` IDs)
 - **File contracts:** `docs/pipeline-meta.md`, `docs/pipeline-layout.md`, `schemas/`
 
@@ -50,9 +50,10 @@ path and the same foreground rule for window targets (§3.3). `lib.rs` composes
 the application.
 
 The frontend has a separate composition boundary. `src/api/` wraps IPC;
-`src/modules/shell/` owns navigation and preferences. Some feature views
-currently read other feature stores to present combined UI. Those integration
-imports are recorded in §8 and do not reverse the Rust dependency direction.
+`src/modules/shell/` owns navigation, preferences, and the small runtime
+integration contract consumed by capture UI. `src/modules/observability/`
+owns the shared execution log. Feature views consume those contracts instead
+of importing pipeline state into capture or testing composition.
 
 | Capability | Primary files | Provides | Consumes |
 |------------|---------------|----------|----------|
@@ -61,7 +62,7 @@ imports are recorded in §8 and do not reverse the Rust dependency direction.
 | REC, ACT | Backend `modules/pipeline/plugins/` | Plugin registry, ROI evaluation, action mapping and execution | Authoring node config, capture frame/bounds |
 | PIPE | `src/modules/pipeline/runtime/`; backend `modules/pipeline/runtime/` | Plan, run lifecycle, status, step evidence, runtime UI | Authoring, capture, plugins |
 | TEST | `src/modules/testing/`; backend `modules/testing/` | Node tests, emulator, batch workflow | Capture, authoring, plugins, runtime |
-| OBS | Runtime/capture UI; backend runtime evidence | Events, snapshots, logs, progress, debug images | Run and capture state |
+| OBS | `src/modules/observability/`; backend runtime evidence | Shared execution log, events, snapshots, progress, debug images | Run and capture state |
 | SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts` | Persisted preferences and session flags | Browser storage, stream status |
 | NOT | `src/modules/notifications/`; Tauri notification plugin | Permission-aware, task-ID-deduplicated native notifications | Terminal pipeline status, recorder state, persisted opt-in |
 | RCD | `src/modules/recorder/`; backend `modules/recorder/` | Recorder state machine, Windows input hooks, review drafts, global controls | Capture selection and bounds, foreground state, settings |
@@ -90,8 +91,9 @@ does not follow symbolic links.
 ### 3.1 Capture (CAP)
 
 Backend `capture/repositories/` wraps screen, window, Win32, and virtual
-desktop APIs. `capture/services/stream.rs` owns the broadcast channel,
-current target, session generation, cached frame, and capture owner.
+desktop APIs. `capture/services/stream.rs` is the `StreamService` facade;
+`capture/services/stream/models.rs` owns frame and target models and
+`capture/services/stream/ownership.rs` owns typed `StreamOwner` arbitration.
 `capture/services/bounds.rs` resolves a captured screen or window to physical
 screen bounds. Commands expose enumeration, one-shot capture, stream control,
 resize, and desktop operations.
@@ -127,7 +129,7 @@ custom graph validation.
 
 `plugins/mod.rs` registers `RecognizerPlugin` and `ActionPlugin` types.
 Recognizers evaluate a supplied image and recognition configuration.
-`plugins/shared.rs` resolves ROI and action geometry using capture-owned
+`plugins/shared/coordinates.rs` resolves ROI and action geometry using capture-owned
 bounds. The pipeline engine and isolated node tests restore and verify a
 window target's foreground state just before each registered action. If Windows
 does not grant foreground ownership, they refuse input with
@@ -251,7 +253,9 @@ node before Endpoint when visual confirmation is required.
 
 #### 3.5.1 Testing
 
-`modules/testing/node_test.rs` loads metadata and tests isolated recognition
+`modules/testing/node_test.rs` is the command facade;
+`modules/testing/node_test/metadata.rs` discovers and loads metadata. The
+facade tests isolated recognition
 or action against a supplied or cached frame. The frontend emulator validates
 draft fields. The batch controller runs selected pipelines sequentially.
 
@@ -399,14 +403,19 @@ executable-level verification.
 - Runtime constructs the plugin registry; isolated tests reuse the same
   registrations and plugin behavior.
 - The SRS maps capabilities; this document records code placement.
+- `src/api/pipeline.ts` is a compatibility barrel. Focused authoring, runtime,
+  Patrol model, and testing contracts live below `src/api/pipeline/`.
+- `runtime/patrol.rs` exposes the runtime contract. Configuration, reference
+  storage, search, strict response protocol, and VLM transport remain in
+  capability-local modules below `runtime/patrol/`.
+- `runtime/engine/runner.rs` remains the `PipelineRunSession` aggregate and
+  `run_pipeline` facade. Its Patrol worker, target acquisition, and parameter
+  substitution are private modules below `runtime/engine/runner/`.
+- Feature stylesheet entry files contain ordered imports. Component rules live
+  in ordered partials so the existing cascade stays deterministic.
 
 ## 8. Open issues
 
-- Frontend capture components still read runtime stores for active-pipeline
-  display and stream controls. A shell-level integration interface could
-  remove this coupling without changing capture behavior.
-- Capture ownership is stored as strings in `StreamService`; a typed enum
-  would prevent invalid owner values.
 - The source-preserving `save_pipeline` IPC shape differs from the retired
   graph-only shape. Existing external callers must pass Mermaid and metadata
   source text.
@@ -416,3 +425,24 @@ executable-level verification.
   without resolving Tauri's unused `TaskDialogIndirect` import against legacy
   Common Controls; the application still uses Tauri's embedded activation
   manifest. All enabled library tests now execute.
+
+### 8.1 Source-size audit
+
+The refactor uses 500 lines as a review signal rather than a compiler limit.
+The following production coordinators remain above that signal and need later
+behavior-preserving extraction. None is classified as a static-data exception.
+
+| Coordinator | Current responsibility to split next |
+|-------------|--------------------------------------|
+| `runtime/engine/runner.rs` | Node attempt state machine and terminal cleanup inside `PipelineRunSession::run` |
+| `testing/node_test.rs` | Target preparation, restoration guard, isolated execution, and result formatting |
+| `runtime/engine/debug_image.rs` | Overlays, action symbols, information panels, and font data |
+| `runtime/runner.rs` | Startup, registry construction, controls, and standalone tests |
+| `capture/services/stream.rs` | Frame/session lifecycle and platform capture loop |
+| `pipeline/authoring/components/MermaidGraph.tsx` | Viewport, dragging, selection, minimap, and layout persistence |
+| `pipeline/runtime/stores/usePipelineStore.ts` | State transitions, event handling, coordination, and notification adapters |
+| `sample_target/CombinedPage.tsx` | Login, dashboard, settings, and recovery lab sections |
+
+The large CSS entry files were replaced by ordered partials. One responsive
+capture partial remains slightly above the signal because its enclosing media
+query is one cohesive cascade block; it is a style-only exception.
