@@ -1,0 +1,302 @@
+
+.debug-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #f9f9f9;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.debug-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-label {
+  color: #666;
+  min-width: 60px;
+}
+
+.debug-dim {
+  color: #999;
+  margin-left: auto;
+}
+
+.debug-value {
+  color: #0f0f0f;
+  font-weight: 500;
+}
+
+.debug-copy-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #3b82f6;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.debug-copy-btn:hover:not(:disabled) {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.debug-copy-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.debug-region-status {
+  padding: 4px 8px;
+  overflow: hidden;
+  color: #666;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-details-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.debug-details-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  width: 90vw;
+  max-width: 900px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.debug-details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.debug-details-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.debug-details-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #666;
+}
+
+.debug-details-close:hover {
+  background: #f0f0f0;
+}
+
+.debug-details-body {
+  overflow: auto;
+  padding: 12px;
+}
+
+.debug-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.debug-details-table th {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 2px solid #e0e0e0;
+  font-weight: 600;
+  color: #555;
+  position: sticky;
+  top: 0;
+  background: #fff;
+}
+
+.debug-details-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.debug-details-table tr:hover td {
+  background: #f8f9ff;
+}
+
+.debug-details-table .mono {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.debug-expand-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.debug-expand-btn:hover:not(:disabled) {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+.debug-expand-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.debug-overlay-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.debug-overlay-panel.left {
+}
+
+.debug-overlay-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  color: #333;
+}
+
+.debug-overlay-check input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.debug-overlay-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.debug-overlay-dot.selection {
+  background: #22c55e;
+}
+
+.debug-overlay-dot.roi {
+  background: #f59e0b;
+}
+
+.debug-overlay-dot.result {
+  background: #ef4444;
+}
+
+.debug-overlay-clear-btn {
+  margin-top: 4px;
+  padding: 3px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.debug-overlay-clear-btn:hover {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+
+/* ===== Debug Tabs ===== */
+.debug-tab-bar {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f5f5f5;
+}
+
+.debug-tab-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-bottom: 2px solid transparent;
+}
+
+.debug-tab-btn:hover {
+  color: #333;
+  background: #eee;
+}
+
+.debug-tab-btn.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+  background: #fff;
+}
+
+.debug-capture-space {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-left: 1px solid #e0e0e0;
+  color: #666;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.debug-capture-space select {
+  max-width: 112px;
+  padding: 2px 4px;
+  border: 1px solid #d5d5d5;
+  border-radius: 4px;
+  background: #fff;
+  color: #444;
+  font-size: 10px;
+}
+
+.debug-tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

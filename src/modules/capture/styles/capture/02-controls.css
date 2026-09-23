@@ -1,0 +1,304 @@
+.window-state-buttons button.active {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+.window-state-buttons button:hover:not(.active) {
+  border-color: #3b82f6;
+}
+
+.target-select select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.target-refresh-btn {
+  flex: 0 0 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.target-refresh-btn:hover:not(:disabled) {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.target-refresh-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.window-resize-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.window-resize-label {
+  color: #666;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.window-resize-control input {
+  box-sizing: border-box;
+  width: 92px;
+  min-width: 60px;
+  padding: 7px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 13px;
+}
+
+.window-resize-control button {
+  padding: 7px 12px;
+  border: 1px solid #9bb9df;
+  border-radius: 6px;
+  background: #eef5ff;
+  color: #205da8;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.window-resize-control button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.window-resize-status {
+  min-width: 0;
+  overflow: hidden;
+  color: #666;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fafafa;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.target-info-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.target-info-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.target-info-name {
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-info-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 12px;
+  max-width: 100%;
+}
+
+.target-info-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #666;
+}
+
+.target-info-size {
+  padding: 2px 6px;
+  border: 1px solid #dbe4ef;
+  border-radius: 4px;
+  background: #f4f7fb;
+  color: #46566b;
+  font-variant-numeric: tabular-nums;
+}
+
+.target-info-size.expected.matches {
+  border-color: #b7dfc4;
+  background: #effaf2;
+  color: #24723a;
+}
+
+.target-info-size.expected.mismatch {
+  border-color: #efc0c0;
+  background: #fff1f1;
+  color: #b42323;
+}
+
+
+.target-info-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.target-info-status.idle::before {
+  background: #999;
+}
+
+.target-info-status.streaming::before {
+  background: #22c55e;
+  animation: target-pulse 1s infinite;
+}
+
+.target-info-status.captured::before {
+  background: #3b82f6;
+}
+
+@keyframes target-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.target-info-engine {
+  padding: 1px 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: monospace;
+  color: #666;
+  background: #fff;
+}
+
+.capture-button button {
+  padding: 10px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.capture-button button:hover:not(:disabled) {
+  border-color: #999;
+  background: #f5f5f5;
+}
+
+.capture-button button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.capture-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.capture-actions .capture-button {
+  margin-left: auto;
+}
+
+.capture-preview-card {
+  width: min(100%, 920px);
+  min-height: 220px;
+  max-height: 460px;
+  flex: 1 1 360px;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.capture-preview-card .target-info {
+  flex-shrink: 0;
+  border: 0;
+  border-bottom: 1px solid #e8e8e8;
+  border-radius: 0;
+}
+
+.capture-thumbnail {
+  flex: 1;
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, #f3f3f3 25%, transparent 25%),
+    linear-gradient(-45deg, #f3f3f3 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #f3f3f3 75%),
+    linear-gradient(-45deg, transparent 75%, #f3f3f3 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.capture-thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  user-select: none;
+}
+
+.capture-thumbnail-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+  color: #777;
+  text-align: center;
+}
+
+.capture-thumbnail-empty > span {
+  color: #aaa;
+  font-size: 30px;
+}
+
+.capture-thumbnail-empty strong {
+  font-size: 13px;
+}
+
+.capture-thumbnail-empty small {
+  color: #999;
+  font-size: 11px;
+}

@@ -1,0 +1,381 @@
+
+.pipeline-pane-eyebrow {
+  color: #888;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+.pipeline-pane-action {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border: 1px solid #d8d8d8;
+  border-radius: 5px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.pipeline-pane-action:hover {
+  border-color: #3b82f6;
+  color: #2563eb;
+}
+
+.pipeline-pane-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pipeline-focus-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pipeline-focus-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.pipeline-focus-switch input:checked ~ .pipeline-focus-label {
+  color: #2563eb;
+}
+
+.pipeline-focus-toggle {
+  width: 28px;
+  height: 16px;
+  flex: 0 0 28px;
+  padding: 2px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.15s ease;
+}
+
+.pipeline-focus-toggle > span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.pipeline-focus-switch input:checked + .pipeline-focus-toggle {
+  background: #3b82f6;
+}
+
+.pipeline-focus-switch input:checked + .pipeline-focus-toggle > span {
+  transform: translateX(12px);
+}
+
+.pipeline-focus-switch input:focus-visible + .pipeline-focus-toggle {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* Pipeline Card */
+.pipeline-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.pipeline-card.selected {
+  border-color: #3b82f6;
+  background: #f0f7ff;
+}
+
+.pipeline-card.running {
+  border-color: #22c55e;
+}
+
+.pipeline-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.pipeline-card-row:hover {
+  background: #f5f5f5;
+}
+
+.pipeline-card-checkbox {
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.pipeline-card-icon {
+  font-size: 14px;
+}
+
+.pipeline-card-name {
+  flex: 1;
+  min-width: 40px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-card-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.pipeline-card-status.running {
+  color: #22c55e;
+  background: #dcfce7;
+}
+
+.pipeline-card-status.needs_resize {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.pipeline-card-preview,
+.pipeline-card-toggle,
+.pipeline-card-remove {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  color: #666;
+  transition: all 0.15s;
+}
+
+.pipeline-card-preview:hover {
+  color: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.pipeline-card-toggle:hover {
+  color: #333;
+  border-color: #999;
+}
+
+.pipeline-card-remove:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.pipeline-card-panel {
+  padding: 8px 12px;
+  border-top: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.pipeline-window-size-warning {
+  display: grid;
+  gap: 6px;
+  margin: 0 10px 10px;
+  padding: 10px;
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.pipeline-window-size-warning > div {
+  display: flex;
+  gap: 8px;
+}
+
+/* Pipeline Add Row */
+.pipeline-add-row {
+  padding: 4px 0;
+}
+
+.pipeline-error-banner {
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.pipeline-add-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pipeline-add-select:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.pipeline-graph-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pipeline-graph-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+}
+
+@container main-workspace (max-width: 760px) {
+  .pipeline-view {
+    padding: 12px;
+  }
+
+  .pipeline-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pipeline-execution-controls {
+    flex-wrap: wrap;
+  }
+
+  .pipeline-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 1fr) minmax(240px, 1.15fr);
+  }
+
+  .pipeline-workspace.graph-collapsed {
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+.pipeline-tester-panel {
+  flex: 1;
+  min-height: 150px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Drag Handle (unified) */
+.drag-handle {
+  height: 8px;
+  background: #f5f5f5;
+  border-top: 1px solid #e8e8e8;
+  border-bottom: 1px solid #e8e8e8;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  background: #e0e7ff;
+}
+
+.drag-handle:active {
+  background: #c7d2fe;
+}
+
+.drag-handle-grip {
+  width: 32px;
+  height: 3px;
+  background: #ccc;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+
+.drag-handle:hover .drag-handle-grip {
+  background: #6366f1;
+}
+
+.drag-handle:active .drag-handle-grip {
+  background: #4f46e5;
+}
+
+/* Status Text */
+.pipeline-status-text {
+  font-size: 12px;
+  color: #666;
+  margin-left: 8px;
+  display: inline-block;
+  width: 120px;
+  text-align: right;
+}
+
+/* Header Layout */
+.pipeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.pipeline-execution-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pipeline-execution-controls .pipeline-btn {
+  flex: none;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* Log Header Actions */
+.execution-log-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.execution-log-action {
+  padding: 2px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  color: #666;
+}
+
+.execution-log-action:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+

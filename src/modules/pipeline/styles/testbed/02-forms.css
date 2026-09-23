@@ -1,0 +1,344 @@
+
+.tester-error {
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #fecaca;
+}
+
+.tester-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+}
+
+.tester-result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tester-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.tester-badge.matched {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tester-badge.unmatched {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.tester-badge.noop {
+  background: #f0f0f0;
+  color: #888;
+}
+
+.tester-confidence {
+  font-size: 12px;
+  font-family: monospace;
+  color: #555;
+}
+
+.tester-success {
+  font-size: 12px;
+  color: #166534;
+}
+
+.tester-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #888;
+}
+
+.tester-section-empty {
+  font-size: 12px;
+  color: #aaa;
+  padding: 8px;
+  text-align: center;
+}
+
+.tester-multi-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tester-action-group {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tester-action-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.tester-action-index {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+}
+
+.tester-action-type {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+}
+
+.tester-action-group .tester-panel {
+  padding: 8px 10px;
+}
+
+/* ── Graph clickable nodes ── */
+.testbed-graph-node {
+  cursor: pointer;
+}
+
+.testbed-graph-node:hover rect {
+  stroke: #3b82f6;
+  stroke-width: 2;
+}
+
+.testbed-graph-node.selected rect {
+  fill: #dbeafe;
+  stroke: #3b82f6;
+  stroke-width: 2;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .testbed-control-bar {
+    border-color: #444;
+    background: #1a1a1a;
+  }
+
+  .testbed-tabs {
+    border-color: #444;
+    background: #1a1a1a;
+  }
+
+  .testbed-tab {
+    color: #aaa;
+  }
+
+  .testbed-tab:hover {
+    color: #ddd;
+    background: #2a2a2a;
+  }
+
+  .testbed-tab.active {
+    color: #60a5fa;
+    border-bottom-color: #60a5fa;
+  }
+
+  .testbed-graph-info {
+    border-color: #444;
+    background: #1a1a1a;
+    color: #aaa;
+  }
+
+  .testbed-graph-wrapper {
+    --graph-grid-color: #475569;
+    --graph-edge-color: #cbd5e1;
+  }
+
+  .testbed-minimap {
+    border-color: #444;
+  }
+
+  .testbed-layout-controls {
+    border-color: #444;
+    background: rgba(26, 26, 26, 0.94);
+  }
+
+  .testbed-layout-controls label {
+    color: #aaa;
+  }
+
+  .testbed-layout-controls button {
+    border-color: #444;
+    background: #2a2a2a;
+    color: #aaa;
+  }
+
+  .pipeline-select {
+    border-color: #444;
+    background: #1a1a1a;
+    color: #f0f0f0;
+  }
+
+  .pipeline-path-input {
+    border-color: #444;
+    background: #1a1a1a;
+    color: #f0f0f0;
+  }
+
+  .pipeline-btn-secondary {
+    border-color: #444;
+    background: #1a1a1a;
+    color: #aaa;
+  }
+
+  .testbed-node-select-row select {
+    border-color: #444;
+    background: #1a1a1a;
+    color: #f0f0f0;
+  }
+
+  .tester-tab {
+    background: #1a1a1a;
+    color: #aaa;
+    border-color: #444;
+  }
+
+  .tester-tab:hover:not(.active) {
+    background: #2a2a2a;
+  }
+
+  .tester-tab.active {
+    background: #3b82f6;
+    color: #fff;
+  }
+
+  .tester-value {
+    background: #2a2a2a;
+    color: #f0f0f0;
+  }
+
+  .tester-input,
+  .tester-textarea {
+    border-color: #444;
+    background: #1a1a1a;
+    color: #f0f0f0;
+  }
+
+  .tester-checkbox {
+    color: #aaa;
+  }
+
+  .tester-error {
+    background: #450a0a;
+    border-color: #7f1d1d;
+    color: #fca5a5;
+  }
+
+  .tester-result {
+    border-color: #444;
+    background: #1a1a1a;
+  }
+
+  .tester-hint {
+    color: #aaa;
+  }
+
+  .tester-section-empty {
+    color: #666;
+  }
+
+  .tester-action-header {
+    background: #2a2a2a;
+    border-color: #444;
+  }
+
+  .tester-action-group {
+    border-color: #444;
+  }
+
+  /* Target UI Dark Mode */
+  .target-page { background: linear-gradient(135deg, #312e81, #4c1d95); }
+  .target-card { background: #1e1b4b; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4); }
+  .target-card .target-title, .target-app-logo-text, .target-app-tab.active { color: #e0e7ff; }
+  .target-subtitle { color: #a5b4fc; }
+  .target-input-wrap { border-color: #3730a3; background: #1e1b4b; }
+  .target-input-wrap:focus-within { border-color: #818cf8; background: #1e1b4b; }
+  .target-input { color: #e0e7ff; }
+  .target-input::placeholder { color: #6366f1; }
+  .target-input-icon { color: #6366f1; }
+  .target-error { background: #450a0a; color: #fca5a5; }
+  .target-hint { color: #6366f1; }
+  .target-app { background: #0f0d2e; }
+  .target-app-header { background: #1e1b4b; border-color: #3730a3; }
+  .target-app-tabs { background: #1e1b4b; border-color: #3730a3; }
+  .target-app-tab { color: #6366f1; }
+  .target-app-tab:hover { color: #a5b4fc; }
+  .target-app-tab.active { color: #a5b4fc; }
+  .target-app-tab.active::after { background: #818cf8; }
+  .target-app-body { background: #0f0d2e; }
+  .target-app-avatar { background: #4c1d95; }
+  .target-logout-btn-sm { border-color: #3730a3; background: #1e1b4b; color: #a5b4fc; }
+  .target-logout-btn-sm:hover { background: #3b0764; color: #fca5a5; border-color: #7f1d1d; }
+  .target-settings-label { color: #6366f1; }
+  .target-carousel-card { opacity: 0.9; }
+  .target-carousel-card:hover { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
+  .target-scroll-list { border-color: #3730a3; background: #1e1b4b; }
+  .target-scroll-item { border-color: #312e81; }
+  .target-scroll-item:hover { background: #312e81; }
+  .target-scroll-item-title { color: #e0e7ff; }
+  .target-scroll-item-desc { color: #6366f1; }
+  .target-scroll-item-time { color: #4338ca; }
+  .target-longpress-btn { border-color: #7f1d1d; background: #1e1b4b; color: #fca5a5; }
+  .target-longpress-btn:hover { background: #450a0a; }
+  .target-longpress-btn.pressing { background: #7f1d1d; }
+  .target-longpress-btn.done { background: #166534; border-color: #166534; }
+  .target-longpress-ring circle { stroke: #fca5a5; }
+  .target-action-btn { border-color: #3730a3; background: #1e1b4b; color: #a5b4fc; }
+  .target-action-btn:hover { border-color: #818cf8; background: #312e81; color: #c7d2fe; }
+  .target-settings-section { background: #1e1b4b; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3); }
+  .target-settings-section-title { color: #6366f1; }
+  .target-profile-avatar { background: #4c1d95; }
+  .target-label { color: #a5b4fc; }
+  .target-toggle.off { background: #3730a3; }
+  .target-toggle-left { color: #e0e7ff; }
+  .target-shortcut-hint { color: #6366f1; background: #1e1b4b; }
+  .target-button-secondary { border-color: #3730a3; background: #1e1b4b; color: #a5b4fc; }
+  .target-button-secondary:hover { background: #312e81; }
+  .target-settings-footer { color: #4338ca; }
+  .target-controls { border-color: #3730a3; background: #1e1b4b; }
+  .target-step-info { color: #a5b4fc; }
+  .target-step-info strong { color: #e0e7ff; }
+  .target-reset-btn { border-color: #3730a3; background: #1e1b4b; color: #a5b4fc; }
+  .target-reset-btn:hover:not(:disabled) { background: #312e81; }
+  .target-log { border-color: #3730a3; }
+  .target-log-title { background: #1e1b4b; border-color: #3730a3; color: #6366f1; }
+  .target-log-entry { border-color: #312e81; }
+  .target-log-entry.error { background: #450a0a; }
+  .target-log-entry.done { background: #052e16; }
+  .target-log-step { color: #4338ca; }
+  .target-log-node { color: #e0e7ff; }
+  .target-log-msg { color: #a5b4fc; }
+  .target-log-conf { color: #6366f1; }
+  .target-key-detect-area { border-color: #3730a3; background: #1e1b4b; }
+  .target-key-detect-area:focus { border-color: #818cf8; box-shadow: 0 0 0 3px #312e81; }
+  .target-key-detect-area.has-key { border-color: #818cf8; background: #312e81; }
+  .target-key-detect-label { color: #6366f1; }
+  .target-key-detect-value { color: #a5b4fc; }
+  .target-swipe-vertical { border-color: #3730a3; background: #1e1b4b; }
+  .target-scroll-horizontal::-webkit-scrollbar { height: 0; }
+  .target-scroll-h-label { color: #6366f1; }
+  .target-toggle-pw { color: #6366f1; }
+  .target-toggle-pw:hover { color: #a5b4fc; }
+  .target-color-swatch { cursor: pointer; }
+  .target-color-block { border-color: rgba(255, 255, 255, 0.06); }
+  .target-color-name { color: #6366f1; }
+}
