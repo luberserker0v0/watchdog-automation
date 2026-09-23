@@ -4,6 +4,7 @@ import { useStreamStore } from "../../capture/stores/useStreamStore";
 import { ensureNotificationPermission, notifyTask } from "../../notifications/services/taskNotifier";
 import { useRecorderStore } from "../../recorder/stores/useRecorderStore";
 import ShortcutCaptureInput from "../components/ShortcutCaptureInput";
+import RelatedDetailsSection from "../components/RelatedDetailsSection";
 import "../styles/settings.css";
 
 const FPS_OPTIONS = [1, 5, 10, 15, 30];
@@ -390,6 +391,7 @@ export default function SettingsView() {
             )}
           </div>
         </div>
+        <RelatedDetailsSection />
       </div>
     </div>
   );

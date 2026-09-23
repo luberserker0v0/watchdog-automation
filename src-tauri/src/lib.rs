@@ -139,6 +139,8 @@ fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
         .manage(StreamState(stream_service))
         .manage(modules::recorder::service::RecorderService::default())
         .invoke_handler(tauri::generate_handler![
+            core::folders::list_related_folders,
+            core::folders::open_related_folder,
             modules::capture::commands::screen::get_screens,
             modules::capture::commands::screen::capture_screen,
             modules::capture::commands::screen::save_capture,

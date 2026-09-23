@@ -1,8 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import SettingsView from "./SettingsView";
+
+const { openRelatedFolder } = vi.hoisted(() => ({
+  openRelatedFolder: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../../../api/settings", () => ({
+  listRelatedFolders: vi.fn().mockResolvedValue([
+    { key: "logs", name: "logs", purpose: "Application and execution logs", path: "C:\\Users\\tester\\.watch_dog\\logs" },
+  ]),
+  openRelatedFolder,
+}));
 
 beforeEach(() => {
   usePreferencesStore.setState({ patrolEnabled: false, patrolCycleSeconds: 20, patrolRecoveryPolicy: "hint_only", patrolMaxRedirects: 1, taskNotificationsEnabled: false, recorderNotificationsEnabled: false, recorderStartStopHotkey: "CommandOrControl+Alt+F9", recorderPauseHotkey: "CommandOrControl+Alt+F10", recorderCaptureText: false });
@@ -44,4 +54,13 @@ it("shows notification and recorder controls and rejects duplicate shortcuts", a
   expect(usePreferencesStore.getState().recorderPauseHotkey).toBe("CommandOrControl+Alt+F10");
   fireEvent.keyDown(window, { key: "F8", code: "F8", ctrlKey: true, altKey: true });
   expect(usePreferencesStore.getState().recorderPauseHotkey).toBe("CommandOrControl+Alt+F8");
+});
+
+it("shows related folder purposes and opens an allowlisted folder", async () => {
+  const user = userEvent.setup();
+  render(<SettingsView />);
+  expect(await screen.findByText("Application and execution logs")).toBeTruthy();
+  expect(screen.getByText("C:\\Users\\tester\\.watch_dog\\logs")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Open logs folder" }));
+  expect(openRelatedFolder).toHaveBeenCalledWith("logs");
 });

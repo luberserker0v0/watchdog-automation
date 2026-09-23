@@ -89,6 +89,12 @@ input.settings-item-control {
 .shortcut-capture-value { font-family:monospace; }
 .shortcut-capture-value.capturing { border-color:#6366f1; background:#eef2ff; color:#4338ca; }
 .settings-action:disabled { opacity:.5; cursor:not-allowed; }
+.settings-folder-list { display:flex; flex-direction:column; gap:8px; }
+.settings-folder { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid #e0e0e0; border-radius:8px; background:#fff; }
+.settings-folder-detail { min-width:0; color:#475569; font-size:12px; }
+.settings-folder-detail strong { color:#334155; font-size:13px; }
+.settings-folder-detail code { display:block; max-width:min(680px,70vw); margin-top:3px; overflow:hidden; color:#94a3b8; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.settings-folder .settings-action { flex:0 0 auto; }
 
 /* Toggle Switch */
 .settings-toggle {
@@ -160,6 +166,10 @@ input.settings-item-control {
   .settings-item-text {
     color: #888;
   }
+
+  .settings-folder { background:#252525; border-color:#444; }
+  .settings-folder-detail { color:#bbb; }
+  .settings-folder-detail strong { color:#e5e7eb; }
 
   .settings-toggle-slider {
     background: #555;

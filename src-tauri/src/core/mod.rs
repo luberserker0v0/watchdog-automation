@@ -1,6 +1,7 @@
 pub mod base64;
 pub mod error;
 pub mod file;
+pub mod folders;
 pub mod logger;
 pub mod maintenance;
 pub mod paths;
