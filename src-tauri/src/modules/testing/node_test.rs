@@ -381,9 +381,9 @@ pub async fn open_window(
     stream_state: tauri::State<'_, crate::modules::capture::commands::stream::StreamState>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    stream_state.0.reject_if_pipeline_owned().await?;
+    stream_state.inner().0.reject_if_pipeline_owned().await?;
     log::info!("[node_test] open_window: {:?}", target);
-    let status = stream_state.0.status().await;
+    let status = stream_state.inner().0.status().await;
     let inherited_hwnd = active_window_hwnd(&status);
     let hwnd = resolve_target(&target, &app, false, inherited_hwnd).await?;
     let detail = match target {
@@ -404,7 +404,7 @@ pub async fn test_node(
     stream_state: tauri::State<'_, crate::modules::capture::commands::stream::StreamState>,
     app: tauri::AppHandle,
 ) -> Result<NodeTestResult, String> {
-    stream_state.0.reject_if_pipeline_owned().await?;
+    stream_state.inner().0.reject_if_pipeline_owned().await?;
     let start = std::time::Instant::now();
     let save_debug_images = save_debug_images.unwrap_or(false);
     let detailed_timings = detailed_timings.unwrap_or(false);
@@ -456,7 +456,7 @@ pub async fn test_node(
         msg
     })?;
 
-    let stream_service = stream_state.0.clone();
+    let stream_service = stream_state.inner().0.clone();
     let initial_status = stream_service.status().await;
     let inherited_hwnd = active_window_hwnd(&initial_status);
 
