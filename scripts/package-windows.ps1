@@ -19,6 +19,24 @@ function Get-PackageRelativePath {
     return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($fileUri).ToString()).Replace('/', '\')
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $stream = [System.IO.File]::OpenRead($FilePath)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return -join ($sha256.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") })
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 $projectRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $packageJson = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
 $version = $packageJson.version
@@ -75,7 +93,7 @@ $files = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Sort-Object 
     [ordered]@{
         path = (Get-PackageRelativePath -BasePath $packageRoot -FilePath $_.FullName).Replace('\', '/')
         bytes = $_.Length
-        sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        sha256 = Get-Sha256Hex -FilePath $_.FullName
     }
 })
 $manifest = [ordered]@{
@@ -94,7 +112,7 @@ $checksumEntries = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File |
     Sort-Object FullName |
     ForEach-Object {
         $relative = (Get-PackageRelativePath -BasePath $packageRoot -FilePath $_.FullName).Replace('\', '/')
-        $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hash = Get-Sha256Hex -FilePath $_.FullName
         "$hash  $relative"
     })
 $checksumEntries | Set-Content -LiteralPath (Join-Path $packageRoot "checksums.sha256") -Encoding utf8
@@ -106,7 +124,7 @@ if (Test-Path -LiteralPath $archivePath) {
     Remove-Item -LiteralPath $archivePath -Force
 }
 Compress-Archive -LiteralPath $packageRoot -DestinationPath $archivePath -CompressionLevel Optimal
-$archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$archiveHash = Get-Sha256Hex -FilePath $archivePath
 $archiveChecksumPath = "$archivePath.sha256"
 "$archiveHash  $([System.IO.Path]::GetFileName($archivePath))" |
     Set-Content -LiteralPath $archiveChecksumPath -Encoding ascii

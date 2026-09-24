@@ -28,6 +28,24 @@ function Get-PackageRelativePath {
     return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($fileUri).ToString()).Replace('/', '\')
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $stream = [System.IO.File]::OpenRead($FilePath)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return -join ($sha256.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") })
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 $requiredFiles = @(
     "watch-dog.exe",
     "watch-dog-tester.exe",
@@ -82,7 +100,7 @@ foreach ($entry in $manifest.files) {
     if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
         throw "Manifest entry is missing: $($entry.path)"
     }
-    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actual = Get-Sha256Hex -FilePath $filePath
     if ($actual -ne $entry.sha256) {
         throw "Checksum mismatch for $($entry.path)"
     }
@@ -115,7 +133,7 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $packageRoot "checksums.sh
     if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
         throw "Checksum entry is missing: $relative"
     }
-    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actual = Get-Sha256Hex -FilePath $filePath
     if ($actual -ne $checksumEntries[$relative]) {
         throw "checksums.sha256 mismatch for $relative"
     }
