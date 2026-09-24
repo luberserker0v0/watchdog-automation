@@ -20,13 +20,17 @@ import { useCaptureController } from "./modules/capture/hooks/useCaptureControll
 import "./modules/shell/styles/sidebar.css";
 import "./App.css";
 
-function SplitLayout() {
+interface AppModeProps {
+  showNodeTest: boolean;
+}
+
+function SplitLayout({ showNodeTest }: AppModeProps) {
   const capturePanelOpen = useUiStore((state) => state.capturePanelOpen);
   const capturePanelVisible = usePreferencesStore((state) => state.capturePanelVisible);
   return (
     <ResizableSplit
       left={<>
-        <Workspace />
+        <Workspace showNodeTest={showNodeTest} />
         <ExecutionLog />
       </>}
       right={<CaptureView />}
@@ -36,35 +40,42 @@ function SplitLayout() {
   );
 }
 
-function Workspace() {
+function Workspace({ showNodeTest }: AppModeProps) {
   const activeView = useUiStore((s) => s.activeView);
 
   return (
     <div className={`workspace ${activeView === "patrolChat" ? "patrol-chat-workspace" : ""}`}>
       {activeView === "pipeline" && <PipelineView />}
-      {activeView === "nodeTest" && <NodeTestView />}
+      {showNodeTest && activeView === "nodeTest" && <NodeTestView />}
       {activeView === "patrolChat" && <PatrolChatRoom />}
       {activeView === "actionRecorder" && <ActionRecorderView />}
     </div>
   );
 }
 
-function MainContent() {
+function MainContent({ showNodeTest }: AppModeProps) {
   const activeView = useUiStore((s) => s.activeView);
 
   return (
     <div className="app-content">
-      {activeView === "pipeline" && <SplitLayout />}
-      {activeView === "nodeTest" && <SplitLayout />}
-      {activeView === "patrolChat" && <Workspace />}
-      {activeView === "actionRecorder" && <Workspace />}
+      {activeView === "pipeline" && <SplitLayout showNodeTest={showNodeTest} />}
+      {showNodeTest && activeView === "nodeTest" && <SplitLayout showNodeTest={showNodeTest} />}
+      {activeView === "patrolChat" && <Workspace showNodeTest={showNodeTest} />}
+      {activeView === "actionRecorder" && <Workspace showNodeTest={showNodeTest} />}
       {activeView === "settings" && <SettingsView />}
     </div>
   );
 }
 
-function App() {
+export type AppMode = "production" | "tester";
+
+interface AppProps {
+  mode?: AppMode;
+}
+
+function App({ mode = "production" }: AppProps) {
   const isPreview = window.location.hash === "#preview";
+  const showNodeTest = mode === "tester";
   const recognitionDevice = usePreferencesStore((state) => state.recognitionDevice);
   useCaptureController(!isPreview);
 
@@ -89,10 +100,10 @@ function App() {
 
   return (
     <div className="app-layout">
-      <Sidebar />
+      <Sidebar showNodeTest={showNodeTest} />
       <div className="app-main">
         <RecordingStatusBar />
-        <MainContent />
+        <MainContent showNodeTest={showNodeTest} />
       </div>
       <RecorderCoordinator />
       <RuntimeIntegrationCoordinator />

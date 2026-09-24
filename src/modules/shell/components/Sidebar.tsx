@@ -15,7 +15,11 @@ const NAV_ITEMS: NavItem[] = [
   { id: "actionRecorder", icon: "⏺", labelKey: "nav.recorder" },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  showNodeTest?: boolean;
+}
+
+export default function Sidebar({ showNodeTest = false }: SidebarProps) {
   const { t } = useTranslation();
   const activeView = useUiStore((s) => s.activeView);
   const setActiveView = useUiStore((s) => s.setActiveView);
@@ -37,7 +41,7 @@ export default function Sidebar() {
         </button>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => showNodeTest || item.id !== "nodeTest").map((item) => {
             const label = t(item.labelKey);
             return (
             <button
