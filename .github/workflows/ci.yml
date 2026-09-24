@@ -49,6 +49,10 @@ jobs:
       - name: Build frontend entrypoints
         run: npm run build
 
+      - name: Stage ONNX Runtime resources
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile debug
+
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
