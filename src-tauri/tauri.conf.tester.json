@@ -41,7 +41,7 @@
     ],
     "resources": [
       "resources/**/*",
-      "native/windows-x64/*.dll"
+      "native/windows-x64"
     ]
   }
 }

@@ -11,6 +11,7 @@ const production = await readJson("src-tauri/tauri.conf.json");
 const tester = await readJson("src-tauri/tauri.conf.tester.json");
 const target = await readJson("src-tauri/tauri.conf.target.json");
 const cargo = await readFile(resolve(projectRoot, "src-tauri/Cargo.toml"), "utf8");
+const runtimeInstaller = await readFile(resolve(projectRoot, "scripts/install-onnxruntime.ps1"), "utf8");
 
 const cargoField = (name) => cargo.match(new RegExp(`^${name}\\s*=\\s*"([^"]+)"`, "m"))?.[1];
 const versions = new Map([
@@ -37,10 +38,17 @@ for (const [name, config] of [["production", production], ["Tester", tester], ["
 for (const [name, config] of [["production", production], ["Tester", tester]]) {
   const resources = config.bundle?.resources ?? [];
   if (!resources.includes("resources/**/*")) errors.push(`${name} bundle is missing application resources`);
-  if (!resources.includes("native/windows-x64/*.dll")) errors.push(`${name} bundle is missing native runtime DLL resources`);
+  if (!resources.includes("native/windows-x64")) errors.push(`${name} bundle is missing the native runtime resource directory`);
   if (!config.build?.beforeBuildCommand?.includes("install-onnxruntime.ps1")) {
     errors.push(`${name} build does not stage ONNX Runtime before bundling`);
   }
+}
+
+if (!runtimeInstaller.includes('Microsoft.ML.OnnxRuntime.DirectML')) {
+  errors.push("Runtime installer does not declare the ONNX Runtime DirectML package");
+}
+if (!runtimeInstaller.includes('Microsoft.AI.DirectML')) {
+  errors.push("Runtime installer does not declare the DirectML dependency package");
 }
 
 for (const script of ["build:all-targets", "build:all-targets:debug", "package:windows", "package:windows:debug"]) {

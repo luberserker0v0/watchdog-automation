@@ -52,6 +52,7 @@ $requiredFiles = @(
     "watch-dog-target.exe",
     "onnxruntime.dll",
     "onnxruntime_providers_shared.dll",
+    "DirectML.dll",
     "resources\pipelines\sample\sample.md",
     "resources\pipelines\sample\sample.meta.json",
     "resources\pipelines\patrol-redirection\patrol-redirection.md",
