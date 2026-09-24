@@ -4,6 +4,7 @@ import { loadPatrolChatImage, usePatrolChatStore, type PatrolChatContent, type P
 import "./patrol-chat-room.css";
 
 function ImagePreview({ part }: { part: Extract<PatrolChatContent, { type: "image" }> }) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [large, setLarge] = useState(false);
@@ -12,15 +13,15 @@ function ImagePreview({ part }: { part: Extract<PatrolChatContent, { type: "imag
     loadPatrolChatImage(part.image_id).then((value) => {
       if (active) setUrl(value);
     }).catch(() => {
-      if (active) setError("Image preview is no longer available in this session.");
+      if (active) setError(t("patrol.imageUnavailable"));
     });
     return () => { active = false; };
-  }, [part.image_id]);
+  }, [part.image_id, t]);
   return <div className="patrol-chat-image">
     <strong>{part.label}</strong>
     {error && <span role="status">{error}</span>}
-    {!error && !url && <span>Loading image…</span>}
-    {url && <button type="button" onClick={() => setLarge(!large)} aria-label={`${large ? "Shrink" : "Enlarge"} ${part.label}`}>
+    {!error && !url && <span>{t("patrol.imageLoading")}</span>}
+    {url && <button type="button" onClick={() => setLarge(!large)} aria-label={`${t(large ? "patrol.shrink" : "patrol.enlarge")} ${part.label}`}>
       <img src={url} alt={part.label} className={large ? "large" : ""} />
     </button>}
   </div>;
@@ -39,18 +40,31 @@ function MessageContent({ content }: { content: PatrolChatContent[] }) {
 }
 
 function Message({ message }: { message: PatrolChatEvent }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const time = new Date(message.occurred_at_ms).toLocaleTimeString();
+  const detailText = message.content.map((part) => part.type === "field" ? part.value : part.type === "text" ? part.text : "").join(" ");
+  const summary = message.summary.includes("circuit") || detailText.includes("circuit opened")
+    ? t("patrol.circuitOpen")
+    : message.summary.includes("deadline") || detailText.includes("deadline expired")
+      ? t("patrol.deadlineExpired")
+      : detailText.includes("Low-confidence")
+        ? t("patrol.lowConfidence")
+        : detailText.includes("no newer frame")
+          ? t("patrol.noNewerFrame")
+        : detailText.includes("(unstable)")
+          ? t("patrol.unstable")
+          : t(`patrol.kind.${message.kind}`, { defaultValue: message.summary });
   return <article className={`patrol-chat-message ${message.sender}`} aria-label={`${message.sender} ${message.kind}`}>
     <div className="patrol-chat-message-head">
-      <strong>{message.sender === "vlm" ? "VLM" : "Patrol"}</strong>
+      <strong>{t(message.sender === "vlm" ? "patrol.vlm" : "patrol.patrol")}</strong>
       <span>{message.tier && `${message.tier} · `}{time}</span>
     </div>
-    <p className="patrol-chat-summary">{message.summary}</p>
+    <p className="patrol-chat-summary">{summary}</p>
     <details onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary>{expanded ? "Hide details" : "Show details"}</summary>
+      <summary>{t(expanded ? "patrol.hideDetails" : "patrol.showDetails")}</summary>
       {expanded && <>
-        <div className="patrol-chat-context">Node {message.node_id} · frame {message.frame} · session {message.session}<br />{message.target}</div>
+        <div className="patrol-chat-context">{t("patrol.node")} {message.node_id} · {t("patrol.frame")} {message.frame} · {t("patrol.session")} {message.session}<br />{message.target}</div>
         <MessageContent content={message.content} />
       </>}
     </details>
@@ -77,11 +91,11 @@ export default function PatrolChatRoom() {
 
   return <section className="patrol-chat-room" aria-label={t("patrol.title")}>
     <header className="patrol-chat-toolbar">
-      <div><h2>{t("patrol.title")}</h2><p>{t("patrol.subtitle")}{activeRun !== "all" && activeRun && ` · ${activeRun}: ${runStatuses[activeRun] ?? "Recorded"}`}</p></div>
+      <div><h2>{t("patrol.title")}</h2><p>{t("patrol.subtitle")}{activeRun !== "all" && activeRun && ` · ${activeRun}: ${runStatuses[activeRun] ?? t("patrol.recorded")}`}</p></div>
       <div className="patrol-chat-controls">
         <label>{t("patrol.run")} <select aria-label={t("patrol.run")} value={selectedRunId} onChange={(event) => selectRun(event.target.value)}>
           <option value="latest">{t("patrol.latest")}</option><option value="all">{t("patrol.all")}</option>
-          {runs.map((run) => <option key={run} value={run}>{run} · {runStatuses[run] ?? "Recorded"}</option>)}
+          {runs.map((run) => <option key={run} value={run}>{run} · {runStatuses[run] ?? t("patrol.recorded")}</option>)}
         </select></label>
         <label><input type="checkbox" checked={autoScroll} onChange={(event) => setAutoScroll(event.target.checked)} /> {t("patrol.autoScroll")}</label>
         <button type="button" onClick={() => void clear()}>{t("patrol.clear")}</button>
@@ -90,7 +104,7 @@ export default function PatrolChatRoom() {
     <div className="patrol-chat-timeline" ref={scrollRef}>
       {visible.length === 0 && <div className="patrol-chat-empty">{t("patrol.empty")}</div>}
       {visible.map((message, index) => <div key={message.id}>
-        {(index === 0 || visible[index - 1].sample_id !== message.sample_id) && <div className="patrol-chat-sample">Run {message.run_id} · {message.node_id} · frame {message.frame}</div>}
+        {(index === 0 || visible[index - 1].sample_id !== message.sample_id) && <div className="patrol-chat-sample">{t("patrol.runGroup", { run: message.run_id, node: message.node_id, frame: message.frame })}</div>}
         <Message message={message} />
       </div>)}
     </div>

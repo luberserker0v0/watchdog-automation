@@ -2,7 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PatrolChatRoom from "./PatrolChatRoom";
-import { usePatrolChatStore, type PatrolChatEvent } from "../stores/usePatrolChatStore";
+import { PATROL_CHAT_KINDS, usePatrolChatStore, type PatrolChatEvent } from "../stores/usePatrolChatStore";
+import { resources } from "../../../../i18n/resources";
 
 const invoke = vi.hoisted(() => vi.fn(async () => "data:image/jpeg;base64,aGVsbG8="));
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
@@ -26,6 +27,12 @@ beforeEach(() => {
 });
 
 describe("Patrol Chat Room", () => {
+  it("formats every backend chat kind in both supported languages", () => {
+    for (const kind of PATROL_CHAT_KINDS) {
+      expect(resources.en.translation.patrol.kind).toHaveProperty(kind);
+      expect(resources["zh-TW"].translation.patrol.kind).toHaveProperty(kind);
+    }
+  });
   it("places Patrol and VLM messages on opposite sides and keeps details and images closed", async () => {
     const user = userEvent.setup();
     usePatrolChatStore.getState().append(event());
@@ -51,12 +58,12 @@ describe("Patrol Chat Room", () => {
   it("filters by run and clears session history", async () => {
     const user = userEvent.setup();
     usePatrolChatStore.getState().append(event());
-    usePatrolChatStore.getState().append(event({ id: 3, run_id: "run-2", sample_id: "run-2:1:4", frame: 4, summary: "Second run capture" }));
+    usePatrolChatStore.getState().append(event({ id: 3, run_id: "run-2", sample_id: "run-2:1:4", frame: 4, kind: "capture", summary: "Second run capture" }));
     render(<PatrolChatRoom />);
-    expect(screen.getByText("Second run capture")).toBeVisible();
-    expect(screen.queryByText("Sent local search to VLM")).toBeNull();
+    expect(screen.getByText("Captured current screen")).toBeVisible();
+    expect(screen.queryByText("Sent state match request")).toBeNull();
     await user.selectOptions(screen.getByRole("combobox", { name: "Run" }), "all");
-    expect(screen.getByText("Sent local search to VLM")).toBeVisible();
+    expect(screen.getByText("Sent state match request")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Clear session" }));
     expect(screen.getByText(/No Patrol exchange yet/)).toBeVisible();
     expect(invoke).toHaveBeenCalledWith("clear_patrol_chat_images");

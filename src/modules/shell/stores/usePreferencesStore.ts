@@ -24,6 +24,8 @@ interface PreferencesState {
   patrolCycleSeconds: number;
   patrolKHops: number;
   patrolThreshold: number;
+  patrolActionEffectThreshold: number;
+  patrolRedirectThreshold: number;
   patrolMinMargin: number;
   patrolRecoveryPolicy: PatrolRecoveryPolicy;
   patrolMaxRedirects: number;
@@ -49,6 +51,8 @@ interface PreferencesState {
   setPatrolCycleSeconds: (seconds: number) => void;
   setPatrolKHops: (hops: number) => void;
   setPatrolThreshold: (threshold: number) => void;
+  setPatrolActionEffectThreshold: (threshold: number) => void;
+  setPatrolRedirectThreshold: (threshold: number) => void;
   setPatrolMinMargin: (margin: number) => void;
   setPatrolRecoveryPolicy: (policy: PatrolRecoveryPolicy) => void;
   setPatrolMaxRedirects: (count: number) => void;
@@ -87,6 +91,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       patrolCycleSeconds: 20,
       patrolKHops: 1,
       patrolThreshold: 0.85,
+      patrolActionEffectThreshold: 0.85,
+      patrolRedirectThreshold: 0.85,
       patrolMinMargin: 0.1,
       patrolRecoveryPolicy: "hint_only",
       patrolMaxRedirects: 1,
@@ -112,6 +118,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       setPatrolCycleSeconds: (seconds) => set({ patrolCycleSeconds: Number.isFinite(seconds) ? Math.min(3600, Math.max(1, Math.round(seconds))) : 20 }),
       setPatrolKHops: (hops) => set({ patrolKHops: Number.isFinite(hops) ? Math.min(4, Math.max(1, Math.round(hops))) : 1 }),
       setPatrolThreshold: (threshold) => set({ patrolThreshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : 0.85 }),
+      setPatrolActionEffectThreshold: (threshold) => set({ patrolActionEffectThreshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : 0.85 }),
+      setPatrolRedirectThreshold: (threshold) => set({ patrolRedirectThreshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : 0.85 }),
       setPatrolMinMargin: (margin) => set({ patrolMinMargin: Number.isFinite(margin) ? Math.min(1, Math.max(0, margin)) : 0.1 }),
       setPatrolRecoveryPolicy: (patrolRecoveryPolicy) => set({ patrolRecoveryPolicy }),
       setPatrolMaxRedirects: (count) => set({ patrolMaxRedirects: Number.isFinite(count) ? Math.min(10, Math.max(1, Math.round(count))) : 1 }),
@@ -127,7 +135,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       name: "watchdog:settings",
       // saveToDisk and saveDebugImages are session-only: they reset to off
       // on every window open, so they are never written to storage.
-      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, taskNotificationsEnabled, recorderNotificationsEnabled, recorderStartStopHotkey, recorderPauseHotkey, recorderCaptureText, capturePanelVisible, previewWindowSize }) => ({
+      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolActionEffectThreshold, patrolRedirectThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, taskNotificationsEnabled, recorderNotificationsEnabled, recorderStartStopHotkey, recorderPauseHotkey, recorderCaptureText, capturePanelVisible, previewWindowSize }) => ({
         mode,
         showFps,
         captureEngine,
@@ -140,6 +148,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         patrolCycleSeconds,
         patrolKHops,
         patrolThreshold,
+        patrolActionEffectThreshold,
+        patrolRedirectThreshold,
         patrolMinMargin,
         patrolRecoveryPolicy,
         patrolMaxRedirects,
@@ -153,6 +163,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       }),
       merge: (persisted, current) => {
         const { patrolMode: legacyPatrolMode, ...stored } = persisted as Partial<PreferencesState> & { patrolMode?: string };
+        const migratedThreshold = Number.isFinite(stored.patrolThreshold) ? Math.min(1, Math.max(0, stored.patrolThreshold!)) : 0.85;
         return {
           ...current,
           ...stored,
@@ -163,7 +174,9 @@ export const usePreferencesStore = create<PreferencesState>()(
           patrolEnabled: stored.patrolEnabled === true && legacyPatrolMode !== "record",
           patrolCycleSeconds: Number.isFinite(stored.patrolCycleSeconds) ? Math.min(3600, Math.max(1, Math.round(stored.patrolCycleSeconds!))) : 20,
           patrolKHops: Number.isFinite(stored.patrolKHops) ? Math.min(4, Math.max(1, Math.round(stored.patrolKHops!))) : 1,
-          patrolThreshold: Number.isFinite(stored.patrolThreshold) ? Math.min(1, Math.max(0, stored.patrolThreshold!)) : 0.85,
+          patrolThreshold: migratedThreshold,
+          patrolActionEffectThreshold: Number.isFinite(stored.patrolActionEffectThreshold) ? Math.min(1, Math.max(0, stored.patrolActionEffectThreshold!)) : migratedThreshold,
+          patrolRedirectThreshold: Number.isFinite(stored.patrolRedirectThreshold) ? Math.min(1, Math.max(0, stored.patrolRedirectThreshold!)) : migratedThreshold,
           patrolMinMargin: Number.isFinite(stored.patrolMinMargin) ? Math.min(1, Math.max(0, stored.patrolMinMargin!)) : 0.1,
           patrolRecoveryPolicy: stored.patrolRecoveryPolicy === "redirection_only" ? "redirection_only" : "hint_only",
           patrolMaxRedirects: Number.isFinite(stored.patrolMaxRedirects) ? Math.min(10, Math.max(1, Math.round(stored.patrolMaxRedirects!))) : 1,

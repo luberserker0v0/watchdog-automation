@@ -12,7 +12,7 @@ export interface PatrolReportEvent {
   target: string;
   session: number;
   frame: number;
-  outcome: "aligned" | "possible_mismatch" | "achieved" | "unchanged" | "in_progress" | "unexpected" | "inconclusive";
+  outcome: "aligned" | "possible_mismatch" | "achieved" | "unchanged" | "in_progress" | "unexpected" | "inconclusive" | "circuit_open";
   reason: string | null;
 }
 
@@ -27,6 +27,11 @@ export interface PatrolRecoveryEvent {
   accepted: boolean;
   redirect_count: number;
   max_redirects: number;
+  location_node?: string | null;
+  location_confidence?: number | null;
+  location_source?: "state_matcher" | "action_expected_successor" | "action_error_successor" | null;
+  location_frame_stable?: boolean | null;
+  location_uncertain?: boolean;
 }
 
 /**

@@ -182,7 +182,7 @@ does not count, and a separate timeout bounds active waiting.
 #### 3.4.3 Patrol scheduling and VLM tasks
 
 The Settings View supplies patrol enablement, cycle seconds (default 20), K
-hops, score threshold, minimum margin, recovery policy, and redirect limit to
+hops, separate state-match, action-effect, and redirect thresholds, minimum margin, recovery policy, and redirect limit to
 `start_pipeline`. Patrol settings
 are absent from pipeline metadata; a legacy `patrol` field receives a field
 diagnostic. Invalid or unavailable configuration is logged without preventing
@@ -193,13 +193,14 @@ the pipeline from starting.
 | Periodic start | `engine/runner.rs` starts a worker with the run. The first sample is due one configured cycle after start. |
 | Later samples | The worker waits for the previous response and for one cycle since that request began. A response slower than the cycle allows the next request immediately. At most one VLM request is in flight. |
 | Task selection | A completed, sent, unresolved action attempt with a newer frame on the same target/session selects Action Effect Verifier. Otherwise the sample selects Current State Matcher. |
-| Current State Matcher | `runtime/patrol.rs` scores the latest frame against the expected node and undirected K-hop neighbors. It receives no action history. A request includes at most 16 candidates; missing references use descriptions. An inconclusive local result expands to 2K hops and shared-parent siblings. |
-| Action Effect Verifier | Compares one action batch's exact pre-dispatch image and a newer image with its ordered sanitized actions, direct normal-node successor descriptions/references, and the declared error successor when visual. The VLM returns the explicit classes `expected_successor`, `error_successor`, `unchanged`, `in_progress`, or `inconclusive`. Runtime reports map the first two to `achieved` and `unexpected`; matching the error successor is never treated as achievement. |
-| Recovery task | Runs only at an impending terminal failure after the final action/state check. Hint policy requests one advisory candidate. Redirection policy requests one route candidate. Both receive failure context, recent path, error-handler before/current frames and sanitized actions, and at most 16 engine-selected normal nodes with descriptions, sanitized actions, and available references. |
+| Current State Matcher | `runtime/patrol.rs` scores the latest frame against the expected node and undirected K-hop neighbors. It receives no action history. A request contains at most 16 candidates ordered by anchor, direct normal successors, declared error successor, recent eligible nodes, then hop distance and graph order. Missing references use descriptions. An inconclusive local result expands to 2K hops and shared-parent siblings. |
+| Action Effect Verifier | Compares the exact pre-dispatch image with a selected newer image and the actions actually dispatched, preserving repetition order. Failed/blocked actions remain in the ledger but are excluded from the prompt. Wait/no-op/stop-only batches and attempts without a visual normal or error successor are skipped. A successful post-freeze frame is preferred; otherwise a two-active-second collector samples at least 200 ms apart until three frames are 0.98 similar, or marks the latest newer frame unstable. Low-confidence successor results become inconclusive. |
+| Failure handoff | At impending failure, a stable above-threshold Action Effect Verifier success/error successor becomes `LocatedState`. Unchanged, in-progress, unstable, low-confidence, malformed, inconclusive, wrong-successor, or changed-session evidence falls back to Current State Matcher. The handoff retains node, confidence, task source, capture target/session/frame, stability, and reason. |
+| Recovery task | Runs after location handoff. Candidates are anchored at the located node and ordered as location, enabled normal K-hop neighbors, recent eligible nodes, then remaining nodes by hop distance and graph order, capped at 16. It receives one current image plus structured location, failure, recent-path, and candidate metadata/actions. It receives no prior-task raw response, before-action image, or candidate reference image. Hint policy may produce an explicitly uncertain suggestion without a location; redirection policy cannot. |
 | Report | State results use `aligned`, `possible_mismatch`, or `inconclusive`. Action results use the five effect values. Both include run, task, target, capture session, and frame sequence and go to the Execution Log and run evidence. |
 
 Each request performs one task with a dedicated system prompt and response
-type. The VLM HTTP request has a separate 120-second timeout. Analysis runs while the
+type. Transport returns typed connection, timeout, rate-limit, and server categories. Connection, 429, and 5xx failures retry once after 500 ms; timeout does not immediately retry. Three consecutive transport failures open a per-run periodic circuit and emit one diagnostic. A successful HTTP response resets the consecutive count. Analysis runs while the
 pipeline continues recognition, actions, and routing, so a periodic report can arrive
 after node advancement. A report, model error, or reference save failure does
 not change routing, block input, or fail the run. Only the failure-boundary
@@ -220,9 +221,8 @@ run ID. It reads only that run's references; a new run uses descriptions until
 its own visits produce images. No baseline run is needed.
 
 Before terminal status, the engine stops periodic sampling, cancels unfinished
-periodic VLM work, and waits for reference saves. On failure it also attempts
-one final validation and waits for its report. It verifies the latest unresolved
-action when usable action evidence exists; otherwise it performs state matching. The check prefers a newer
+periodic VLM work, and waits for reference saves. On failure it permits one final probe even when the periodic circuit is open and shares a 45-second active-time budget across Task 2, Task 1 fallback, and Task 3. Paused time does not consume the budget and stop cancels it. It verifies the latest unresolved
+action when usable action evidence exists; a result that cannot establish location triggers state matching. Without usable action evidence it starts with state matching. The check prefers a newer
 cached frame in the same capture session; if no frame exists, it logs that
 validation was unavailable. The run then closes an atomic report gate before
 publishing terminal status. No Patrol report follows terminal status.
@@ -235,10 +235,10 @@ publishing terminal status. No Patrol report follows terminal status.
 |----------|----------------|
 | Capture | Node, target, session, frame sequence, and recognizer result. |
 | Input dispatch | Sanitized intent, source frame, action-attempt ID, and dispatch outcome. Successful dispatch starts with an unverified visual effect. Allowlisted control keys use names; text and arbitrary keys remain redacted. |
-| Action attempt | Source node, ordered input IDs, direct visual successors, before/after frame identities, timing, and effect result. One node visit forms one attempt. |
+| Action attempt | Source node, ordered input IDs, direct visual successors, exact before/selected-after frame identities, after-frame stability, timing, and effect result. One node visit forms one attempt. |
 | Action images | Exact before image and newer after image are retained only in a bounded private worker cache and the session preview cache, never in pipeline status. |
 | State decision | Anchor, possible matched node, capture identity, outcome, and reason. State decisions never confirm action effects. |
-| Recovery decision | Policy, failure node, proposed target, confidence, reason, validation result, and accepted redirect count. |
+| Recovery decision | Policy, failure node, proposed target, confidence, reason, validation result, accepted redirect count, and optional location node/confidence/source/stability/uncertainty. |
 
 Pipeline status exposes this ledger. Text input, arbitrary character keys, and
 custom parameters are excluded from status and logs. Allowlisted non-text
@@ -265,7 +265,7 @@ draft fields. The batch controller runs selected pipelines sequentially.
 |---------|-----------------------|
 | `pipeline-status` | Runtime sends revisioned snapshots and appended steps. The frontend shows the latest ten steps; backend handles retain full history. |
 | `patrol-report` | Runtime sends independent advisory reports. The Execution Log shows a concise state transition; technical capture identity and exact VLM reasoning remain in the Chat Room. |
-| `patrol-recovery` | Runtime reports a hint, accepted redirect, or rejected redirect before terminal status. The frontend renders a concise recovery path and decision with a persistent `HINT ONLY` or `REDIRECT` policy tag. |
+| `patrol-recovery` | Runtime reports a hint, accepted redirect, or rejected redirect before terminal status, including optional structured location fields. The frontend renders a concise recovery path, location certainty, and decision with a persistent `HINT ONLY` or `REDIRECT` policy tag. |
 | Debug images and timings | Engine produces these when the corresponding options are enabled. |
 | Cleanup fields | Status and events carry `cleanup_complete` and optional `cleanup_error`. The frontend follows a terminal run until cleanup finishes and shows restoration failure separately. |
 
@@ -278,11 +278,12 @@ An app-level listener collects `patrol-chat-event` messages before runs start
 and while the room is closed. Each structured event carries run/sample IDs,
 capture identity, sender, operation kind, task tier, exact prompt text parts,
 exact response text, validation diagnostics, score rows, sanitized actions,
-and before/after/reference image IDs. It excludes the API key and image base64.
+location handoffs, unresolved-location diagnostics, and task-relevant image
+IDs. Backend kinds are a serialized enum mirrored by the frontend event union. It excludes the API key and image base64.
 
 | View behavior | Contract |
 |---------------|----------|
-| Layout | VLM messages on the left; Patrol operations on the right. Details are closed by default. |
+| Layout | VLM messages on the left; Patrol operations on the right. Details are closed by default. Interface labels, diagnostic states, controls, and operation summaries are localized in English and Traditional Chinese. |
 | Session controls | Run selector, auto-scroll, and clear-session action for bounded in-memory history. |
 | Previews | Backend caches images by opaque ID. Expansion fetches a preview; eviction displays an unavailable state. |
 | Effect | Trace events only describe activity; they cannot change routes or dispatch actions. |
@@ -294,6 +295,8 @@ save-debug-images are session-only and rehydrate as off. The VLM endpoint and
 model name persist; the API key remains in memory for the app session, is
 passed to `start_pipeline` only when a run starts, and is omitted from stored
 preferences and logs.
+Legacy preferences that lack the action-effect or redirect threshold copy the
+stored state-match threshold; all three default to 0.85 on a new installation.
 
 ### 3.6 Task notification and action recording (NOT, RCD)
 
@@ -374,8 +377,9 @@ action plugins.
 - Window-target action paths try to activate the target before input and refuse
   input if that window cannot be verified foreground immediately before dispatch.
 - Polling recovers missed status events; the UI discards stale revisions.
-- At an impending terminal failure, Patrol completes the final action or state
-  check and then runs the configured recovery task. `hint_only` emits an
+- At an impending terminal failure, Patrol stops periodic sampling, tries to
+  locate the state from a qualified final action result, falls back to State
+  Matcher when needed, and then runs the configured recovery task. `hint_only` emits an
   advisory suggestion and preserves failure. `redirection_only` can resume the
   same run at one engine-generated candidate when confidence, capture identity,
   node validity, redirect limit, and route-deduplication checks pass.

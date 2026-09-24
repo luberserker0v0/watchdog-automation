@@ -6,8 +6,9 @@ use target::ensure_effective_target;
 
 pub(crate) use parameters::substitute_actions;
 use patrol_worker::{
-    pending_action_for_snapshot, sample_patrol, PatrolActionFrames, PatrolRecoveryReport,
-    PatrolSampler, PatrolSnapshot, PatrolWorker,
+    locate_state_for_failure, located_state_from_action, pending_action_for_snapshot,
+    sample_patrol, PatrolActionFrames, PatrolRecoveryReport, PatrolSampler, PatrolSnapshot,
+    PatrolWorker,
 };
 
 use super::frame;
@@ -20,9 +21,11 @@ use crate::modules::capture::services::stream::{StreamFrame, StreamService, Stre
 use crate::modules::pipeline::authoring::models::action::Action;
 use crate::modules::pipeline::authoring::models::node::Node;
 use crate::modules::pipeline::plugins::PluginRegistry;
-use crate::modules::pipeline::runtime::chat::{cache_image, ChatContent, PatrolChatSink};
+use crate::modules::pipeline::runtime::chat::{
+    cache_image, ChatContent, PatrolChatKind, PatrolChatSink,
+};
 use crate::modules::pipeline::runtime::patrol::{
-    PatrolRuntime, RecoveryDecision, RecoveryInput, RecoveryPolicy,
+    LocatedState, PatrolRuntime, RecoveryDecision, RecoveryInput, RecoveryPolicy,
 };
 use crate::modules::pipeline::runtime::plan::ExecutionPlan;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -140,6 +143,35 @@ async fn wait_until_running(handle: &RunHandle) -> bool {
     }
 }
 
+async fn await_with_active_budget<F, T>(
+    handle: &RunHandle,
+    remaining: &mut Duration,
+    future: F,
+) -> Result<T, &'static str>
+where
+    F: std::future::Future<Output = T>,
+{
+    tokio::pin!(future);
+    loop {
+        if stop_requested(handle) {
+            return Err("stopped");
+        }
+        if remaining.is_zero() {
+            return Err("expired");
+        }
+        let paused = matches!(handle.get_state(), PipelineState::Paused);
+        let slice = (*remaining).min(Duration::from_millis(25));
+        tokio::select! {
+            value = &mut future => return Ok(value),
+            _ = tokio::time::sleep(slice) => {
+                if !paused {
+                    *remaining = remaining.saturating_sub(slice);
+                }
+            }
+        }
+    }
+}
+
 /// One exclusively-owned pipeline execution. This is the aggregate root for a
 /// run: mutable execution state cannot leak into command handlers or another
 /// concurrent run.
@@ -236,6 +268,7 @@ impl PipelineRunSession {
                 ctx.graph.clone(),
                 Arc::clone(&handle),
                 app.clone(),
+                Arc::clone(&stream_service),
             )
         });
         let mut redirect_count = 0u32;
@@ -499,6 +532,7 @@ impl PipelineRunSession {
                         capture_target: capture_target.clone(),
                         capture_session: expected_session,
                         frame_sequence,
+                        stable: false,
                     });
                 }
                 if patrol.is_some() {
@@ -951,6 +985,7 @@ impl PipelineRunSession {
                                                 capture_target: capture_target.clone(),
                                                 capture_session: expected_session,
                                                 frame_sequence,
+                                                stable: false,
                                             });
                                         }
                                         resolved_frame_bounds = frame_bounds.or_else(|| match &expected_stream_target {
@@ -1119,9 +1154,11 @@ impl PipelineRunSession {
                     );
                 }
 
+                let mut patrol_expected_successors = Vec::new();
+                let mut patrol_error_successor = None;
                 let action_attempt_id = if !mapped_actions.is_empty() {
-                    if let Some(worker) = patrol_worker.as_ref() {
-                        let expected_successors = ctx
+                    if patrol_worker.is_some() {
+                        patrol_expected_successors = ctx
                         .plan
                         .next(&current_node.id)
                         .iter()
@@ -1133,7 +1170,7 @@ impl PipelineRunSession {
                         })
                         .cloned()
                         .collect::<Vec<_>>();
-                        let error_successor = ctx.plan.error(&current_node.id).and_then(|node_id| {
+                        patrol_error_successor = ctx.plan.error(&current_node.id).and_then(|node_id| {
                         ctx.graph
                             .find_node(node_id)
                             .filter(|node| {
@@ -1147,39 +1184,14 @@ impl PipelineRunSession {
                             let attempt_id = handle.patrol_state.lock().ok().map(|mut state| {
                                 state.begin_attempt(
                                     &current_node.id,
-                                    expected_successors.clone(),
-                                    error_successor.clone(),
+                                    patrol_expected_successors.clone(),
+                                    patrol_error_successor.clone(),
                                     &capture_target,
                                     expected_session,
                                     frame_sequence,
                                     elapsed_ms,
                                 )
                             });
-                            if let Some(attempt_id) = attempt_id {
-                                let actions = mapped_actions
-                                    .iter()
-                                    .map(|action| {
-                                        let (kind, intent) =
-                                            super::patrol_state::summarize_action(action);
-                                        if intent.is_empty() {
-                                            kind.to_string()
-                                        } else {
-                                            format!("{kind} {intent}")
-                                        }
-                                    })
-                                    .collect();
-                                worker.record_action_attempt(PatrolActionFrames {
-                                    attempt_id,
-                                    node_id: current_node.id.clone(),
-                                    actions,
-                                    expected_successors,
-                                    error_successor,
-                                    before: Arc::clone(&screenshot),
-                                    target: capture_target.clone(),
-                                    session: expected_session,
-                                    before_frame: frame_sequence,
-                                });
-                            }
                             attempt_id
                         }
                     } else {
@@ -1190,6 +1202,7 @@ impl PipelineRunSession {
                 };
 
                 let phase_start = std::time::Instant::now();
+                let mut patrol_sent_actions = Vec::new();
                 for repetition in 0..current_node.repeat {
                     if action_error.is_some() {
                         break;
@@ -1294,6 +1307,20 @@ impl PipelineRunSession {
                         match result {
                             Ok(()) => {
                                 actions_fired += 1;
+                                if super::patrol_state::is_effect_eligible(action) {
+                                    let (kind, intent) =
+                                        super::patrol_state::summarize_action(action);
+                                    let summary = if intent.is_empty() {
+                                        kind.to_string()
+                                    } else {
+                                        format!("{kind} {intent}")
+                                    };
+                                    patrol_sent_actions.push(format!(
+                                        "repeat={} action={} {summary}",
+                                        repetition + 1,
+                                        action_index + 1
+                                    ));
+                                }
                                 if let Some(evidence_id) = evidence_id {
                                     if let Ok(mut state) = handle.patrol_state.lock() {
                                         state.finish_action(
@@ -1354,6 +1381,26 @@ impl PipelineRunSession {
                             handle.start_time.elapsed().as_millis() as u64,
                         );
                     }
+                    if !patrol_sent_actions.is_empty()
+                        && (!patrol_expected_successors.is_empty()
+                            || patrol_error_successor.is_some())
+                    {
+                        if let Some(worker) = patrol_worker.as_ref() {
+                            worker.record_action_attempt(PatrolActionFrames {
+                                attempt_id,
+                                node_id: current_node.id.clone(),
+                                actions: patrol_sent_actions,
+                                expected_successors: patrol_expected_successors,
+                                error_successor: patrol_error_successor,
+                                before: Arc::clone(&screenshot),
+                                target: capture_target.clone(),
+                                session: expected_session,
+                                before_frame: frame_sequence,
+                                preferred_after: None,
+                                preferred_from_post_freeze: false,
+                            });
+                        }
+                    }
                 }
 
                 if actions_fired > 0
@@ -1408,6 +1455,7 @@ impl PipelineRunSession {
                                         capture_target: capture_target.clone(),
                                         capture_session: expected_session,
                                         frame_sequence: frame.sequence,
+                                        stable: true,
                                     });
                                 }
                             }
@@ -1506,7 +1554,7 @@ impl PipelineRunSession {
                             match patrol.record(&node_id, &frame) {
                                 Ok((path, bytes)) => chat.emit(
                                     "patrol",
-                                    "reference_save",
+                                    PatrolChatKind::ReferenceSave,
                                     format!("Saved reference for {}", node_id),
                                     None,
                                     vec![
@@ -1532,7 +1580,7 @@ impl PipelineRunSession {
                                     );
                                     chat.emit(
                                         "patrol",
-                                        "error",
+                                        PatrolChatKind::Error,
                                         format!("Could not save reference for {}", node_id),
                                         None,
                                         vec![ChatContent::Text {
@@ -1589,6 +1637,11 @@ impl PipelineRunSession {
                 } else {
                     (None, Arc::new(std::sync::Mutex::new(VecDeque::new())))
                 };
+            let mut finalization_budget = Duration::from_secs(45);
+            let mut located_state: Option<LocatedState> = None;
+            let final_probe_allowed = patrol
+                .as_ref()
+                .is_some_and(|patrol| patrol.allow_final_probe());
             if !was_stopped && (ctx.failed || !ctx.current_node_id.is_empty()) {
                 // A new capture may have arrived while the failed node was running
                 // its actions or delay. Prefer it over that node's earlier frame.
@@ -1608,6 +1661,7 @@ impl PipelineRunSession {
                                 snapshot.screenshot = Arc::new(image);
                                 snapshot.frame_sequence = frame.sequence;
                                 snapshot.anchor_confirmed = false;
+                                snapshot.stable = false;
                                 if let Ok(mut state) = handle.patrol_state.lock() {
                                     state.observe(ScreenObservation {
                                         expected_node_id: snapshot.node_id.clone(),
@@ -1623,180 +1677,340 @@ impl PipelineRunSession {
                         }
                     }
                 }
-                if let (Some(patrol), Some(snapshot)) = (patrol.as_ref(), final_snapshot.as_ref()) {
-                    let mut final_sampler = PatrolSampler::new();
-                    let action =
-                        pending_action_for_snapshot(&final_action_frames, &handle, snapshot);
-                    sample_patrol(
-                        &mut final_sampler,
-                        patrol,
-                        &ctx.graph,
-                        &handle,
-                        &app,
-                        snapshot,
-                        action,
-                        "failure",
-                    );
-                    final_sampler.complete_pending().await;
-                } else if patrol.is_some() {
-                    log::warn!("[patrol] final validation unavailable: no captured frame");
+                if final_probe_allowed {
+                    if let (Some(patrol), Some(snapshot)) =
+                        (patrol.as_ref(), final_snapshot.as_ref())
+                    {
+                        let action =
+                            pending_action_for_snapshot(&final_action_frames, &handle, snapshot);
+                        if let Some(action) = action {
+                            let attempt_id = action.attempt_id;
+                            let mut final_sampler = PatrolSampler::new();
+                            sample_patrol(
+                                &mut final_sampler,
+                                patrol,
+                                &ctx.graph,
+                                &handle,
+                                &app,
+                                snapshot,
+                                Some(action),
+                                "failure",
+                            );
+                            if let Err(wait_error) = await_with_active_budget(
+                                &handle,
+                                &mut finalization_budget,
+                                final_sampler.complete_pending(),
+                            )
+                            .await
+                            {
+                                final_sampler.cancel_pending().await;
+                                if wait_error == "stopped" {
+                                    was_stopped = true;
+                                }
+                            } else {
+                                located_state = located_state_from_action(&handle, attempt_id);
+                                let chat = PatrolChatSink::new(
+                                    &app,
+                                    &handle.run_id,
+                                    &snapshot.node_id,
+                                    &snapshot.capture_target,
+                                    snapshot.capture_session,
+                                    snapshot.frame_sequence,
+                                );
+                                if let Some(location) = &located_state {
+                                    chat.emit(
+                                        "patrol",
+                                        PatrolChatKind::LocationHandoff,
+                                        format!("Action verifier located {}", location.node_id),
+                                        Some("recovery"),
+                                        vec![
+                                            ChatContent::Field {
+                                                label: "Node".into(),
+                                                value: location.node_id.clone(),
+                                            },
+                                            ChatContent::Field {
+                                                label: "Confidence".into(),
+                                                value: format!("{:.2}", location.confidence),
+                                            },
+                                            ChatContent::Field {
+                                                label: "Source".into(),
+                                                value: location.source.as_str().into(),
+                                            },
+                                            ChatContent::Field {
+                                                label: "Capture".into(),
+                                                value: format!(
+                                                    "{} · session {} · frame {} · stable",
+                                                    location.capture_target,
+                                                    location.capture_session,
+                                                    location.frame_sequence
+                                                ),
+                                            },
+                                        ],
+                                    );
+                                } else if !patrol.last_request_was_transport_failure() {
+                                    chat.emit(
+                                        "patrol",
+                                        PatrolChatKind::LocationUnresolved,
+                                        "Action result did not establish location; falling back to State Matcher",
+                                        Some("recovery"),
+                                        vec![ChatContent::Text { label: "Diagnostic".into(), text: "Only a stable, confident expected_successor or error_successor result can establish recovery location".into() }],
+                                    );
+                                }
+                            }
+                        }
+                        if !was_stopped
+                            && located_state.is_none()
+                            && !patrol.last_request_was_transport_failure()
+                        {
+                            match await_with_active_budget(
+                                &handle,
+                                &mut finalization_budget,
+                                locate_state_for_failure(
+                                    patrol, &ctx.graph, &handle, &app, snapshot,
+                                ),
+                            )
+                            .await
+                            {
+                                Ok(Ok(location)) => located_state = Some(location),
+                                Ok(Err(error)) => {
+                                    let chat = PatrolChatSink::new(
+                                        &app,
+                                        &handle.run_id,
+                                        &snapshot.node_id,
+                                        &snapshot.capture_target,
+                                        snapshot.capture_session,
+                                        snapshot.frame_sequence,
+                                    );
+                                    chat.emit(
+                                        "patrol",
+                                        PatrolChatKind::LocationUnresolved,
+                                        "Patrol could not establish the current location",
+                                        Some("recovery"),
+                                        vec![ChatContent::Text {
+                                            label: "Diagnostic".into(),
+                                            text: error,
+                                        }],
+                                    );
+                                }
+                                Err(wait_error) => {
+                                    if wait_error == "stopped" {
+                                        was_stopped = true;
+                                    }
+                                }
+                            }
+                        }
+                        if !was_stopped && finalization_budget.is_zero() {
+                            let chat = PatrolChatSink::new(
+                                &app,
+                                &handle.run_id,
+                                &snapshot.node_id,
+                                &snapshot.capture_target,
+                                snapshot.capture_session,
+                                snapshot.frame_sequence,
+                            );
+                            chat.emit("patrol", PatrolChatKind::Error, "Patrol finalization deadline expired", None, vec![ChatContent::Text { label: "Diagnostic".into(), text: "The 45-second final Patrol budget expired; the original pipeline failure is preserved".into() }]);
+                        }
+                    } else if patrol.is_some() {
+                        log::warn!("[patrol] final validation unavailable: no captured frame");
+                    }
                 }
             }
 
             if !was_stopped && ctx.failed {
-                if let (Some(patrol), Some(snapshot)) = (patrol.as_ref(), final_snapshot.as_ref()) {
-                    let failure_node = steps
-                        .last()
-                        .map(|step| step.node_id.clone())
-                        .unwrap_or_else(|| snapshot.node_id.clone());
-                    let recent_nodes = steps
-                        .iter()
-                        .map(|step| step.node_id.clone())
-                        .collect::<Vec<_>>();
-                    let failure_action = final_action_frames.lock().ok().and_then(|frames| {
-                        frames
+                let final_probe_succeeded = patrol
+                    .as_ref()
+                    .is_some_and(|patrol| !patrol.last_request_was_transport_failure());
+                if final_probe_allowed && final_probe_succeeded {
+                    if let (Some(patrol), Some(snapshot)) =
+                        (patrol.as_ref(), final_snapshot.as_ref())
+                    {
+                        let failure_node = steps
+                            .last()
+                            .map(|step| step.node_id.clone())
+                            .unwrap_or_else(|| snapshot.node_id.clone());
+                        let recent_nodes = steps
                             .iter()
-                            .rev()
-                            .find(|action| {
-                                action.node_id == failure_node
-                                    && action.target == snapshot.capture_target
-                                    && action.session == snapshot.capture_session
-                                    && action.before_frame < snapshot.frame_sequence
-                            })
-                            .cloned()
-                    });
-                    let chat = PatrolChatSink::new(
-                        &app,
-                        &handle.run_id,
-                        &failure_node,
-                        &snapshot.capture_target,
-                        snapshot.capture_session,
-                        snapshot.frame_sequence,
-                    );
-                    chat.emit(
-                        "patrol",
-                        "recovery_trigger",
-                        "Assessing recovery before pipeline failure",
-                        Some("recovery"),
-                        vec![ChatContent::Field {
-                            label: "Failure".into(),
-                            value: ctx
+                            .map(|step| step.node_id.clone())
+                            .collect::<Vec<_>>();
+                        let chat = PatrolChatSink::new(
+                            &app,
+                            &handle.run_id,
+                            &failure_node,
+                            &snapshot.capture_target,
+                            snapshot.capture_session,
+                            snapshot.frame_sequence,
+                        );
+                        chat.emit(
+                            "patrol",
+                            PatrolChatKind::RecoveryTrigger,
+                            "Assessing recovery before pipeline failure",
+                            Some("recovery"),
+                            vec![ChatContent::Field {
+                                label: "Failure".into(),
+                                value: ctx
+                                    .failure_error
+                                    .clone()
+                                    .unwrap_or_else(|| "Pipeline failed".into()),
+                            }],
+                        );
+                        let input = RecoveryInput {
+                            failure_node: failure_node.clone(),
+                            failure_reason: ctx
                                 .failure_error
                                 .clone()
                                 .unwrap_or_else(|| "Pipeline failed".into()),
-                        }],
-                    );
-                    let input = RecoveryInput {
-                        failure_node: failure_node.clone(),
-                        failure_reason: ctx
-                            .failure_error
-                            .clone()
-                            .unwrap_or_else(|| "Pipeline failed".into()),
-                        actions: failure_action
-                            .as_ref()
-                            .map(|action| action.actions.clone())
-                            .unwrap_or_default(),
-                        before: failure_action.map(|action| action.before),
-                        after: Arc::clone(&snapshot.screenshot),
-                        recent_nodes,
-                    };
-                    let result = patrol.assess_recovery(&ctx.graph, &input, &chat).await;
-                    let mut target_node = None;
-                    let mut confidence = None;
-                    let mut accepted = false;
-                    let (decision, reason) = match result {
-                        Ok(result) => {
-                            target_node = result.target_node.clone();
-                            confidence = Some(result.confidence);
-                            let mut reason = result.reason;
-                            let decision = match result.decision {
-                                RecoveryDecision::Suggest => "suggest",
-                                RecoveryDecision::Redirect => "redirect",
-                                RecoveryDecision::NoRecovery => "no_recovery",
-                                RecoveryDecision::Inconclusive => "inconclusive",
-                            };
-                            if patrol.config.recovery_policy == RecoveryPolicy::RedirectionOnly
-                                && result.decision == RecoveryDecision::Redirect
-                            {
-                                if let Some(target) = result.target_node.as_deref() {
-                                    let valid_node = ctx.graph.find_node(target).is_some_and(|node| {
+                            after: Arc::clone(&snapshot.screenshot),
+                            recent_nodes,
+                            located_state: located_state.clone(),
+                            location_uncertain: located_state.is_none(),
+                        };
+                        let result = match await_with_active_budget(
+                            &handle,
+                            &mut finalization_budget,
+                            patrol.assess_recovery(&ctx.graph, &input, &chat),
+                        )
+                        .await
+                        {
+                            Ok(result) => result,
+                            Err(wait_error) => {
+                                if wait_error == "stopped" {
+                                    was_stopped = true;
+                                }
+                                Err(
+                            "Patrol finalization deadline expired; original pipeline failure preserved"
+                                .into(),
+                            )
+                            }
+                        };
+                        let mut target_node = None;
+                        let mut confidence = None;
+                        let mut accepted = false;
+                        let (decision, reason) = match result {
+                            Ok(result) => {
+                                target_node = result.target_node.clone();
+                                confidence = Some(result.confidence);
+                                let mut reason = if input.location_uncertain {
+                                    format!("Location uncertain: {}", result.reason)
+                                } else {
+                                    result.reason
+                                };
+                                let decision = match result.decision {
+                                    RecoveryDecision::Suggest => "suggest",
+                                    RecoveryDecision::Redirect => "redirect",
+                                    RecoveryDecision::NoRecovery => "no_recovery",
+                                    RecoveryDecision::Inconclusive => "inconclusive",
+                                };
+                                if patrol.config.recovery_policy == RecoveryPolicy::RedirectionOnly
+                                    && result.decision == RecoveryDecision::Redirect
+                                {
+                                    if let Some(target) = result.target_node.as_deref() {
+                                        let valid_node = ctx.graph.find_node(target).is_some_and(|node| {
                                         node.kind
                                             == crate::modules::pipeline::authoring::models::node::NodeKind::Normal
                                             && node.enabled
-                                            && node.id != failure_node
                                     });
-                                    let same_capture =
-                                        active_capture.as_ref().is_some_and(|active| {
-                                            active.session_id == snapshot.capture_session
-                                                && format!("{:?}", active.stream_target)
-                                                    == snapshot.capture_target
-                                        });
-                                    let route = (failure_node.clone(), target.to_string());
-                                    let rejection = if result.confidence < patrol.config.threshold {
-                                        Some(format!(
+                                        let same_capture =
+                                            active_capture.as_ref().is_some_and(|active| {
+                                                active.session_id == snapshot.capture_session
+                                                    && format!("{:?}", active.stream_target)
+                                                        == snapshot.capture_target
+                                            });
+                                        let location_matches_capture =
+                                            located_state.as_ref().is_some_and(|location| {
+                                                location.capture_target == snapshot.capture_target
+                                                    && location.capture_session
+                                                        == snapshot.capture_session
+                                            });
+                                        let route = (failure_node.clone(), target.to_string());
+                                        let rejection = if result.confidence
+                                            < patrol.config.redirect_threshold()
+                                        {
+                                            Some(format!(
                                             "Redirect confidence {:.2} is below threshold {:.2}",
-                                            result.confidence, patrol.config.threshold
+                                            result.confidence,
+                                            patrol.config.redirect_threshold()
                                         ))
-                                    } else if !valid_node {
-                                        Some(
-                                            "Redirect target is not an eligible normal node".into(),
-                                        )
-                                    } else if !same_capture {
-                                        Some("Capture target or session changed during recovery analysis".into())
-                                    } else if redirect_count >= patrol.config.max_redirects {
-                                        Some("Per-run Patrol redirect limit was reached".into())
-                                    } else if redirect_routes.contains(&route) {
-                                        Some(
-                                            "The same failure-to-target redirect already ran"
-                                                .into(),
-                                        )
-                                    } else if stop_requested(&handle) {
-                                        Some("The run was stopped before redirection".into())
-                                    } else {
-                                        None
-                                    };
-                                    if let Some(rejection) = rejection {
-                                        reason = rejection;
-                                    } else {
-                                        accepted = true;
-                                        redirect_count += 1;
-                                        redirect_routes.insert(route);
+                                        } else if !valid_node {
+                                            Some(
+                                                "Redirect target is not an eligible normal node"
+                                                    .into(),
+                                            )
+                                        } else if !same_capture {
+                                            Some("Capture target or session changed during recovery analysis".into())
+                                        } else if !location_matches_capture {
+                                            Some("Validated location belongs to a different capture target or session".into())
+                                        } else if redirect_count >= patrol.config.max_redirects {
+                                            Some("Per-run Patrol redirect limit was reached".into())
+                                        } else if redirect_routes.contains(&route) {
+                                            Some(
+                                                "The same failure-to-target redirect already ran"
+                                                    .into(),
+                                            )
+                                        } else if stop_requested(&handle) {
+                                            Some("The run was stopped before redirection".into())
+                                        } else {
+                                            None
+                                        };
+                                        if let Some(rejection) = rejection {
+                                            reason = rejection;
+                                        } else {
+                                            accepted = true;
+                                            redirect_count += 1;
+                                            redirect_routes.insert(route);
+                                        }
                                     }
                                 }
+                                (decision.to_string(), reason)
                             }
-                            (decision.to_string(), reason)
+                            Err(error) => ("inconclusive".into(), error),
+                        };
+                        let report = PatrolRecoveryReport {
+                            run_id: handle.run_id.clone(),
+                            policy: match patrol.config.recovery_policy {
+                                RecoveryPolicy::HintOnly => "hint_only",
+                                RecoveryPolicy::RedirectionOnly => "redirection_only",
+                            }
+                            .into(),
+                            failure_node: failure_node.clone(),
+                            target_node: target_node.clone(),
+                            decision,
+                            confidence,
+                            reason: reason.clone(),
+                            accepted,
+                            redirect_count,
+                            max_redirects: patrol.config.max_redirects,
+                            location_node: located_state
+                                .as_ref()
+                                .map(|location| location.node_id.clone()),
+                            location_confidence: located_state
+                                .as_ref()
+                                .map(|location| location.confidence),
+                            location_source: located_state
+                                .as_ref()
+                                .map(|location| location.source.as_str().to_string()),
+                            location_frame_stable: located_state
+                                .as_ref()
+                                .map(|location| location.frame_stable),
+                            location_uncertain: located_state.is_none(),
+                        };
+                        if let Ok(mut state) = handle.patrol_state.lock() {
+                            state.record_recovery(RecoveryEvidence {
+                                policy: report.policy.clone(),
+                                failure_node: report.failure_node.clone(),
+                                target_node: report.target_node.clone(),
+                                decision: report.decision.clone(),
+                                confidence: report.confidence,
+                                reason: report.reason.clone(),
+                                accepted: report.accepted,
+                                redirect_count: report.redirect_count,
+                                location_node: report.location_node.clone(),
+                                location_confidence: report.location_confidence,
+                                location_source: report.location_source.clone(),
+                                location_frame_stable: report.location_frame_stable,
+                                location_uncertain: report.location_uncertain,
+                            });
                         }
-                        Err(error) => ("inconclusive".into(), error),
-                    };
-                    let report = PatrolRecoveryReport {
-                        run_id: handle.run_id.clone(),
-                        policy: match patrol.config.recovery_policy {
-                            RecoveryPolicy::HintOnly => "hint_only",
-                            RecoveryPolicy::RedirectionOnly => "redirection_only",
-                        }
-                        .into(),
-                        failure_node: failure_node.clone(),
-                        target_node: target_node.clone(),
-                        decision,
-                        confidence,
-                        reason: reason.clone(),
-                        accepted,
-                        redirect_count,
-                        max_redirects: patrol.config.max_redirects,
-                    };
-                    if let Ok(mut state) = handle.patrol_state.lock() {
-                        state.record_recovery(RecoveryEvidence {
-                            policy: report.policy.clone(),
-                            failure_node: report.failure_node.clone(),
-                            target_node: report.target_node.clone(),
-                            decision: report.decision.clone(),
-                            confidence: report.confidence,
-                            reason: report.reason.clone(),
-                            accepted: report.accepted,
-                            redirect_count: report.redirect_count,
-                        });
-                    }
-                    log::info!(
+                        log::info!(
                     "[patrol] recovery run='{}' policy='{}' failure='{}' target={:?} accepted={} reason={:?}",
                     report.run_id,
                     report.policy,
@@ -1805,47 +2019,49 @@ impl PipelineRunSession {
                     report.accepted,
                     report.reason
                 );
-                    chat.emit(
-                        "patrol",
-                        "recovery_report",
+                        chat.emit(
+                            "patrol",
+                            PatrolChatKind::RecoveryReport,
+                            if accepted {
+                                format!(
+                                    "Redirect accepted: {} to {}",
+                                    failure_node,
+                                    target_node.as_deref().unwrap_or("unknown")
+                                )
+                            } else if patrol.config.recovery_policy == RecoveryPolicy::HintOnly {
+                                "Recovery hint prepared".into()
+                            } else {
+                                "Recovery redirect was not accepted".into()
+                            },
+                            Some("recovery"),
+                            vec![
+                                ChatContent::Field {
+                                    label: "Target".into(),
+                                    value: target_node.clone().unwrap_or_else(|| "None".into()),
+                                },
+                                ChatContent::Field {
+                                    label: "Reason".into(),
+                                    value: reason,
+                                },
+                            ],
+                        );
+                        let _ = app.emit("patrol-recovery", report);
                         if accepted {
-                            format!(
-                                "Redirect accepted: {} to {}",
-                                failure_node,
-                                target_node.as_deref().unwrap_or("unknown")
-                            )
-                        } else if patrol.config.recovery_policy == RecoveryPolicy::HintOnly {
-                            "Recovery hint prepared".into()
-                        } else {
-                            "Recovery redirect was not accepted".into()
-                        },
-                        Some("recovery"),
-                        vec![
-                            ChatContent::Field {
-                                label: "Target".into(),
-                                value: target_node.clone().unwrap_or_else(|| "None".into()),
-                            },
-                            ChatContent::Field {
-                                label: "Reason".into(),
-                                value: reason,
-                            },
-                        ],
-                    );
-                    let _ = app.emit("patrol-recovery", report);
-                    if accepted {
-                        let target = target_node.expect("accepted recovery has a target");
-                        routing::redirect(&mut ctx, &handle, &target);
-                        attempt_node = None;
-                        solo_node.clear();
-                        next_frame_not_before = Some(Instant::now());
-                        patrol_worker = Some(PatrolWorker::start(
-                            Arc::clone(patrol),
-                            ctx.graph.clone(),
-                            Arc::clone(&handle),
-                            app.clone(),
-                        ));
-                        publish_status(&app, &handle, None);
-                        continue 'execution;
+                            let target = target_node.expect("accepted recovery has a target");
+                            routing::redirect(&mut ctx, &handle, &target);
+                            attempt_node = None;
+                            solo_node.clear();
+                            next_frame_not_before = Some(Instant::now());
+                            patrol_worker = Some(PatrolWorker::start(
+                                Arc::clone(patrol),
+                                ctx.graph.clone(),
+                                Arc::clone(&handle),
+                                app.clone(),
+                                Arc::clone(&stream_service),
+                            ));
+                            publish_status(&app, &handle, None);
+                            continue 'execution;
+                        }
                     }
                 }
             }
@@ -2004,6 +2220,26 @@ mod parameter_tests {
         );
     }
 
+    #[tokio::test]
+    async fn patrol_finalization_budget_excludes_pause_and_observes_stop() {
+        let handle = RunHandle::new("budget".into());
+        *handle.state.lock().unwrap() = PipelineState::Paused;
+        let mut remaining = Duration::from_millis(40);
+        let result = await_with_active_budget(&handle, &mut remaining, async {
+            tokio::time::sleep(Duration::from_millis(70)).await;
+            7
+        })
+        .await;
+        assert_eq!(result, Ok(7));
+        assert_eq!(remaining, Duration::from_millis(40));
+
+        handle.stop();
+        assert_eq!(
+            await_with_active_budget(&handle, &mut remaining, std::future::pending::<()>()).await,
+            Err("stopped")
+        );
+    }
+
     #[test]
     fn patrol_prioritizes_a_sent_unresolved_action_with_a_newer_same_session_frame() {
         let handle = RunHandle::new("run".into());
@@ -2044,6 +2280,8 @@ mod parameter_tests {
                 target: "Screen { index: 0 }".into(),
                 session: 3,
                 before_frame: 10,
+                preferred_after: None,
+                preferred_from_post_freeze: false,
             },
         ])));
         let mut snapshot = PatrolSnapshot {
@@ -2053,6 +2291,7 @@ mod parameter_tests {
             capture_target: "Screen { index: 0 }".into(),
             capture_session: 3,
             frame_sequence: 10,
+            stable: false,
         };
         assert!(pending_action_for_snapshot(&frames, &handle, &snapshot).is_none());
         snapshot.frame_sequence = 11;

@@ -163,41 +163,145 @@ pub fn candidate_tiers(graph: &PipelineGraph, anchor: &str, k_hops: usize) -> Ca
     CandidateTiers { local, expanded }
 }
 
+/// Keep VLM requests bounded while retaining the route-critical states first.
+/// Candidate order is stable across runs because graph edge and node order are
+/// used after the explicit priorities.
+pub fn bounded_candidates(
+    graph: &PipelineGraph,
+    anchor: &str,
+    candidates: Vec<Candidate>,
+    recent_nodes: &[String],
+    limit: usize,
+) -> Vec<Candidate> {
+    let by_id = candidates
+        .into_iter()
+        .map(|candidate| (candidate.node_id.clone(), candidate))
+        .collect::<HashMap<_, _>>();
+    let mut ordered = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push = |node_id: &str| {
+        if ordered.len() < limit && seen.insert(node_id.to_string()) {
+            if let Some(candidate) = by_id.get(node_id) {
+                ordered.push(candidate.clone());
+            }
+        }
+    };
+    push(anchor);
+    for edge in graph.next_edges(anchor) {
+        push(&edge.to);
+    }
+    for edge in graph.error_edges(anchor) {
+        push(&edge.to);
+    }
+    for node_id in recent_nodes.iter().rev() {
+        push(node_id);
+    }
+    let graph_order = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| (node.id.as_str(), index))
+        .collect::<HashMap<_, _>>();
+    let mut remaining = by_id.values().collect::<Vec<_>>();
+    remaining.sort_by_key(|candidate| {
+        (
+            candidate.hops,
+            graph_order
+                .get(candidate.node_id.as_str())
+                .copied()
+                .unwrap_or(usize::MAX),
+        )
+    });
+    for candidate in remaining {
+        push(&candidate.node_id);
+    }
+    ordered
+}
+
 pub fn recovery_candidates(
     graph: &PipelineGraph,
-    failure_node: &str,
+    anchor: &str,
     recent_nodes: &[String],
     k_hops: usize,
 ) -> Vec<Candidate> {
-    let tiers = candidate_tiers(graph, failure_node, k_hops);
-    let hop_by_id = tiers
-        .local
-        .into_iter()
-        .chain(tiers.expanded)
-        .map(|candidate| (candidate.node_id, candidate.hops))
-        .collect::<HashMap<_, _>>();
+    let known = graph
+        .nodes
+        .iter()
+        .map(|node| node.id.as_str())
+        .collect::<HashSet<_>>();
+    if !known.contains(anchor) {
+        return Vec::new();
+    }
+    let mut adjacent: HashMap<&str, Vec<&str>> = HashMap::new();
+    for edge in &graph.edges {
+        if known.contains(edge.from.as_str()) && known.contains(edge.to.as_str()) {
+            adjacent.entry(&edge.from).or_default().push(&edge.to);
+            adjacent.entry(&edge.to).or_default().push(&edge.from);
+        }
+    }
+    let mut distances = HashMap::from([(anchor, 0usize)]);
+    let mut queue = VecDeque::from([anchor]);
+    while let Some(node_id) = queue.pop_front() {
+        let distance = distances[node_id];
+        for neighbor in adjacent.get(node_id).into_iter().flatten() {
+            if !distances.contains_key(neighbor) {
+                distances.insert(neighbor, distance + 1);
+                queue.push_back(neighbor);
+            }
+        }
+    }
+    let eligible = |node_id: &str| {
+        graph
+            .find_node(node_id)
+            .is_some_and(|node| node.kind == NodeKind::Normal && node.enabled)
+    };
     let mut result = Vec::new();
     let mut seen = HashSet::new();
-    for node_id in recent_nodes.iter().rev().chain(hop_by_id.keys()) {
-        if node_id == failure_node || !seen.insert(node_id.clone()) {
-            continue;
+    let mut push = |node_id: &str| {
+        if result.len() < 16 && seen.insert(node_id.to_string()) && eligible(node_id) {
+            result.push(Candidate {
+                node_id: node_id.to_string(),
+                hops: distances.get(node_id).copied().unwrap_or(usize::MAX),
+            });
         }
-        let Some(node) = graph.find_node(node_id) else {
-            continue;
-        };
-        if node.kind != NodeKind::Normal || !node.enabled {
-            continue;
-        }
-        result.push(Candidate {
-            node_id: node_id.clone(),
-            hops: hop_by_id
-                .get(node_id)
+    };
+    push(anchor);
+    let mut local = graph
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            distances
+                .get(node.id.as_str())
                 .copied()
-                .unwrap_or(k_hops.saturating_mul(2)),
-        });
-        if result.len() == 16 {
-            break;
-        }
+                .filter(|hops| *hops > 0 && *hops <= k_hops)
+                .map(|hops| (node.id.as_str(), hops))
+        })
+        .collect::<Vec<_>>();
+    local.sort_by_key(|(_, hops)| *hops);
+    for (node_id, _) in local {
+        push(node_id);
+    }
+    for node_id in recent_nodes.iter().rev() {
+        push(node_id);
+    }
+    let mut remaining = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| {
+            (
+                node.id.as_str(),
+                distances
+                    .get(node.id.as_str())
+                    .copied()
+                    .unwrap_or(usize::MAX),
+                index,
+            )
+        })
+        .collect::<Vec<_>>();
+    remaining.sort_by_key(|(_, hops, index)| (*hops, *index));
+    for (node_id, _, _) in remaining {
+        push(node_id);
     }
     result
 }

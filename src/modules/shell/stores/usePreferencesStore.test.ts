@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from "vitest";
 import { normalizePreviewWindowSize, usePreferencesStore } from "./usePreferencesStore";
 
 beforeEach(() => {
-  usePreferencesStore.setState({ mode: "screen", saveToDisk: false, showFps: false, captureEngine: "graphics", windowCaptureArea: "frame", patrolEnabled: false, patrolKHops: 1, patrolThreshold: 0.85, patrolMinMargin: 0.1, taskNotificationsEnabled: false, recorderNotificationsEnabled: false, recorderStartStopHotkey: "CommandOrControl+Alt+F9", recorderPauseHotkey: "CommandOrControl+Alt+F10", recorderCaptureText: false, capturePanelVisible: true, previewWindowSize: [1200, 800] });
+  usePreferencesStore.setState({ mode: "screen", saveToDisk: false, showFps: false, captureEngine: "graphics", windowCaptureArea: "frame", patrolEnabled: false, patrolKHops: 1, patrolThreshold: 0.85, patrolActionEffectThreshold: 0.85, patrolRedirectThreshold: 0.85, patrolMinMargin: 0.1, taskNotificationsEnabled: false, recorderNotificationsEnabled: false, recorderStartStopHotkey: "CommandOrControl+Alt+F9", recorderPauseHotkey: "CommandOrControl+Alt+F10", recorderCaptureText: false, capturePanelVisible: true, previewWindowSize: [1200, 800] });
 });
 
 it("persists capture visibility and a normalized logical Preview size", () => {
@@ -72,14 +72,16 @@ it("persists patrol enablement and validates restored search options", async () 
   settings.setPatrolEnabled(true);
   settings.setPatrolKHops(2);
   settings.setPatrolThreshold(0.9);
+  settings.setPatrolActionEffectThreshold(0.8);
+  settings.setPatrolRedirectThreshold(0.95);
   settings.setPatrolMinMargin(0.2);
   const persisted = JSON.parse(localStorage.getItem("watchdog:settings")!);
-  expect(persisted.state).toMatchObject({ patrolEnabled: true, patrolKHops: 2, patrolThreshold: 0.9, patrolMinMargin: 0.2 });
+  expect(persisted.state).toMatchObject({ patrolEnabled: true, patrolKHops: 2, patrolThreshold: 0.9, patrolActionEffectThreshold: 0.8, patrolRedirectThreshold: 0.95, patrolMinMargin: 0.2 });
   expect(persisted.state).not.toHaveProperty("patrolMode");
 
   localStorage.setItem("watchdog:settings", JSON.stringify({ state: { patrolMode: "invalid", patrolKHops: 99, patrolThreshold: 3, patrolMinMargin: -1 }, version: 0 }));
   await usePreferencesStore.persist.rehydrate();
-  expect(usePreferencesStore.getState()).toMatchObject({ patrolEnabled: false, patrolKHops: 4, patrolThreshold: 1, patrolMinMargin: 0 });
+  expect(usePreferencesStore.getState()).toMatchObject({ patrolEnabled: false, patrolKHops: 4, patrolThreshold: 1, patrolActionEffectThreshold: 1, patrolRedirectThreshold: 1, patrolMinMargin: 0 });
 });
 
 it("persists notifier and recorder controls with private text capture disabled by default", () => {

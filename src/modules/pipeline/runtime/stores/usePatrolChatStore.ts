@@ -14,15 +14,24 @@ export interface PatrolChatEvent {
   sample_id: string;
   occurred_at_ms: number;
   sender: "patrol" | "vlm";
-  kind: "capture" | "search" | "reference" | "request" | "response" | "expansion" | "report" | "reference_save" | "error" | "action_evidence" | "action_request" | "action_response" | "action_report" | "format_retry" | "validation_error";
+  kind: PatrolChatKind;
   summary: string;
   node_id: string;
   target: string;
   session: number;
   frame: number;
-  tier: "local" | "expanded" | "action" | null;
+  tier: "local" | "expanded" | "action" | "recovery" | null;
   content: PatrolChatContent[];
 }
+
+export const PATROL_CHAT_KINDS = [
+  "trigger", "capture", "search", "reference", "request", "response", "expansion", "report",
+  "reference_save", "error", "action_evidence", "action_request", "action_response", "action_report",
+  "location_handoff", "location_unresolved",
+  "format_retry", "transport_retry", "validation_error", "recovery_trigger", "recovery_candidates", "recovery_request",
+  "recovery_response", "recovery_report",
+] as const;
+export type PatrolChatKind = typeof PATROL_CHAT_KINDS[number];
 
 interface PatrolChatState {
   messages: PatrolChatEvent[];

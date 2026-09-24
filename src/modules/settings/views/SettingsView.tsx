@@ -48,6 +48,10 @@ export default function SettingsView() {
   const setPatrolKHops = usePreferencesStore((s) => s.setPatrolKHops);
   const patrolThreshold = usePreferencesStore((s) => s.patrolThreshold);
   const setPatrolThreshold = usePreferencesStore((s) => s.setPatrolThreshold);
+  const patrolActionEffectThreshold = usePreferencesStore((s) => s.patrolActionEffectThreshold);
+  const setPatrolActionEffectThreshold = usePreferencesStore((s) => s.setPatrolActionEffectThreshold);
+  const patrolRedirectThreshold = usePreferencesStore((s) => s.patrolRedirectThreshold);
+  const setPatrolRedirectThreshold = usePreferencesStore((s) => s.setPatrolRedirectThreshold);
   const patrolMinMargin = usePreferencesStore((s) => s.patrolMinMargin);
   const setPatrolMinMargin = usePreferencesStore((s) => s.setPatrolMinMargin);
   const patrolRecoveryPolicy = usePreferencesStore((s) => s.patrolRecoveryPolicy);
@@ -217,9 +221,19 @@ export default function SettingsView() {
                 value={patrolKHops} onChange={(e) => setPatrolKHops(Number(e.target.value))} disabled={!patrolEnabled} />
             </div>
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="patrol-threshold">{t("settings.threshold")}</label>
+              <label className="settings-item-label" htmlFor="patrol-threshold">{t("settings.stateThreshold")}</label>
               <input id="patrol-threshold" className="settings-item-control" type="number" min={0} max={1} step={0.01}
                 value={patrolThreshold} onChange={(e) => setPatrolThreshold(Number(e.target.value))} disabled={!patrolEnabled} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-action-threshold">{t("settings.actionThreshold")}</label>
+              <input id="patrol-action-threshold" className="settings-item-control" type="number" min={0} max={1} step={0.01}
+                value={patrolActionEffectThreshold} onChange={(e) => setPatrolActionEffectThreshold(Number(e.target.value))} disabled={!patrolEnabled} />
+            </div>
+            <div className="settings-item">
+              <label className="settings-item-label" htmlFor="patrol-redirect-threshold">{t("settings.redirectThreshold")}</label>
+              <input id="patrol-redirect-threshold" className="settings-item-control" type="number" min={0} max={1} step={0.01}
+                value={patrolRedirectThreshold} onChange={(e) => setPatrolRedirectThreshold(Number(e.target.value))} disabled={!patrolEnabled} />
             </div>
             <div className="settings-item">
               <label className="settings-item-label" htmlFor="patrol-margin">{t("settings.margin")}</label>
@@ -247,7 +261,7 @@ export default function SettingsView() {
               </div>
             )}
             <div className="settings-item">
-              <label className="settings-item-label" htmlFor="llm-endpoint">Chat completions URL</label>
+              <label className="settings-item-label" htmlFor="llm-endpoint">{t("settings.endpoint")}</label>
               <input id="llm-endpoint" className="settings-item-control" type="url"
                 placeholder="https://provider.example/v1/chat/completions"
                 value={llmEndpoint} onChange={(e) => setLlmEndpoint(e.target.value)} />
@@ -256,7 +270,7 @@ export default function SettingsView() {
             <div className="settings-item">
               <label className="settings-item-label" htmlFor="llm-model">{t("settings.model")}</label>
               <input id="llm-model" className="settings-item-control" type="text"
-                placeholder="Vision-capable model name"
+                placeholder={t("settings.modelPlaceholder")}
                 value={llmModel} onChange={(e) => setLlmModel(e.target.value)} />
             </div>
             <div className="settings-item">

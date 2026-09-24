@@ -1,10 +1,11 @@
 use super::super::RunHandle;
-use crate::modules::pipeline::runtime::chat::{ChatContent, PatrolChatSink};
+use crate::modules::capture::services::stream::StreamService;
+use crate::modules::pipeline::runtime::chat::{ChatContent, PatrolChatKind, PatrolChatSink};
 use crate::modules::pipeline::runtime::engine::patrol_state::{
-    DispatchOutcome, EffectOutcome, PatrolDecisionEvidence,
+    ActionAttemptEvidence, DispatchOutcome, EffectOutcome, PatrolDecisionEvidence,
 };
 use crate::modules::pipeline::runtime::patrol::{
-    ActionEffectKind, ActionVerificationInput, PatrolDecision, PatrolRuntime,
+    ActionEffectKind, ActionVerificationInput, LocatedState, LocationSource, PatrolRuntime,
 };
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,6 +80,7 @@ pub(super) struct PatrolSnapshot {
     pub(super) capture_target: String,
     pub(super) capture_session: u64,
     pub(super) frame_sequence: u64,
+    pub(super) stable: bool,
 }
 
 #[derive(Clone)]
@@ -92,11 +94,17 @@ pub(super) struct PatrolActionFrames {
     pub(super) target: String,
     pub(super) session: u64,
     pub(super) before_frame: u64,
+    pub(super) preferred_after: Option<PatrolSnapshot>,
+    pub(super) preferred_from_post_freeze: bool,
 }
 
 pub(super) struct PatrolWorker {
     latest: Arc<std::sync::Mutex<Option<PatrolSnapshot>>>,
     action_frames: Arc<std::sync::Mutex<VecDeque<PatrolActionFrames>>>,
+    stream_service: Arc<StreamService>,
+    handle: Arc<RunHandle>,
+    collectors: Arc<std::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>>,
+    app: AppHandle,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
 }
@@ -115,12 +123,16 @@ impl PatrolWorker {
         graph: crate::modules::pipeline::authoring::models::graph::PipelineGraph,
         handle: Arc<RunHandle>,
         app: AppHandle,
+        stream_service: Arc<StreamService>,
     ) -> Self {
         let latest = Arc::new(std::sync::Mutex::new(None::<PatrolSnapshot>));
         let observations = Arc::clone(&latest);
         let action_frames = Arc::new(std::sync::Mutex::new(VecDeque::new()));
         let worker_action_frames = Arc::clone(&action_frames);
         let (stop, mut stopped) = tokio::sync::oneshot::channel();
+        let collectors = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let collector_handle = Arc::clone(&handle);
+        let collector_app = app.clone();
         let period = Duration::from_secs(patrol.config.cycle_seconds);
         let task = tokio::spawn(async move {
             let mut sampler = PatrolSampler::new();
@@ -132,6 +144,44 @@ impl PatrolWorker {
                         let started = tokio::time::Instant::now();
                         let snapshot = observations.lock().ok().and_then(|value| value.clone());
                         if let Some(snapshot) = snapshot {
+                            if !patrol.periodic_allowed() {
+                                if patrol.take_circuit_report() {
+                                    let reason = "Patrol VLM circuit opened after three consecutive transport failures; periodic requests are paused for this run".to_string();
+                                    let chat = PatrolChatSink::new(
+                                        &app,
+                                        &handle.run_id,
+                                        &snapshot.node_id,
+                                        &snapshot.capture_target,
+                                        snapshot.capture_session,
+                                        snapshot.frame_sequence,
+                                    );
+                                    chat.emit(
+                                        "patrol",
+                                        PatrolChatKind::Error,
+                                        "Patrol endpoint circuit is open",
+                                        None,
+                                        vec![ChatContent::Text {
+                                            label: "Diagnostic".into(),
+                                            text: reason.clone(),
+                                        }],
+                                    );
+                                    let _ = app.emit("patrol-report", PatrolReport {
+                                        run_id: handle.run_id.clone(),
+                                        trigger: "cycle".into(),
+                                        task: "state_match".into(),
+                                        action_attempt_id: None,
+                                        expected_node_id: snapshot.node_id.clone(),
+                                        matched_node_id: None,
+                                        target: snapshot.capture_target.clone(),
+                                        session: snapshot.capture_session,
+                                        frame: snapshot.frame_sequence,
+                                        outcome: "circuit_open".into(),
+                                        reason: Some(reason),
+                                    });
+                                }
+                                due = next_patrol_due(started, tokio::time::Instant::now(), period);
+                                continue;
+                            }
                             let action = pending_action_for_snapshot(
                                 &worker_action_frames,
                                 &handle,
@@ -156,12 +206,29 @@ impl PatrolWorker {
         Self {
             latest,
             action_frames,
+            stream_service,
+            handle: collector_handle,
+            collectors,
+            app: collector_app,
             stop: Some(stop),
             task: Some(task),
         }
     }
 
     pub(super) fn observe(&self, snapshot: PatrolSnapshot) {
+        if snapshot.stable {
+            if let Ok(mut attempts) = self.action_frames.lock() {
+                for attempt in attempts.iter_mut().rev() {
+                    if attempt.target == snapshot.capture_target
+                        && attempt.session == snapshot.capture_session
+                        && attempt.before_frame < snapshot.frame_sequence
+                    {
+                        attempt.preferred_after = Some(snapshot.clone());
+                        attempt.preferred_from_post_freeze = true;
+                    }
+                }
+            }
+        }
         if let Ok(mut latest) = self.latest.lock() {
             *latest = Some(snapshot);
         }
@@ -178,11 +245,120 @@ impl PatrolWorker {
     }
 
     pub(super) fn record_action_attempt(&self, attempt: PatrolActionFrames) {
+        let attempt_id = attempt.attempt_id;
+        let node_id = attempt.node_id.clone();
+        let target = attempt.target.clone();
+        let session = attempt.session;
+        let before_frame = attempt.before_frame;
         if let Ok(mut attempts) = self.action_frames.lock() {
             attempts.push_back(attempt);
             while attempts.len() > 32 {
                 attempts.pop_front();
             }
+        }
+        let frames = Arc::clone(&self.action_frames);
+        let handle = Arc::clone(&self.handle);
+        let app = self.app.clone();
+        let mut rx = self.stream_service.subscribe();
+        let collector = tokio::spawn(async move {
+            let mut active_elapsed = Duration::ZERO;
+            let mut last_tick = tokio::time::Instant::now();
+            let mut last_sample_at: Option<tokio::time::Instant> = None;
+            let mut previous: Option<Arc<image::DynamicImage>> = None;
+            let mut stable_samples = 0u8;
+            let mut latest: Option<PatrolSnapshot> = None;
+            while active_elapsed < Duration::from_secs(2) {
+                if super::stop_requested(&handle) {
+                    return;
+                }
+                let paused = matches!(handle.get_state(), super::PipelineState::Paused);
+                let received = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await;
+                let now = tokio::time::Instant::now();
+                if !paused {
+                    active_elapsed += now.saturating_duration_since(last_tick);
+                }
+                last_tick = now;
+                let Ok(Ok(frame)) = received else { continue };
+                if paused
+                    || frame.session_id != session
+                    || format!("{:?}", frame.target) != target
+                    || frame.sequence <= before_frame
+                    || last_sample_at
+                        .is_some_and(|at| now.duration_since(at) < Duration::from_millis(200))
+                {
+                    continue;
+                }
+                let Ok(image) = image::load_from_memory(&frame.bytes) else {
+                    continue;
+                };
+                let image = Arc::new(image);
+                stable_samples = if previous
+                    .as_ref()
+                    .is_some_and(|previous| patrol_frame_similarity(previous, &image) >= 0.98)
+                {
+                    stable_samples.saturating_add(1)
+                } else {
+                    1
+                };
+                previous = Some(Arc::clone(&image));
+                last_sample_at = Some(now);
+                latest = Some(PatrolSnapshot {
+                    node_id: String::new(),
+                    screenshot: image,
+                    anchor_confirmed: false,
+                    capture_target: target.clone(),
+                    capture_session: session,
+                    frame_sequence: frame.sequence,
+                    stable: stable_samples >= 3,
+                });
+                if stable_samples >= 3 {
+                    break;
+                }
+            }
+            if let Some(snapshot) = latest {
+                if let Ok(mut attempts) = frames.lock() {
+                    if let Some(attempt) = attempts
+                        .iter_mut()
+                        .find(|attempt| attempt.attempt_id == attempt_id)
+                    {
+                        if !attempt.preferred_from_post_freeze
+                            && attempt
+                                .preferred_after
+                                .as_ref()
+                                .is_none_or(|existing| !existing.stable || snapshot.stable)
+                        {
+                            attempt.preferred_after = Some(snapshot);
+                        }
+                    }
+                }
+            } else {
+                let reason = format!(
+                    "Action attempt {attempt_id} has no newer frame on the same target/session; effect verification skipped"
+                );
+                log::warn!("[patrol] {reason}");
+                PatrolChatSink::new(
+                    &app,
+                    &handle.run_id,
+                    &node_id,
+                    &target,
+                    session,
+                    before_frame,
+                )
+                .emit(
+                    "patrol",
+                    PatrolChatKind::Error,
+                    "Action verification skipped",
+                    Some("action"),
+                    vec![ChatContent::Text {
+                        label: "Diagnostic".into(),
+                        text: reason,
+                    }],
+                );
+            }
+        });
+        if let Ok(mut collectors) = self.collectors.lock() {
+            collectors.retain(|task| !task.is_finished());
+            collectors.push(collector);
         }
     }
 
@@ -197,6 +373,14 @@ impl PatrolWorker {
         }
         if let Some(task) = self.task.take() {
             let _ = task.await;
+        }
+        let collectors = self
+            .collectors
+            .lock()
+            .map(|mut collectors| std::mem::take(&mut *collectors))
+            .unwrap_or_default();
+        for collector in collectors {
+            let _ = collector.await;
         }
         let latest = self.latest.lock().ok().and_then(|value| value.clone());
         (latest, Arc::clone(&self.action_frames))
@@ -214,7 +398,7 @@ pub(super) fn pending_action_for_snapshot(
         .iter()
         .rev()
         .find(|frames| {
-            if frames.expected_successors.is_empty()
+            if (frames.expected_successors.is_empty() && frames.error_successor.is_none())
                 || frames.target != snapshot.capture_target
                 || frames.session != snapshot.capture_session
                 || frames.before_frame >= snapshot.frame_sequence
@@ -253,6 +437,88 @@ impl Drop for PatrolWorker {
         if let Some(task) = self.task.take() {
             task.abort();
         }
+        if let Ok(mut collectors) = self.collectors.lock() {
+            for collector in collectors.drain(..) {
+                collector.abort();
+            }
+        }
+    }
+}
+
+fn patrol_frame_similarity(left: &image::DynamicImage, right: &image::DynamicImage) -> f64 {
+    use image::imageops::FilterType;
+    let left = left.resize_exact(64, 64, FilterType::Triangle).to_luma8();
+    let right = right.resize_exact(64, 64, FilterType::Triangle).to_luma8();
+    let difference = left
+        .pixels()
+        .zip(right.pixels())
+        .map(|(left, right)| (f64::from(left[0]) - f64::from(right[0])).abs())
+        .sum::<f64>();
+    1.0 - difference / (64.0 * 64.0 * 255.0)
+}
+
+#[cfg(test)]
+mod stability_tests {
+    use super::*;
+
+    fn attempt(effect: EffectOutcome, stable: Option<bool>) -> ActionAttemptEvidence {
+        ActionAttemptEvidence {
+            id: 1,
+            node_id: "ClickLogin".into(),
+            action_ids: vec![],
+            expected_successors: vec!["Dashboard".into()],
+            error_successor: Some("LoginError".into()),
+            target: "Window(7)".into(),
+            source_session: 3,
+            before_frame: 10,
+            after_frame: Some(11),
+            after_frame_stable: stable,
+            started_ms: 1,
+            completed_ms: Some(2),
+            effect,
+        }
+    }
+
+    #[test]
+    fn patrol_frame_similarity_distinguishes_stable_and_changed_frames() {
+        let black = image::DynamicImage::new_luma8(8, 8);
+        let mut white = image::GrayImage::new(8, 8);
+        white.fill(255);
+        let white = image::DynamicImage::ImageLuma8(white);
+        assert_eq!(patrol_frame_similarity(&black, &black), 1.0);
+        assert!(patrol_frame_similarity(&black, &white) < 0.01);
+    }
+
+    #[test]
+    fn only_stable_declared_successor_effects_establish_location() {
+        let achieved = attempt(
+            EffectOutcome::Achieved {
+                matched_successor: "Dashboard".into(),
+                session: 3,
+                frame: 11,
+                confidence: 0.91,
+                reason: "visible".into(),
+            },
+            Some(true),
+        );
+        let location = located_state_from_attempt(&achieved).unwrap();
+        assert_eq!(location.node_id, "Dashboard");
+        assert_eq!(location.source, LocationSource::ActionExpectedSuccessor);
+        assert_eq!(location.confidence, 0.91);
+
+        let mut unstable = achieved.clone();
+        unstable.after_frame_stable = Some(false);
+        assert!(located_state_from_attempt(&unstable).is_none());
+        let unchanged = attempt(
+            EffectOutcome::Unchanged {
+                session: 3,
+                frame: 11,
+                confidence: 0.99,
+                reason: "same".into(),
+            },
+            Some(true),
+        );
+        assert!(located_state_from_attempt(&unchanged).is_none());
     }
 }
 
@@ -283,6 +549,201 @@ pub(super) struct PatrolRecoveryReport {
     pub(super) accepted: bool,
     pub(super) redirect_count: u32,
     pub(super) max_redirects: u32,
+    pub(super) location_node: Option<String>,
+    pub(super) location_confidence: Option<f64>,
+    pub(super) location_source: Option<String>,
+    pub(super) location_frame_stable: Option<bool>,
+    pub(super) location_uncertain: bool,
+}
+
+pub(super) fn located_state_from_action(
+    handle: &RunHandle,
+    attempt_id: u64,
+) -> Option<LocatedState> {
+    let state = handle.patrol_state.lock().ok()?;
+    let attempt = state
+        .action_attempts
+        .iter()
+        .find(|attempt| attempt.id == attempt_id)?;
+    located_state_from_attempt(attempt)
+}
+
+fn located_state_from_attempt(attempt: &ActionAttemptEvidence) -> Option<LocatedState> {
+    if attempt.after_frame_stable != Some(true) {
+        return None;
+    }
+    match &attempt.effect {
+        EffectOutcome::Achieved {
+            matched_successor,
+            session,
+            frame,
+            confidence,
+            reason,
+        } => Some(LocatedState {
+            node_id: matched_successor.clone(),
+            confidence: *confidence,
+            source: LocationSource::ActionExpectedSuccessor,
+            capture_target: attempt.target.clone(),
+            capture_session: *session,
+            frame_sequence: *frame,
+            frame_stable: true,
+            reason: reason.clone(),
+        }),
+        EffectOutcome::Unexpected {
+            matched_node: Some(matched_node),
+            session,
+            frame,
+            confidence,
+            reason,
+        } => Some(LocatedState {
+            node_id: matched_node.clone(),
+            confidence: *confidence,
+            source: LocationSource::ActionErrorSuccessor,
+            capture_target: attempt.target.clone(),
+            capture_session: *session,
+            frame_sequence: *frame,
+            frame_stable: true,
+            reason: reason.clone(),
+        }),
+        _ => None,
+    }
+}
+
+pub(super) async fn locate_state_for_failure(
+    patrol: &PatrolRuntime,
+    graph: &crate::modules::pipeline::authoring::models::graph::PipelineGraph,
+    handle: &RunHandle,
+    app: &AppHandle,
+    snapshot: &PatrolSnapshot,
+) -> Result<LocatedState, String> {
+    let recent_nodes = handle
+        .step_results
+        .lock()
+        .map(|steps| {
+            steps
+                .iter()
+                .map(|step| step.node_id.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let chat = PatrolChatSink::new(
+        app,
+        &handle.run_id,
+        &snapshot.node_id,
+        &snapshot.capture_target,
+        snapshot.capture_session,
+        snapshot.frame_sequence,
+    );
+    let result = patrol
+        .verify(
+            graph,
+            &snapshot.node_id,
+            &snapshot.screenshot,
+            snapshot.anchor_confirmed,
+            &recent_nodes,
+            &chat,
+        )
+        .await;
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = app.emit(
+                "patrol-report",
+                PatrolReport {
+                    run_id: handle.run_id.clone(),
+                    trigger: "failure".into(),
+                    task: "state_match".into(),
+                    action_attempt_id: None,
+                    expected_node_id: snapshot.node_id.clone(),
+                    matched_node_id: None,
+                    target: snapshot.capture_target.clone(),
+                    session: snapshot.capture_session,
+                    frame: snapshot.frame_sequence,
+                    outcome: "inconclusive".into(),
+                    reason: Some(error.clone()),
+                },
+            );
+            return Err(error);
+        }
+    };
+    let outcome = if result.node_id == snapshot.node_id {
+        "aligned"
+    } else {
+        "possible_mismatch"
+    };
+    let location = LocatedState {
+        node_id: result.node_id.clone(),
+        confidence: result.confidence,
+        source: LocationSource::StateMatcher,
+        capture_target: snapshot.capture_target.clone(),
+        capture_session: snapshot.capture_session,
+        frame_sequence: snapshot.frame_sequence,
+        frame_stable: snapshot.stable,
+        reason: result.reason.clone(),
+    };
+    if let Ok(mut state) = handle.patrol_state.lock() {
+        state.decide(PatrolDecisionEvidence {
+            expected_node_id: snapshot.node_id.clone(),
+            matched_node_id: Some(result.node_id.clone()),
+            target: snapshot.capture_target.clone(),
+            session: snapshot.capture_session,
+            frame: snapshot.frame_sequence,
+            elapsed_ms: handle.start_time.elapsed().as_millis() as u64,
+            outcome: outcome.into(),
+            reason: Some(result.reason.clone()),
+        });
+    }
+    chat.emit(
+        "patrol",
+        PatrolChatKind::LocationHandoff,
+        format!("Validated current location at {}", location.node_id),
+        Some("recovery"),
+        vec![
+            ChatContent::Field {
+                label: "Node".into(),
+                value: location.node_id.clone(),
+            },
+            ChatContent::Field {
+                label: "Confidence".into(),
+                value: format!("{:.2}", location.confidence),
+            },
+            ChatContent::Field {
+                label: "Source".into(),
+                value: location.source.as_str().into(),
+            },
+            ChatContent::Field {
+                label: "Capture".into(),
+                value: format!(
+                    "{} · session {} · frame {} · {}",
+                    location.capture_target,
+                    location.capture_session,
+                    location.frame_sequence,
+                    if location.frame_stable {
+                        "stable"
+                    } else {
+                        "unstable"
+                    }
+                ),
+            },
+        ],
+    );
+    let _ = app.emit(
+        "patrol-report",
+        PatrolReport {
+            run_id: handle.run_id.clone(),
+            trigger: "failure".into(),
+            task: "state_match".into(),
+            action_attempt_id: None,
+            expected_node_id: snapshot.node_id.clone(),
+            matched_node_id: Some(result.node_id),
+            target: snapshot.capture_target.clone(),
+            session: snapshot.capture_session,
+            frame: snapshot.frame_sequence,
+            outcome: outcome.into(),
+            reason: Some(result.reason),
+        },
+    );
+    Ok(location)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -305,11 +766,16 @@ pub(super) fn sample_patrol(
     let handle = Arc::clone(handle);
     let app = app.clone();
     let node_id = snapshot.node_id.clone();
-    let screenshot = snapshot.screenshot.clone();
+    let action_snapshot = action
+        .as_ref()
+        .and_then(|action| action.preferred_after.clone())
+        .unwrap_or_else(|| snapshot.clone());
+    let screenshot = action_snapshot.screenshot.clone();
     let anchor_confirmed = snapshot.anchor_confirmed;
-    let capture_target = snapshot.capture_target.clone();
-    let capture_session = snapshot.capture_session;
-    let frame_sequence = snapshot.frame_sequence;
+    let capture_target = action_snapshot.capture_target.clone();
+    let capture_session = action_snapshot.capture_session;
+    let frame_sequence = action_snapshot.frame_sequence;
+    let after_frame_stable = action_snapshot.stable;
     let trigger = trigger.to_string();
     let task = tokio::spawn(async move {
         let _guard = _guard;
@@ -323,7 +789,7 @@ pub(super) fn sample_patrol(
         );
         chat.emit(
             "patrol",
-            "trigger",
+            PatrolChatKind::Trigger,
             if trigger == "failure" {
                 "Validating before pipeline failure"
             } else {
@@ -403,17 +869,29 @@ pub(super) fn sample_patrol(
                         effect,
                     )
                 }
-                Err(error) => (
-                    None,
-                    "inconclusive",
-                    None,
-                    Some(error.clone()),
-                    EffectOutcome::Inconclusive {
-                        session: capture_session,
-                        frame: frame_sequence,
-                        reason: error,
-                    },
-                ),
+                Err(error) => {
+                    let (outcome, error) = if patrol.take_circuit_report() {
+                        (
+                            "circuit_open",
+                            format!(
+                                "{error}. Patrol VLM circuit opened after three consecutive transport failures; periodic requests are paused for this run"
+                            ),
+                        )
+                    } else {
+                        ("inconclusive", error)
+                    };
+                    (
+                        None,
+                        outcome,
+                        None,
+                        Some(error.clone()),
+                        EffectOutcome::Inconclusive {
+                            session: capture_session,
+                            frame: frame_sequence,
+                            reason: error,
+                        },
+                    )
+                }
             };
             if let Ok(mut state) = handle.patrol_state.lock() {
                 if let Err(error) = state.apply_action_effect(
@@ -424,6 +902,8 @@ pub(super) fn sample_patrol(
                     effect,
                 ) {
                     log::warn!("[patrol] rejected action-effect evidence: {error}");
+                } else {
+                    state.set_after_frame_stability(action.attempt_id, after_frame_stable);
                 }
             }
             let report = PatrolReport {
@@ -445,7 +925,7 @@ pub(super) fn sample_patrol(
             );
             chat.emit(
                 "patrol",
-                "action_report",
+                PatrolChatKind::ActionReport,
                 format!("Action effect: {}", outcome.replace('_', " ")),
                 Some("action"),
                 vec![
@@ -467,13 +947,45 @@ pub(super) fn sample_patrol(
                         label: "Reason".into(),
                         value: reason.unwrap_or_else(|| "No reason supplied".into()),
                     },
+                    ChatContent::Field {
+                        label: "Before frame".into(),
+                        value: format!("session {}, frame {}", action.session, action.before_frame),
+                    },
+                    ChatContent::Field {
+                        label: "After frame".into(),
+                        value: format!(
+                            "session {capture_session}, frame {frame_sequence} ({})",
+                            if after_frame_stable {
+                                "stable"
+                            } else {
+                                "unstable"
+                            }
+                        ),
+                    },
                 ],
             );
             let _ = app.emit("patrol-report", report);
             return;
         }
+        let recent_nodes = handle
+            .step_results
+            .lock()
+            .map(|steps| {
+                steps
+                    .iter()
+                    .map(|step| step.node_id.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let result = patrol
-            .verify(&graph, &node_id, &screenshot, anchor_confirmed, &chat)
+            .verify(
+                &graph,
+                &node_id,
+                &screenshot,
+                anchor_confirmed,
+                &recent_nodes,
+                &chat,
+            )
             .await;
         if !handle.patrol_reports_open() {
             log::debug!(
@@ -482,11 +994,23 @@ pub(super) fn sample_patrol(
             );
             return;
         }
+        let circuit_open = patrol.take_circuit_report();
         let (matched_node_id, outcome, reason) = match result {
-            Ok(PatrolDecision::Aligned) => (Some(node_id.clone()), "aligned", None),
-            Ok(PatrolDecision::PossibleMismatch(candidate)) => {
-                (Some(candidate), "possible_mismatch", None)
+            Ok(result) if result.node_id == node_id => {
+                (Some(result.node_id), "aligned", Some(result.reason))
             }
+            Ok(result) => (
+                Some(result.node_id),
+                "possible_mismatch",
+                Some(result.reason),
+            ),
+            Err(error) if circuit_open => (
+                None,
+                "circuit_open",
+                Some(format!(
+                    "{error}. Patrol VLM circuit opened after three consecutive transport failures; periodic requests are paused for this run"
+                )),
+            ),
             Err(error) => (None, "inconclusive", Some(error)),
         };
         let report = PatrolReport {
@@ -526,7 +1050,7 @@ pub(super) fn sample_patrol(
         );
         chat.emit(
             "patrol",
-            "report",
+            PatrolChatKind::Report,
             format!("Patrol report: {}", outcome.replace('_', " ")),
             None,
             vec![

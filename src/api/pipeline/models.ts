@@ -299,6 +299,7 @@ export interface PatrolState {
     source_session: number;
     before_frame: number;
     after_frame: number | null;
+    after_frame_stable?: boolean | null;
     started_ms: number;
     completed_ms: number | null;
     effect: PatrolActionEffect;
@@ -347,6 +348,11 @@ export interface PatrolState {
     reason: string;
     accepted: boolean;
     redirect_count: number;
+    location_node?: string | null;
+    location_confidence?: number | null;
+    location_source?: "state_matcher" | "action_expected_successor" | "action_error_successor" | null;
+    location_frame_stable?: boolean | null;
+    location_uncertain?: boolean;
   }>;
 }
 
@@ -394,6 +400,8 @@ export interface PatrolConfig {
   cycle_seconds: number;
   k_hops: number;
   threshold: number;
+  action_effect_threshold?: number;
+  redirect_threshold?: number;
   min_margin: number;
   recovery_policy: "hint_only" | "redirection_only";
   max_redirects: number;

@@ -3,6 +3,43 @@ use std::collections::HashSet;
 
 use super::config::RecoveryPolicy;
 use super::search::{Candidate, CandidateScore};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocationSource {
+    StateMatcher,
+    ActionExpectedSuccessor,
+    ActionErrorSuccessor,
+}
+
+impl LocationSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::StateMatcher => "state_matcher",
+            Self::ActionExpectedSuccessor => "action_expected_successor",
+            Self::ActionErrorSuccessor => "action_error_successor",
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct LocatedState {
+    pub node_id: String,
+    pub confidence: f64,
+    pub source: LocationSource,
+    pub capture_target: String,
+    pub capture_session: u64,
+    pub frame_sequence: u64,
+    pub frame_stable: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StateMatchResult {
+    pub node_id: String,
+    pub confidence: f64,
+    pub reason: String,
+}
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ScoreEnvelope {
@@ -106,10 +143,10 @@ pub struct RecoveryResult {
 pub struct RecoveryInput {
     pub failure_node: String,
     pub failure_reason: String,
-    pub actions: Vec<String>,
-    pub before: Option<std::sync::Arc<DynamicImage>>,
     pub after: std::sync::Arc<DynamicImage>,
     pub recent_nodes: Vec<String>,
+    pub located_state: Option<LocatedState>,
+    pub location_uncertain: bool,
 }
 
 pub(super) fn validate_recovery_result(

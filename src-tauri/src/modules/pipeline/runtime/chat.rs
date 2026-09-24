@@ -92,6 +92,65 @@ pub enum ChatContent {
     Field { label: String, value: String },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatrolChatKind {
+    Trigger,
+    Capture,
+    Search,
+    Reference,
+    Request,
+    Response,
+    Expansion,
+    Report,
+    ReferenceSave,
+    Error,
+    ActionEvidence,
+    ActionRequest,
+    ActionResponse,
+    ActionReport,
+    LocationHandoff,
+    LocationUnresolved,
+    FormatRetry,
+    TransportRetry,
+    ValidationError,
+    RecoveryTrigger,
+    RecoveryCandidates,
+    RecoveryRequest,
+    RecoveryResponse,
+    RecoveryReport,
+}
+
+impl PatrolChatKind {
+    #[cfg(test)]
+    const ALL: [Self; 24] = [
+        Self::Trigger,
+        Self::Capture,
+        Self::Search,
+        Self::Reference,
+        Self::Request,
+        Self::Response,
+        Self::Expansion,
+        Self::Report,
+        Self::ReferenceSave,
+        Self::Error,
+        Self::ActionEvidence,
+        Self::ActionRequest,
+        Self::ActionResponse,
+        Self::ActionReport,
+        Self::LocationHandoff,
+        Self::LocationUnresolved,
+        Self::FormatRetry,
+        Self::TransportRetry,
+        Self::ValidationError,
+        Self::RecoveryTrigger,
+        Self::RecoveryCandidates,
+        Self::RecoveryRequest,
+        Self::RecoveryResponse,
+        Self::RecoveryReport,
+    ];
+}
+
 #[derive(Clone, serde::Serialize)]
 struct ChatEvent {
     id: u64,
@@ -99,7 +158,7 @@ struct ChatEvent {
     sample_id: String,
     occurred_at_ms: u128,
     sender: &'static str,
-    kind: &'static str,
+    kind: PatrolChatKind,
     summary: String,
     node_id: String,
     target: String,
@@ -145,7 +204,7 @@ impl PatrolChatSink {
     pub fn emit(
         &self,
         sender: &'static str,
-        kind: &'static str,
+        kind: PatrolChatKind,
         summary: impl Into<String>,
         tier: Option<&'static str>,
         content: Vec<ChatContent>,
@@ -195,7 +254,7 @@ mod tests {
             sample_id: "run:1:2".into(),
             occurred_at_ms: 0,
             sender: "patrol",
-            kind: "capture",
+            kind: PatrolChatKind::Capture,
             summary: "Captured".into(),
             node_id: "A".into(),
             target: "Screen 0".into(),
@@ -211,5 +270,19 @@ mod tests {
         assert_eq!(value["content"][0]["image_id"], 99);
         assert!(value.to_string().find("base64").is_none());
         assert!(value.to_string().find("api_key").is_none());
+    }
+
+    #[test]
+    fn every_chat_kind_has_a_stable_snake_case_wire_value() {
+        let values = PatrolChatKind::ALL
+            .into_iter()
+            .map(|kind| serde_json::to_value(kind).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(values.len(), 24);
+        assert!(values.contains(&serde_json::json!("action_evidence")));
+        assert!(values.contains(&serde_json::json!("recovery_candidates")));
+        assert!(values.contains(&serde_json::json!("location_handoff")));
+        assert!(values.contains(&serde_json::json!("location_unresolved")));
+        assert!(values.contains(&serde_json::json!("error")));
     }
 }

@@ -31,6 +31,16 @@ pub struct RecoveryEvidence {
     pub reason: String,
     pub accepted: bool,
     pub redirect_count: u32,
+    #[serde(default)]
+    pub location_node: Option<String>,
+    #[serde(default)]
+    pub location_confidence: Option<f64>,
+    #[serde(default)]
+    pub location_source: Option<String>,
+    #[serde(default)]
+    pub location_frame_stable: Option<bool>,
+    #[serde(default)]
+    pub location_uncertain: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -44,6 +54,8 @@ pub struct ActionAttemptEvidence {
     pub source_session: u64,
     pub before_frame: u64,
     pub after_frame: Option<u64>,
+    #[serde(default)]
+    pub after_frame_stable: Option<bool>,
     pub started_ms: u64,
     pub completed_ms: Option<u64>,
     pub effect: EffectOutcome,
@@ -162,6 +174,7 @@ impl PatrolState {
             source_session: session,
             before_frame,
             after_frame: None,
+            after_frame_stable: None,
             started_ms: elapsed_ms,
             completed_ms: None,
             effect: EffectOutcome::Unverified,
@@ -295,6 +308,16 @@ impl PatrolState {
         Ok(())
     }
 
+    pub fn set_after_frame_stability(&mut self, id: u64, stable: bool) {
+        if let Some(attempt) = self
+            .action_attempts
+            .iter_mut()
+            .find(|attempt| attempt.id == id)
+        {
+            attempt.after_frame_stable = Some(stable);
+        }
+    }
+
     pub fn observe(&mut self, observation: ScreenObservation) {
         self.observations.push(observation);
         trim(&mut self.observations, MAX_OBSERVATIONS);
@@ -373,6 +396,19 @@ pub(crate) fn summarize_action(action: &Action) -> (&'static str, String) {
         Action::StopTask => ("StopTask", String::new()),
         Action::Custom { action, .. } => ("Custom", format!("action={action}")),
     }
+}
+
+pub(crate) fn is_effect_eligible(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::Click { .. }
+            | Action::LongPress { .. }
+            | Action::Swipe { .. }
+            | Action::Scroll { .. }
+            | Action::ClickKey { .. }
+            | Action::InputText { .. }
+            | Action::Custom { .. }
+    )
 }
 
 fn control_key_name(key: i64) -> Option<&'static str> {
@@ -524,5 +560,19 @@ mod tests {
             key: vec![serde_json::json!(65)],
         });
         assert_eq!(redacted, "key_count=1");
+    }
+
+    #[test]
+    fn only_dispatched_gui_effect_actions_are_verification_eligible() {
+        assert!(!is_effect_eligible(&Action::DoNothing));
+        assert!(!is_effect_eligible(&Action::Wait { duration: 10 }));
+        assert!(!is_effect_eligible(&Action::StopTask));
+        assert!(is_effect_eligible(&Action::InputText {
+            input_text: "masked".into(),
+        }));
+        assert!(is_effect_eligible(&Action::Custom {
+            action: "safe-plugin".into(),
+            param: serde_json::Value::Null,
+        }));
     }
 }

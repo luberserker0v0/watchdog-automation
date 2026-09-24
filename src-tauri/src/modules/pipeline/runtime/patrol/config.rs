@@ -7,6 +7,10 @@ pub struct PatrolConfig {
     pub k_hops: usize,
     #[serde(default = "default_threshold")]
     pub threshold: f64,
+    #[serde(default)]
+    pub action_effect_threshold: Option<f64>,
+    #[serde(default)]
+    pub redirect_threshold: Option<f64>,
     #[serde(default = "default_min_margin")]
     pub min_margin: f64,
     #[serde(default = "default_cycle_seconds")]
@@ -31,6 +35,8 @@ impl Default for PatrolConfig {
             enabled: false,
             k_hops: default_k_hops(),
             threshold: default_threshold(),
+            action_effect_threshold: None,
+            redirect_threshold: None,
             min_margin: default_min_margin(),
             cycle_seconds: default_cycle_seconds(),
             recovery_policy: RecoveryPolicy::HintOnly,
@@ -63,6 +69,16 @@ impl PatrolConfig {
         if !self.threshold.is_finite() || !(0.0..=1.0).contains(&self.threshold) {
             return Err("Settings patrol threshold must be between 0 and 1".into());
         }
+        for (label, value) in [
+            ("action-effect", self.action_effect_threshold),
+            ("redirect", self.redirect_threshold),
+        ] {
+            if value.is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value)) {
+                return Err(format!(
+                    "Settings patrol {label} threshold must be between 0 and 1"
+                ));
+            }
+        }
         if !self.min_margin.is_finite() || !(0.0..=1.0).contains(&self.min_margin) {
             return Err("Settings patrol minimum margin must be between 0 and 1".into());
         }
@@ -73,6 +89,14 @@ impl PatrolConfig {
             return Err("Settings patrol maximum redirects must be between 1 and 10".into());
         }
         Ok(())
+    }
+
+    pub fn action_effect_threshold(&self) -> f64 {
+        self.action_effect_threshold.unwrap_or(self.threshold)
+    }
+
+    pub fn redirect_threshold(&self) -> f64 {
+        self.redirect_threshold.unwrap_or(self.threshold)
     }
 }
 

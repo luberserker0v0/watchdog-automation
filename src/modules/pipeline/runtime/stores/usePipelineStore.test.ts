@@ -88,7 +88,7 @@ describe("usePipelineStore", () => {
 
   it("passes enabled patrol and thresholds to engine startup", async () => {
     vi.useFakeTimers();
-    usePreferencesStore.setState({ patrolEnabled: true, patrolCycleSeconds: 30, patrolKHops: 2, patrolThreshold: 0.91, patrolMinMargin: 0.12, llmEndpoint: "http://localhost:8000/v1/chat/completions", llmModel: "vision", llmApiKey: "session-key" });
+    usePreferencesStore.setState({ patrolEnabled: true, patrolCycleSeconds: 30, patrolKHops: 2, patrolThreshold: 0.91, patrolActionEffectThreshold: 0.82, patrolRedirectThreshold: 0.93, patrolMinMargin: 0.12, llmEndpoint: "http://localhost:8000/v1/chat/completions", llmModel: "vision", llmApiKey: "session-key" });
     await usePipelineStore.getState().addPipeline("one.yml");
     const execution = usePipelineStore.getState().startExecution();
     await Promise.resolve();
@@ -96,7 +96,7 @@ describe("usePipelineStore", () => {
     await execution;
     expect(pipelineApi.startPipeline).toHaveBeenCalledWith(
       "one.yml", expect.any(Object), expect.any(Boolean), expect.any(Boolean),
-      { enabled: true, cycle_seconds: 30, k_hops: 2, threshold: 0.91, min_margin: 0.12, recovery_policy: "hint_only", max_redirects: 1 },
+      { enabled: true, cycle_seconds: 30, k_hops: 2, threshold: 0.91, action_effect_threshold: 0.82, redirect_threshold: 0.93, min_margin: 0.12, recovery_policy: "hint_only", max_redirects: 1 },
       { endpoint: "http://localhost:8000/v1/chat/completions", model: "vision", api_key: "session-key" },
     );
     expect(useLogStore.getState().entries).toContainEqual(expect.objectContaining({

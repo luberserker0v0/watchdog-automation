@@ -120,10 +120,11 @@ export function appendPatrolReport(report: PatrolReportEvent) {
     : report.outcome === "unchanged" ? "no visible change"
       : report.outcome === "in_progress" ? "transition still in progress"
         : report.outcome === "unexpected" ? "unexpected state"
+          : report.outcome === "circuit_open" ? "endpoint circuit open"
           : "result unclear";
   const actionPath = `${report.expected_node_id}${report.matched_node_id ? ` → ${report.matched_node_id}` : ""}`;
   const detail = report.task === "action_effect"
-    ? `${report.trigger === "failure" ? "Before failure · " : ""}${actionPath} · ${actionState}`
+    ? `${report.trigger === "failure" ? "Before failure · " : ""}${actionPath} · ${actionState}${report.outcome === "circuit_open" && report.reason ? ` · ${report.reason}` : ""}`
     : report.outcome === "aligned"
     ? `${capture}: ${report.expected_node_id} aligned`
     : report.outcome === "possible_mismatch"
@@ -143,14 +144,17 @@ export function appendPatrolRecovery(report: PatrolRecoveryEvent) {
   if (terminalPatrolRunIds.has(report.run_id)) return;
   const path = `${report.failure_node}${report.target_node ? ` → ${report.target_node}` : ""}`;
   const confidence = report.confidence == null ? "" : ` · ${Math.round(report.confidence * 100)}%`;
+  const location = report.location_node
+    ? ` · located ${report.location_node}${report.location_confidence == null ? "" : ` ${Math.round(report.location_confidence * 100)}%`}`
+    : report.location_uncertain ? " · location uncertain" : "";
   const label = report.policy === "hint_only"
     ? "Patrol · Recovery hint"
     : report.accepted ? "Patrol · Redirect" : "Patrol · Redirect rejected";
   const detail = report.policy === "hint_only"
-    ? `${path} · advisory only; routing unchanged · ${report.reason}${confidence}`
+    ? `${path} · advisory only; routing unchanged${location} · ${report.reason}${confidence}`
     : report.accepted
-      ? `${path} · accepted · ${report.redirect_count}/${report.max_redirects}${confidence}`
-      : `${path} · ${report.reason}${confidence}`;
+      ? `${path} · accepted${location} · ${report.redirect_count}/${report.max_redirects}${confidence}`
+      : `${path}${location} · ${report.reason}${confidence}`;
   useLogStore.getState().appendLog({
     source: "pipeline",
     label,
@@ -329,6 +333,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
             cycle_seconds: preferences.patrolCycleSeconds,
             k_hops: preferences.patrolKHops,
             threshold: preferences.patrolThreshold,
+            action_effect_threshold: preferences.patrolActionEffectThreshold,
+            redirect_threshold: preferences.patrolRedirectThreshold,
             min_margin: preferences.patrolMinMargin,
             recovery_policy: preferences.patrolRecoveryPolicy,
             max_redirects: preferences.patrolMaxRedirects,
