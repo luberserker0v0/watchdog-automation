@@ -10,92 +10,63 @@ The repository produces three applications from one Rust binary target:
 | `watch-dog-tester.exe` | Developer UI for testing pipelines and individual nodes | `app-tester` |
 | `watch-dog-target.exe` | Sample Target UI used by automated node tests | `app-target` |
 
-## Requirements
+## Quick start
 
-WatchDog is currently developed and tested on Windows x64. Install:
-
-- Node.js LTS and npm
-- Rust stable with the MSVC toolchain
-- Microsoft C++ Build Tools with **Desktop development with C++**
-- Microsoft Edge WebView2 Runtime
-- PowerShell
-
-See the official [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/) for setup details.
-
-## Setup
-
-Install JavaScript dependencies from the repository root:
+After installing the
+[Windows prerequisites](docs/tutorials/00-install-and-build.md#01-install-prerequisites),
+install dependencies and start the production application:
 
 ```powershell
 npm install
-```
-
-The first Rust build downloads and compiles Cargo dependencies, so it takes substantially longer than later incremental builds.
-
-## Development
-
-Run one Tauri development command at a time because each command uses Vite port `12420`:
-
-```powershell
-# Production application
 npm run tauri -- dev
-
-# Pipeline and node tester
-npm run dev:tester
-
-# Sample Target UI
-npm run dev:target
 ```
 
-For frontend-only work, run `npm run dev`. Native Tauri commands such as capture and filesystem access are unavailable in a normal browser.
-
-## Verify changes
+Build all debug or optimized standalone executables:
 
 ```powershell
-# Frontend tests
-npm test
-
-# Render-isolation tests
-npm run test:render
-
-# TypeScript and every Vite entrypoint
-npm run build
-
-# Rust tests and formatting
-cargo test --manifest-path src-tauri\Cargo.toml
-cargo fmt --manifest-path src-tauri\Cargo.toml -- --check
-```
-
-`npm run build` updates `dist\` only; it does not rebuild an executable.
-
-## Build executables
-
-Close every running WatchDog executable before building. Windows cannot replace a running `.exe`, and the build intentionally fails instead of retaining a stale artifact.
-
-Fast development build:
-
-```powershell
+# Fast development executables
 npm run build:all-targets:debug
-```
 
-Outputs:
-
-```text
-src-tauri\target\debug\watch-dog.exe
-src-tauri\target\debug\watch-dog-tester.exe
-src-tauri\target\debug\watch-dog-target.exe
-```
-
-Optimized standalone release build without installers:
-
-```powershell
+# Optimized release executables
 npm run build:all-targets
 ```
 
-Outputs use the same names under `src-tauri\target\release\`. Both commands build tester, Target, and production in that order so the final `watch-dog.exe` is always the production application.
+See [Chapter 0: Install and build WatchDog](docs/tutorials/00-install-and-build.md)
+for individual targets, output paths, runtime DLLs, installers, verification,
+and troubleshooting.
 
 ## Documentation
 
+### Tutorial outline
+
+| Chapter | Tutorial |
+| --- | --- |
+| 0 | [Install and build WatchDog](docs/tutorials/00-install-and-build.md) |
+| 1 | [Create your first pipeline](docs/tutorials/01-first-pipeline.md) |
+| 2 | [Draw the pipeline graph in Mermaid](docs/tutorials/02-mermaid-graph.md) |
+| 3 | [Configure pipeline metadata JSON](docs/tutorials/03-metadata-basics.md) |
+| 4 | [Recognize visual states](docs/tutorials/04-recognition.md) |
+| 5 | [Execute actions and control timing](docs/tutorials/05-actions-and-timing.md) |
+| 6 | [Route failures and complete runs](docs/tutorials/06-routing-and-lifecycle.md) |
+| 7 | [Select and launch capture targets](docs/tutorials/07-targets-launch-capture.md) |
+| 8 | [Reuse nodes and parameters](docs/tutorials/08-reuse-and-parameters.md) |
+| 9 | [Test and debug pipelines](docs/tutorials/09-testing-and-debugging.md) |
+| 10 | [Add Patrol and recovery](docs/tutorials/10-patrol-and-recovery.md) |
+| 11 | [Record actions and receive notifications](docs/tutorials/11-recorder-and-notifications.md) |
+
+The [tutorial index](docs/tutorials/README.md) describes the learning path and
+links the related reference documents.
+
+### Reference and engineering documents
+
+- [Apache License 2.0](LICENSE)
+- [Changelog](CHANGELOG.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Release-readiness checklist](docs/release-readiness.md)
 - [Development, builds, resources, and troubleshooting](docs/development.md)
-- [Pipeline Mermaid and execution metadata](docs/pipeline-meta.md)
+- [Pipeline Mermaid and execution metadata reference](docs/pipeline-meta.md)
 - [Shareable pipeline graph layouts](docs/pipeline-layout.md)
+- [Action Recorder reference](docs/action-recorder.md)
+- [Software Requirements Specification](docs/srs.md)
+- [Software Design Description](docs/sdd.md)

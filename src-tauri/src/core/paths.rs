@@ -96,6 +96,27 @@ pub fn built_in_models_dir() -> PathBuf {
     bundled_resources_dir().join("models")
 }
 
+pub fn bundled_native_dir() -> PathBuf {
+    #[cfg(debug_assertions)]
+    {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("native")
+            .join("windows-x64")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        RESOURCE_DIR
+            .get()
+            .cloned()
+            .unwrap_or_else(|| {
+                log::warn!("Resource dir not initialized, falling back to current dir");
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            })
+            .join("native")
+            .join("windows-x64")
+    }
+}
+
 fn migrate_legacy_user_pipelines(base: &std::path::Path) {
     let legacy = base.join("pipelines");
     let destination = base.join("resources").join("pipelines");
@@ -178,6 +199,12 @@ mod tests {
         let path = built_in_pipelines_dir();
         assert!(path.ends_with(PathBuf::from("resources/pipelines")));
         assert!(!path.to_string_lossy().contains("build-in"));
+    }
+
+    #[test]
+    fn native_runtime_uses_the_bundled_native_root() {
+        let path = bundled_native_dir();
+        assert!(path.ends_with(PathBuf::from("native/windows-x64")));
     }
 
     #[test]

@@ -1,8 +1,10 @@
 [package]
 name = "watch-dog"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Windows desktop visual pipeline automation"
+authors = ["luberserker0v0"]
+license = "Apache-2.0"
+repository = "https://github.com/luberserker0v0/watchdog-automation"
 edition = "2021"
 default-run = "watch-dog"
 

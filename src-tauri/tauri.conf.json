@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:12420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-onnxruntime.ps1 -Profile release",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,6 +26,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "luberserker0v0",
+    "homepage": "https://github.com/luberserker0v0/watchdog-automation",
+    "copyright": "Copyright 2026 luberserker0v0",
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,7 +39,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/**/*"
+      "resources/**/*",
+      "native/windows-x64/*.dll"
     ]
   }
 }

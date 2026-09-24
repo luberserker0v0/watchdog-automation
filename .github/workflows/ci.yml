@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-windows:
+    name: Frontend and Rust verification
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify release configuration
+        run: npm run verify:release-config
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run render-isolation tests
+        run: npm run test:render
+
+      - name: Build frontend entrypoints
+        run: npm run build
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Check production backend
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Check Tester backend
+        run: cargo check --manifest-path src-tauri/Cargo.toml --features app-tester
+
+      - name: Check Target backend
+        run: cargo check --manifest-path src-tauri/Cargo.toml --features app-target
+
+      - name: Compile Rust tests
+        run: cargo test --no-run --manifest-path src-tauri/Cargo.toml
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml

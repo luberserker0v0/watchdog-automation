@@ -12,6 +12,7 @@ $archivePath = Join-Path $targetRoot "Microsoft.ML.OnnxRuntime.DirectML-$runtime
 $nativeRoot = Join-Path $cacheRoot "runtimes\win-x64\native"
 $runtimePath = Join-Path $nativeRoot "onnxruntime.dll"
 $destinationDirectory = Join-Path $targetRoot $Profile
+$bundleDirectory = Join-Path $projectRoot "src-tauri\native\windows-x64"
 
 if (-not (Test-Path -LiteralPath $runtimePath)) {
     New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
@@ -24,11 +25,14 @@ if (-not (Test-Path -LiteralPath $runtimePath)) {
 }
 
 New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $bundleDirectory -Force | Out-Null
 $runtimeDlls = Get-ChildItem -LiteralPath $nativeRoot -Filter "*.dll" -File
 if ($runtimeDlls.Count -eq 0) {
     throw "No runtime DLLs found in $nativeRoot"
 }
 foreach ($runtimeDll in $runtimeDlls) {
     Copy-Item -LiteralPath $runtimeDll.FullName -Destination (Join-Path $destinationDirectory $runtimeDll.Name) -Force
+    Copy-Item -LiteralPath $runtimeDll.FullName -Destination (Join-Path $bundleDirectory $runtimeDll.Name) -Force
 }
 Write-Host "Installed ONNX Runtime DirectML $runtimeVersion at $destinationDirectory"
+Write-Host "Staged ONNX Runtime bundle resources at $bundleDirectory"

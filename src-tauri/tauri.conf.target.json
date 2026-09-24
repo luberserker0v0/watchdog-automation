@@ -18,6 +18,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "luberserker0v0",
+    "homepage": "https://github.com/luberserker0v0/watchdog-automation",
+    "copyright": "Copyright 2026 luberserker0v0",
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/target/32x32.png",
       "icons/target/128x128.png",

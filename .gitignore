@@ -8,6 +8,8 @@
 
 # Rust / Tauri build output
 /src-tauri/target/
+/src-tauri/native/windows-x64/*.dll
+/artifacts/
 /src-tauri/gen/schemas/
 /src-tauri/paddleocr_rs_onnx_patch/target/
 /src-tauri/paddleocr_rs_onnx_patch/Cargo.lock

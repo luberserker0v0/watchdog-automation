@@ -150,7 +150,7 @@ Build all three standalone executables without installers:
 npm run build:all-targets
 ```
 
-This uses the same tester → Target → production ordering as the debug command. The resulting directory also contains `onnxruntime.dll` and `DirectML.dll` where required.
+This uses the same tester → Target → production ordering as the debug command. The resulting directory also contains the native DLLs installed from the DirectML-enabled ONNX Runtime package.
 
 Keep the DLLs installed by `scripts\install-onnxruntime.ps1` beside `watch-dog.exe` and `watch-dog-tester.exe`; OCR cannot initialize without them. The script installs the DirectML-enabled ONNX Runtime package, supporting CPU inference and GPU inference on DirectX 12-capable NVIDIA, AMD, and Intel hardware. Select the OCR device under Settings → Debug Settings. GPU initialization falls back to CPU when DirectML is unavailable.
 
@@ -169,7 +169,26 @@ src-tauri\target\release\bundle\msi\
 src-tauri\target\release\bundle\nsis\
 ```
 
-Standalone executables are the supported development workflow. Before distributing an installer, verify that `onnxruntime.dll` and the required application resources are included in the installed application directory.
+The production and Tester bundle configurations run the ONNX Runtime staging script before bundling. The OCR loader searches the packaged `native\windows-x64` resource directory as well as the executable directory. Verify the installed layout and OCR initialization on a clean Windows machine before distribution.
+
+## Portable Windows package
+
+Build, assemble, and verify all three applications as one portable package:
+
+```powershell
+npm run package:windows
+```
+
+The versioned directory, ZIP, and ZIP checksum are written below `artifacts\`. The package
+verification checks executables, OCR models and native libraries, built-in
+pipelines, schemas, legal files, and every hash recorded in `manifest.json`.
+`checksums.sha256` contains hashes suitable for publishing beside the archive.
+
+For an already-built debug tree, use:
+
+```powershell
+npm run package:windows:debug -- -SkipBuild
+```
 
 ## Why the final Rust link is slow
 

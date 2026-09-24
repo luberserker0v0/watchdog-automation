@@ -38,6 +38,7 @@ fn init_ort_runtime() -> Result<(), String> {
         .ok_or_else(|| "Failed to locate executable directory for ONNX Runtime".to_string())?;
     let candidates = [
         executable_dir.join("onnxruntime.dll"),
+        crate::core::paths::bundled_native_dir().join("onnxruntime.dll"),
         executable_dir
             .parent()
             .map(|parent| parent.join("onnxruntime.dll"))
