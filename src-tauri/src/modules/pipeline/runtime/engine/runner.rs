@@ -172,6 +172,8 @@ where
     }
 }
 
+const PATROL_FINALIZATION_BUDGET: Duration = Duration::from_secs(90);
+
 /// One exclusively-owned pipeline execution. This is the aggregate root for a
 /// run: mutable execution state cannot leak into command handlers or another
 /// concurrent run.
@@ -1637,7 +1639,7 @@ impl PipelineRunSession {
                 } else {
                     (None, Arc::new(std::sync::Mutex::new(VecDeque::new())))
                 };
-            let mut finalization_budget = Duration::from_secs(45);
+            let mut finalization_budget = PATROL_FINALIZATION_BUDGET;
             let mut located_state: Option<LocatedState> = None;
             let final_probe_allowed = patrol
                 .as_ref()
@@ -1808,7 +1810,7 @@ impl PipelineRunSession {
                                 snapshot.capture_session,
                                 snapshot.frame_sequence,
                             );
-                            chat.emit("patrol", PatrolChatKind::Error, "Patrol finalization deadline expired", None, vec![ChatContent::Text { label: "Diagnostic".into(), text: "The 45-second final Patrol budget expired; the original pipeline failure is preserved".into() }]);
+                            chat.emit("patrol", PatrolChatKind::Error, "Patrol finalization deadline expired", None, vec![ChatContent::Text { label: "Diagnostic".into(), text: "The 90-second final Patrol budget expired; the original pipeline failure is preserved".into() }]);
                         }
                     } else if patrol.is_some() {
                         log::warn!("[patrol] final validation unavailable: no captured frame");

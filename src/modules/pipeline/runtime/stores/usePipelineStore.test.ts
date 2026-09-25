@@ -231,6 +231,22 @@ describe("usePipelineStore", () => {
     ]);
   });
 
+  it("does not label an inconclusive recovery as a rejected redirect", () => {
+    appendPatrolRecovery({
+      run_id: "deadline", policy: "redirection_only", failure_node: "ApplyRecovery",
+      target_node: null, decision: "inconclusive", confidence: null,
+      reason: "Patrol finalization deadline expired", accepted: false,
+      redirect_count: 0, max_redirects: 1, location_uncertain: true,
+    });
+    const entries = useLogStore.getState().entries;
+    expect(entries[entries.length - 1]).toMatchObject({
+      label: "Patrol · Inconclusive",
+      tag: "redirect",
+      result: "info",
+      detail: expect.stringContaining("finalization deadline expired"),
+    });
+  });
+
   it("adds a GUI log entry when pipeline startup fails", async () => {
     await usePipelineStore.getState().addPipeline("broken.yml");
     pipelineApi.startPipeline.mockRejectedValueOnce({

@@ -139,7 +139,7 @@ flowchart TD
     Guards -->|Hint or rejection| Preserve
 ```
 
-Task 2, Task 1 fallback, and Task 3 share one 45-second active-time budget.
+Task 2, Task 1 fallback, and Task 3 share one 90-second active-time budget.
 Paused time does not consume this budget. Stopping the run cancels finalization.
 
 ## 6. Try a hint-only failure
@@ -283,7 +283,7 @@ requests. Failure finalization is allowed one final probe.
 
 ### `Patrol finalization deadline expired`
 
-The failure-time sequence exceeded its shared 45-second active budget. Use a
+The failure-time sequence exceeded its shared 90-second active budget. Use a
 faster model or endpoint. The original pipeline failure remains authoritative.
 
 ### State matching is inconclusive

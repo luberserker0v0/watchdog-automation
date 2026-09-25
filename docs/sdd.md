@@ -225,7 +225,7 @@ run ID. It reads only that run's references; a new run uses descriptions until
 its own visits produce images. No baseline run is needed.
 
 Before terminal status, the engine stops periodic sampling, cancels unfinished
-periodic VLM work, and waits for reference saves. On failure it permits one final probe even when the periodic circuit is open and shares a 45-second active-time budget across Task 2, Task 1 fallback, and Task 3. Paused time does not consume the budget and stop cancels it. It verifies the latest unresolved
+periodic VLM work, and waits for reference saves. On failure it permits one final probe even when the periodic circuit is open and shares a 90-second active-time budget across Task 2, Task 1 fallback, and Task 3. Paused time does not consume the budget and stop cancels it. It verifies the latest unresolved
 action when usable action evidence exists; a result that cannot establish location triggers state matching. Without usable action evidence it starts with state matching. The check prefers a newer
 cached frame in the same capture session; if no frame exists, it logs that
 validation was unavailable. The run then closes an atomic report gate before

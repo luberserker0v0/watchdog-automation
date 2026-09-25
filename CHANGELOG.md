@@ -56,6 +56,9 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Improved multiline OCR candidate grouping and selection diagnostics.
 - Included the Sample Target companion in the production installer so bundled
   example pipelines can launch their declared target.
+- Made Patrol action-effect prompts distinguish exact node IDs from visible UI
+  text, allowed the three-task failure handoff a 90-second active budget, and
+  stopped labeling inconclusive recovery as a rejected redirect.
 
 [Unreleased]: https://github.com/luberserker0v0/watchdog-automation/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/luberserker0v0/watchdog-automation/releases/tag/v1.0.0

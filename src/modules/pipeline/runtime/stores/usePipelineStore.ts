@@ -149,7 +149,13 @@ export function appendPatrolRecovery(report: PatrolRecoveryEvent) {
     : report.location_uncertain ? " · location uncertain" : "";
   const label = report.policy === "hint_only"
     ? "Patrol · Recovery hint"
-    : report.accepted ? "Patrol · Redirect" : "Patrol · Redirect rejected";
+    : report.accepted
+      ? "Patrol · Redirect"
+      : report.decision === "redirect"
+        ? "Patrol · Redirect rejected"
+        : report.decision === "no_recovery"
+          ? "Patrol · No redirect"
+          : "Patrol · Inconclusive";
   const detail = report.policy === "hint_only"
     ? `${path} · advisory only; routing unchanged${location} · ${report.reason}${confidence}`
     : report.accepted
@@ -160,7 +166,11 @@ export function appendPatrolRecovery(report: PatrolRecoveryEvent) {
     label,
     detail,
     tag: report.policy === "hint_only" ? "hint" : "redirect",
-    result: report.accepted ? "success" : report.policy === "redirection_only" ? "error" : "info",
+    result: report.accepted
+      ? "success"
+      : report.policy === "redirection_only" && report.decision === "redirect"
+        ? "error"
+        : "info",
   });
 }
 
