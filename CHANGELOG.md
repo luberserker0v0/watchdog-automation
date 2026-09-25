@@ -7,6 +7,8 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-25
+
 ### Added
 
 - Windows portable packaging with required-file checks, a content manifest,
@@ -53,10 +55,5 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Preserved active elapsed time between recorded actions.
 - Improved multiline OCR candidate grouping and selection diagnostics.
 
-### Release status
-
-No stable release has been published. The first release remains blocked on the
-native acceptance and packaging checks in
-[docs/release-readiness.md](docs/release-readiness.md).
-
-[Unreleased]: https://github.com/luberserker0v0/watchdog-automation/compare/HEAD...HEAD
+[Unreleased]: https://github.com/luberserker0v0/watchdog-automation/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/luberserker0v0/watchdog-automation/releases/tag/v1.0.0

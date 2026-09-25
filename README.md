@@ -64,6 +64,7 @@ links the related reference documents.
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Release-readiness checklist](docs/release-readiness.md)
+- [Version 1.0.0 release notes](docs/releases/1.0.0.md)
 - [Development, builds, resources, and troubleshooting](docs/development.md)
 - [Pipeline Mermaid and execution metadata reference](docs/pipeline-meta.md)
 - [Shareable pipeline graph layouts](docs/pipeline-layout.md)

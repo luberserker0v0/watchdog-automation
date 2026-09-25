@@ -1,6 +1,6 @@
 [package]
 name = "watch-dog"
-version = "0.1.0"
+version = "1.0.0"
 description = "Windows desktop visual pipeline automation"
 authors = ["luberserker0v0"]
 license = "Apache-2.0"

@@ -1,8 +1,8 @@
 # Software Design Description — WatchDog
 
-- **Product:** watch-dog (`0.1.0`)
+- **Product:** watch-dog (`1.0.0`)
 - **Status:** observed implementation design; source-inspected, not system-certified
-- **Audit basis:** working tree inspected and automated checks run 2026-09-23; not a release baseline
+- **Audit basis:** version 1.0.0 release candidate, based on implementation commit `eeff6eb`; automated checks run through 2026-09-25
 - **Requirements source:** `docs/srs.md` (candidate `REQ-*` and inferred `STK-*` IDs)
 - **File contracts:** `docs/pipeline-meta.md`, `docs/pipeline-layout.md`, `schemas/`
 

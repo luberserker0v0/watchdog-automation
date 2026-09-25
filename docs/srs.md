@@ -1,11 +1,11 @@
 # Software Requirements Specification — WatchDog
 
-- **Product:** watch-dog (`0.1.0`)
+- **Product:** watch-dog (`1.0.0`)
 - **Format:** Requirements inventory informed by ISO/IEC/IEEE 29148:2011
 - **Language:** English
 - **Scope:** whole product (capture, pipeline engine, node testing, settings, target application)
 - **Status:** reverse-engineered draft; requirements and priorities need product approval
-- **Audit basis:** working tree inspected and automated checks run through 2026-09-23; not a release baseline
+- **Audit basis:** version 1.0.0 release candidate, based on implementation commit `eeff6eb`; automated checks run through 2026-09-25
 - **Companions:** SDD (observed design), pipeline format documentation and schemas
 
 This draft was reconstructed from the implementation. A `shall` statement is a
