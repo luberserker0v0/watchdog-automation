@@ -25,7 +25,11 @@ Production and tester are React/WebView frontends connected to a Rust/Tauri
 backend through commands, events, and the `watchdog:///frame` protocol. The
 sample target is a separate executable for tests and demos. The backend reads
 pixels through OS capture APIs and sends mouse/keyboard input through the OS.
-Pipeline files and preferences are local data.
+Pipeline files and preferences are local data. The Windows production installer
+places `watch-dog-target.exe` beside `watch-dog.exe` because the bundled
+`sample` and `patrol-redirection` pipelines declare it as their launch
+executable. The production frontend does not expose Node Tester, and the
+installer does not include `watch-dog-tester.exe`.
 
 `src-tauri/src/lib.rs` registers commands, the frame protocol, and shared
 state. `src/App.tsx` and `src/main-target.tsx` compose the frontend windows.

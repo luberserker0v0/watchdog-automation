@@ -54,6 +54,8 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Prevented Patrol reports from appearing after terminal pipeline status.
 - Preserved active elapsed time between recorded actions.
 - Improved multiline OCR candidate grouping and selection diagnostics.
+- Included the Sample Target companion in the production installer so bundled
+  example pipelines can launch their declared target.
 
 [Unreleased]: https://github.com/luberserker0v0/watchdog-automation/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/luberserker0v0/watchdog-automation/releases/tag/v1.0.0

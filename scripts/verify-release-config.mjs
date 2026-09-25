@@ -35,13 +35,25 @@ for (const [name, config] of [["production", production], ["Tester", tester], ["
   if (!config.bundle?.homepage) errors.push(`${name} bundle homepage is missing`);
 }
 
-for (const [name, config] of [["production", production], ["Tester", tester]]) {
+const resourceSources = (config) => {
   const resources = config.bundle?.resources ?? [];
-  if (!resources.includes("resources/**/*")) errors.push(`${name} bundle is missing application resources`);
+  return Array.isArray(resources) ? resources : Object.keys(resources);
+};
+
+for (const [name, config] of [["production", production], ["Tester", tester]]) {
+  const resources = resourceSources(config);
+  if (!resources.some((resource) => resource === "resources/" || resource === "resources/**/*")) {
+    errors.push(`${name} bundle is missing application resources`);
+  }
   if (!resources.includes("native/windows-x64")) errors.push(`${name} bundle is missing the native runtime resource directory`);
   if (!config.build?.beforeBuildCommand?.includes("install-onnxruntime.ps1")) {
     errors.push(`${name} build does not stage ONNX Runtime before bundling`);
   }
+}
+
+const productionResources = production.bundle?.resources;
+if (Array.isArray(productionResources) || productionResources?.["target/release/watch-dog-target.exe"] !== "watch-dog-target.exe") {
+  errors.push("Production bundle must install the Sample Target companion beside watch-dog.exe");
 }
 
 if (!runtimeInstaller.includes('Microsoft.ML.OnnxRuntime.DirectML')) {
@@ -51,8 +63,12 @@ if (!runtimeInstaller.includes('Microsoft.AI.DirectML')) {
   errors.push("Runtime installer does not declare the DirectML dependency package");
 }
 
-for (const script of ["build:all-targets", "build:all-targets:debug", "package:windows", "package:windows:debug"]) {
+for (const script of ["build:all-targets", "build:all-targets:debug", "build:installer", "package:windows", "package:windows:debug"]) {
   if (!packageJson.scripts?.[script]) errors.push(`package.json script '${script}' is missing`);
+}
+
+if (!packageJson.scripts?.["build:installer"]?.includes("build:target")) {
+  errors.push("build:installer must build the Sample Target before creating the production installer");
 }
 
 if (errors.length) {

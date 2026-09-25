@@ -60,7 +60,8 @@ the candidate notes.
 - [ ] Production, Tester, and Target executables have the intended identity.
 - [ ] ONNX Runtime native DLLs and application resources are included in the
       portable package and installer.
-- [ ] Installer contents include required OCR DLLs and resources.
+- [ ] Installer contents include required OCR DLLs, resources, and the Sample
+      Target companion required by bundled example pipelines.
 - [ ] A fresh Windows machine or clean VM can install and start the application.
 - [ ] OCR, capture, notifications, and bundled pipelines work after install.
 - [ ] Uninstall leaves user-authored resources intact or clearly documents the

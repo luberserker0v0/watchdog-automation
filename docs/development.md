@@ -156,10 +156,10 @@ Keep the DLLs installed by `scripts\install-onnxruntime.ps1` beside `watch-dog.e
 
 ## Windows installers
 
-Build production installers with:
+Build the production NSIS installer with its Sample Target companion:
 
 ```powershell
-npm run tauri -- build
+npm run build:installer
 ```
 
 Tauri writes installer bundles under:
@@ -169,7 +169,13 @@ src-tauri\target\release\bundle\msi\
 src-tauri\target\release\bundle\nsis\
 ```
 
-The production and Tester bundle configurations run the ONNX Runtime staging script before bundling. The OCR loader searches the packaged `native\windows-x64` resource directory as well as the executable directory. Verify the installed layout and OCR initialization on a clean Windows machine before distribution.
+The production bundle runs the ONNX Runtime staging script and installs
+`watch-dog-target.exe` beside `watch-dog.exe`. This companion is required by
+the bundled sample and Patrol-redirection pipelines. Node Tester remains a
+separate developer build and is not part of the production installer. The OCR
+loader searches the packaged `native\windows-x64` resource directory as well
+as the executable directory. Verify the installed layout and OCR initialization
+on a clean Windows machine before distribution.
 
 ## Portable Windows package
 

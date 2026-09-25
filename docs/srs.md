@@ -164,6 +164,7 @@ foregrounded, and driven, but never instrumented.
 | REQ-ENV-002 | The Windows build shall use the toolchain documented in `docs/development.md`; runtime OCR shall load its packaged ONNX dependencies. | E | review |
 | REQ-ENV-003 | The OCR subsystem shall fall back from DirectML GPU to CPU when GPU initialization fails. | E | test |
 | REQ-ENV-004 | Only one capture owner shall hold the streaming session at a time (`none` \| `manual` \| `pipeline+run_id`); a pipeline run shall block manual streaming while it owns capture. | E | test |
+| REQ-ENV-005 | The Windows production installer shall place the Sample Target companion beside the production executable so every bundled example pipeline can resolve its declared launch executable. Node Tester shall remain excluded from the production installer. | E | package test |
 
 ### 5.5 Assumptions and dependencies
 
@@ -524,7 +525,7 @@ require executable-level checks.
 | Interfaces | `REQ-IF-001`…`008` (files); `010`…`022` (IPC); `030`…`035` (OS/runtime) | §7.2 |
 | Usability / reliability / performance | `REQ-USE-001`…`004`; `REQ-REL-001`…`002`; `REQ-PERF-001`…`004` | §7.3–7.5 |
 | Supportability / constraints | `REQ-MNT-001`…`004`; `REQ-CON-001`…`007` | §7.6, §7.8 |
-| Environment / assumptions | `REQ-ENV-001`…`004`; `ASM-001`…`004` | §5.4–5.5; assumptions are not requirements |
+| Environment / assumptions | `REQ-ENV-001`…`005`; `ASM-001`…`004` | §5.4–5.5; assumptions are not requirements |
 
 ### Appendix B — Error-code glossary
 

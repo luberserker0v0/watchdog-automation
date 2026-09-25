@@ -161,10 +161,10 @@ in `docs\release-readiness.md` pass.
 
 ## 0.8 Build Windows installers
 
-Build the production Tauri bundles:
+Build the production NSIS installer and its Sample Target companion:
 
 ```powershell
-npm run tauri -- build
+npm run build:installer
 ```
 
 Tauri writes enabled bundles below:
@@ -174,9 +174,11 @@ src-tauri\target\release\bundle\msi\
 src-tauri\target\release\bundle\nsis\
 ```
 
-The production bundle stages application resources and native OCR DLLs before
-Tauri builds the installer. Test the installed application on a clean Windows
-machine before distribution.
+The production bundle stages application resources, native OCR DLLs, and
+`watch-dog-target.exe` before Tauri builds the installer. The companion makes
+the bundled `sample` and `patrol-redirection` pipelines runnable. Node Tester
+remains a separate developer executable and is not installed. Test the
+installed application on a clean Windows machine before distribution.
 
 ## 0.9 Verify the build
 
