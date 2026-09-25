@@ -41,7 +41,7 @@
     "resources": {
       "resources/": "resources/",
       "native/windows-x64": "native/windows-x64",
-      "target/release/watch-dog-target.exe": "watch-dog-target.exe"
+      "companions/windows-x64/": ""
     }
   }
 }

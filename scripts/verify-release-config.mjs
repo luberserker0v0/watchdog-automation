@@ -52,7 +52,7 @@ for (const [name, config] of [["production", production], ["Tester", tester]]) {
 }
 
 const productionResources = production.bundle?.resources;
-if (Array.isArray(productionResources) || productionResources?.["target/release/watch-dog-target.exe"] !== "watch-dog-target.exe") {
+if (Array.isArray(productionResources) || productionResources?.["companions/windows-x64/"] !== "") {
   errors.push("Production bundle must install the Sample Target companion beside watch-dog.exe");
 }
 
@@ -69,6 +69,9 @@ for (const script of ["build:all-targets", "build:all-targets:debug", "build:ins
 
 if (!packageJson.scripts?.["build:installer"]?.includes("build:target")) {
   errors.push("build:installer must build the Sample Target before creating the production installer");
+}
+if (!packageJson.scripts?.["build:installer"]?.includes("stage-sample-target.ps1")) {
+  errors.push("build:installer must stage the Sample Target into the production bundle resources");
 }
 
 if (errors.length) {
