@@ -28,8 +28,8 @@ applications after acceptance.
 ## 12.3 Trust and recovery
 
 Tauri updater signatures verify that the artifact belongs to WatchDog's update
-key. Authenticode separately verifies its Windows publisher. A release needs
-both. If the updater private key is lost, installed copies cannot accept a new
-key through the trusted update channel. Release operators must keep an
-encrypted backup before publishing the first updater-enabled version. See
-[Updater signing and recovery](../updater-signing.md).
+key and are required. Authenticode may separately verify its Windows publisher,
+but is optional for updater operation. If the updater private key is lost,
+installed copies cannot accept a new key through the trusted update channel.
+Release operators must keep an encrypted backup before publishing the first
+updater-enabled version. See [Updater signing and recovery](../updater-signing.md).

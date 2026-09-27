@@ -278,8 +278,9 @@ Installation waits for idle pipeline and recorder state, then blocks new work,
 stops manual capture, downloads, verifies, and launches passive NSIS.
 
 Ordinary local and verification builds remain unsigned and do not create
-updater artifacts. The signed workflow supplies an Authenticode certificate
-and a separate password-protected Tauri updater key. A matching `vX.Y.Z` tag
+updater artifacts. The release workflow requires a password-protected Tauri
+updater key and optionally uses Authenticode when its complete certificate set
+is configured. A matching `vX.Y.Z` tag
 publishes `latest.json`; manual dispatch does not publish. See
 [`docs/updater-signing.md`](updater-signing.md) for key creation, secrets, and
 recovery requirements.

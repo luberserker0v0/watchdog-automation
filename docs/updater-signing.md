@@ -31,7 +31,8 @@ manifest's artifact with its already embedded public key.
 ## Publish
 
 Create a changelog section and make all version files agree. Push a matching
-`vX.Y.Z` tag. The signed Windows workflow verifies Authenticode and the Tauri
-signature before it publishes the installer, `.sig`, `latest.json`, portable
-ZIP, and checksums. Manual workflow dispatch builds a signed candidate but does
-not update GitHub Releases.
+`vX.Y.Z` tag. The Windows workflow always verifies the Tauri signature and
+also verifies Authenticode when its complete optional certificate configuration
+is present. It then publishes the installer, `.sig`, `latest.json`, portable
+ZIP, and checksums. Manual workflow dispatch builds a candidate but does not
+update GitHub Releases.

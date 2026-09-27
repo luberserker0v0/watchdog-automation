@@ -77,18 +77,17 @@ the candidate notes.
 - [ ] Artifact filenames contain version and architecture.
 - [ ] SHA-256 checksums are generated for distributed artifacts.
 - [ ] Ordinary verification builds remain unsigned and require no certificate.
-- [ ] The dedicated signed workflow reads the PFX/password only from GitHub
-      secrets and the timestamp URL from a repository variable.
-- [ ] `Get-AuthenticodeSignature` reports `Valid` for production, Tester,
-      Sample Target, the staged installer companion, and the NSIS installer
-      before archives and checksums are created.
-- [ ] The temporary PFX and imported CurrentUser certificate are removed after
-      both successful and failed signing runs.
+- [ ] If Authenticode is enabled, its PFX/password come only from GitHub
+      secrets, its timestamp URL comes from a repository variable, and all
+      three settings are present together.
+- [ ] If Authenticode is enabled, `Get-AuthenticodeSignature` reports `Valid`
+      for production, Tester, Sample Target, staged companion, and NSIS.
+- [ ] Optional Authenticode temporary material is removed after success or failure.
 - [ ] The password-protected updater private key has an encrypted, recoverable
       backup and the matching public key is embedded in production config.
 - [ ] `TAURI_SIGNING_PRIVATE_KEY` and
       `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are protected GitHub secrets.
-- [ ] Minisign verifies the final Authenticode-signed NSIS against its `.sig`.
+- [ ] Minisign verifies the final NSIS against its Tauri `.sig`, whether or not Authenticode is enabled.
 - [ ] The `v*` tag equals every version file and has a matching changelog section.
 - [ ] The GitHub Release contains NSIS, `.sig`, `latest.json`, portable ZIP, and checksums; manifest URL, signature, UTC date, and notes are correct.
 

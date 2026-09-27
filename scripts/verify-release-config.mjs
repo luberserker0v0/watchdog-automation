@@ -118,15 +118,7 @@ for (const required of [
 ]) {
   if (!signingScript.includes(required)) errors.push(`Signed build script is missing '${required}'`);
 }
-if (!signingWorkflow.includes("secrets.WINDOWS_CERTIFICATE_BASE64")) {
-  errors.push("Signed workflow must read the certificate from a GitHub secret");
-}
-if (!signingWorkflow.includes("secrets.WINDOWS_CERTIFICATE_PASSWORD")) {
-  errors.push("Signed workflow must read the certificate password from a GitHub secret");
-}
-if (!signingWorkflow.includes("vars.WINDOWS_TIMESTAMP_URL")) {
-  errors.push("Signed workflow must read the timestamp URL from a repository variable");
-}
+if (!signingScript.includes("Authenticode is optional")) errors.push("Signed build must permit updater-only signing when Authenticode is not configured");
 if (!signingWorkflow.includes('tags:') || !signingWorkflow.includes('"v*"')) errors.push("Signed workflow must publish from v* tags");
 if (!signingWorkflow.includes("gh release create")) errors.push("Signed workflow must publish GitHub Release assets");
 if (!signingWorkflow.includes("secrets.TAURI_SIGNING_PRIVATE_KEY")) errors.push("Signed workflow must read the updater private key secret");
@@ -145,4 +137,4 @@ if (errors.length) {
 
 console.log(`Release configuration valid for WatchDog ${packageJson.version}.`);
 console.log("Production and Tester bundles stage application resources and ONNX Runtime DLLs.");
-console.log("Ordinary builds remain unsigned; the dedicated workflow verifies Authenticode artifacts.");
+console.log("The release workflow requires Tauri updater signatures and applies Authenticode when its three settings are configured.");

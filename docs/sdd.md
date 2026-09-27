@@ -475,8 +475,9 @@ executable-level verification.
 - Store is persistent preference storage, not a secret vault. The Patrol API
   key remains memory-only, and Windows release identity uses Authenticode with
   a trusted certificate rather than Stronghold.
-- Tauri updater signatures establish artifact integrity and Authenticode
-  establishes Windows publisher identity. Release publishing requires both.
+- Tauri updater signatures establish artifact integrity and are mandatory for
+  updater publishing. Authenticode separately establishes Windows publisher
+  identity and is applied only when its complete certificate settings exist.
   The updater public key is embedded; its password-protected private key exists
   only outside the repository and in protected release secrets.
 - Runtime constructs the plugin registry; isolated tests reuse the same

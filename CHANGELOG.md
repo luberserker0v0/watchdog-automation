@@ -16,8 +16,8 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   readiness.
 - Tauri Store, FS, and Log plugin integration with scoped Recorder exports and
   application-directory storage.
-- A signing-ready Windows workflow that verifies Authenticode signatures before
-  packaging release artifacts.
+- A signing-ready Windows workflow that requires Tauri update signatures and
+  optionally applies and verifies Authenticode when a certificate is configured.
 - Production update checks, a localized update banner and Settings card, and
   guarded passive installation through the official Tauri Updater.
 
