@@ -33,6 +33,27 @@ for (const [source, version] of versions) {
 if (packageJson.license !== "Apache-2.0") errors.push("package.json must declare Apache-2.0");
 if (cargoField("license") !== "Apache-2.0") errors.push("Cargo.toml must declare Apache-2.0");
 
+const pairedTauriPlugins = new Map([
+  ["fs", "tauri-plugin-fs"],
+  ["log", "tauri-plugin-log"],
+  ["process", "tauri-plugin-process"],
+  ["store", "tauri-plugin-store"],
+  ["updater", "tauri-plugin-updater"],
+]);
+for (const [frontendName, rustName] of pairedTauriPlugins) {
+  const frontendVersion = packageJson.dependencies?.[`@tauri-apps/plugin-${frontendName}`];
+  const rustVersion = cargoField(rustName);
+  if (!/^\d+\.\d+\.\d+$/.test(frontendVersion ?? "")) {
+    errors.push(`@tauri-apps/plugin-${frontendName} must use an exact version`);
+  }
+  if (!/^=\d+\.\d+\.\d+$/.test(rustVersion ?? "")) {
+    errors.push(`${rustName} must use an exact version`);
+  }
+  if (frontendVersion !== rustVersion?.slice(1)) {
+    errors.push(`@tauri-apps/plugin-${frontendName} ${frontendVersion ?? "missing"} does not match ${rustName} ${rustVersion ?? "missing"}`);
+  }
+}
+
 for (const [name, config] of [["production", production], ["Tester", tester], ["Target", target]]) {
   if (config.bundle?.license !== "Apache-2.0") errors.push(`${name} bundle must declare Apache-2.0`);
   if (config.bundle?.licenseFile !== "../LICENSE") errors.push(`${name} bundle must include ../LICENSE`);

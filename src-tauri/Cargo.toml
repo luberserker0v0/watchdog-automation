@@ -52,11 +52,11 @@ tokio = { version = "1", features = ["full"] }
 thiserror = "1"
 paddleocr_rs_onnx = { path = "paddleocr_rs_onnx_patch", features = ["directml"] }
 tauri-plugin-notification = "2"
-tauri-plugin-store = "2"
-tauri-plugin-fs = "2"
-tauri-plugin-log = "2"
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
+tauri-plugin-store = "=2.5.0"
+tauri-plugin-fs = "=2.6.0"
+tauri-plugin-log = "=2.10.0"
+tauri-plugin-updater = "=2.13.0"
+tauri-plugin-process = "=2.4.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-capture = "2.0.1"
