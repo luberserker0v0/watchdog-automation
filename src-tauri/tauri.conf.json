@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "watch-dog",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "com.berserker.watch-dog",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,15 +12,45 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "watch-dog",
         "width": 1200,
         "height": 700,
         "minWidth": 900,
-        "minHeight": 500
+        "minHeight": 500,
+        "visible": false
+      },
+      {
+        "label": "splash",
+        "title": "Starting WatchDog",
+        "url": "/splash.html",
+        "width": 460,
+        "height": 290,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        "default",
+        "splash",
+        "preview"
+      ]
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/luberserker0v0/watchdog-automation/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVDQUYyODk4RTA5ODg3RTIKUldUaWg1amdtQ2l2N0VwLzdna09kU25RaHI5aFFWVkVnT2x6cTViWXcyRTg4cEoraHN0TzBaRFEK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "bundle": {

@@ -1,5 +1,7 @@
 import { create } from "zustand";
+import { appLogger } from "../../observability/services/appLogger";
 import { persist } from "zustand/middleware";
+import { watchdogJsonStorage } from "../../shell/services/persistence";
 import { listen } from "@tauri-apps/api/event";
 import {
   startStream,
@@ -172,7 +174,7 @@ export const useStreamStore = create<StreamState>()(
           }
 
         } catch (e) {
-          console.error("Stream start failed:", e);
+          appLogger.error("Stream start failed:", e);
         }
       },
 
@@ -195,7 +197,7 @@ export const useStreamStore = create<StreamState>()(
           }
           useCaptureFrameStore.getState().clearFrame(usePreferencesStore.getState().mode);
         } catch (e) {
-          console.error("Stream stop failed:", e);
+          appLogger.error("Stream stop failed:", e);
         }
       },
 
@@ -264,12 +266,13 @@ export const useStreamStore = create<StreamState>()(
             useCaptureFrameStore.getState().clearFrame("window");
           }
         } catch (e) {
-          console.error("Stream status failed:", e);
+          appLogger.error("Stream status failed:", e);
         }
       },
     }),
     {
       name: "watchdog:stream",
+      storage: watchdogJsonStorage,
       partialize: (state) => ({
         fps: state.fps,
       }),

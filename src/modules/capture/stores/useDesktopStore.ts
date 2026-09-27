@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { appLogger } from "../../observability/services/appLogger";
 import type { DesktopInfo } from "../../../api/desktop";
 import { getDesktops } from "../../../api/desktop";
 
@@ -25,7 +26,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
         isLoading: false,
       });
     } catch (e) {
-      console.error("[DesktopFilter] failed to fetch desktops:", e);
+      appLogger.error("[DesktopFilter] failed to fetch desktops:", e);
       set({ isLoading: false });
     }
   },

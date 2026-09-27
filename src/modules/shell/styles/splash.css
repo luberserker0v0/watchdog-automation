@@ -1,0 +1,72 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e7edf7;
+  background: #07111f;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+
+.splash-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(39, 117, 255, .2), transparent 42%),
+    linear-gradient(145deg, #07111f 0%, #0c192b 58%, #071321 100%);
+}
+
+.splash-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: .12;
+  background-image: linear-gradient(rgba(255,255,255,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.16) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.splash-glow { position: absolute; width: 180px; height: 180px; border-radius: 50%; filter: blur(55px); opacity: .26; }
+.splash-glow-one { top: -70px; right: -30px; background: #2475ff; }
+.splash-glow-two { bottom: -105px; left: 15px; background: #18d5b2; }
+
+.splash-card {
+  position: relative;
+  z-index: 1;
+  width: min(386px, calc(100% - 56px));
+}
+
+.splash-brand-row { display: flex; align-items: center; gap: 16px; margin-bottom: 34px; }
+.splash-brand-row h1 { margin: 0 0 3px; font-size: 28px; line-height: 1; letter-spacing: -.03em; font-weight: 720; }
+.splash-brand-row p { margin: 0; color: #8fa2bb; font-size: 12px; letter-spacing: .015em; }
+
+.splash-mark {
+  position: relative;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+  background: linear-gradient(145deg, #2c7dff, #1652bd);
+  box-shadow: 0 14px 36px rgba(20, 92, 213, .35), inset 0 1px 0 rgba(255,255,255,.25);
+}
+.splash-mark::before, .splash-mark::after { content: ""; position: absolute; top: 12px; width: 15px; height: 13px; background: #dfeaff; border-radius: 70% 30% 60% 40%; }
+.splash-mark::before { left: 10px; transform: rotate(21deg); }
+.splash-mark::after { right: 10px; transform: scaleX(-1) rotate(21deg); }
+.splash-eye { position: absolute; left: 13px; right: 13px; top: 22px; height: 19px; border: 3px solid #f5f8ff; border-radius: 50% 50% 48% 48%; }
+.splash-eye::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; transform: translate(-50%, -50%); background: #f5f8ff; border-radius: 50%; }
+.splash-pulse { position: absolute; right: -4px; bottom: -4px; width: 15px; height: 15px; border: 3px solid #07111f; background: #28d6ad; border-radius: 50%; box-shadow: 0 0 0 0 rgba(40,214,173,.5); animation: splash-pulse 1.6s infinite; }
+
+.splash-status { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 10px; color: #bdcadd; font-size: 12px; }
+.splash-status strong { color: #f2f6fc; font-size: 12px; font-variant-numeric: tabular-nums; }
+.splash-progress-track { width: 100%; height: 7px; overflow: hidden; border: 1px solid rgba(255,255,255,.07); border-radius: 999px; background: rgba(0,0,0,.3); box-shadow: inset 0 1px 3px rgba(0,0,0,.4); }
+.splash-progress-fill { position: relative; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2d7fff, #32d7b0); transition: width 260ms cubic-bezier(.2,.8,.2,1); box-shadow: 0 0 16px rgba(45,127,255,.55); }
+.splash-progress-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); transform: translateX(-100%); animation: splash-shimmer 1.5s infinite; }
+.splash-detail { min-height: 18px; margin-top: 9px; color: #71869f; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@keyframes splash-shimmer { to { transform: translateX(100%); } }
+@keyframes splash-pulse { 65% { box-shadow: 0 0 0 9px rgba(40,214,173,0); } 100% { box-shadow: 0 0 0 0 rgba(40,214,173,0); } }
+@media (prefers-reduced-motion: reduce) { .splash-pulse, .splash-progress-fill::after { animation: none; } .splash-progress-fill { transition: none; } }

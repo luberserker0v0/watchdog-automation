@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use tauri::{Manager, Runtime};
+use tauri::Runtime;
 use tauri_plugin_opener::OpenerExt;
 
 #[derive(Clone, serde::Serialize)]
@@ -11,19 +11,16 @@ pub struct RelatedFolder {
 }
 
 fn known_folders<R: Runtime>(
-    app: &tauri::AppHandle<R>,
+    _app: &tauri::AppHandle<R>,
 ) -> Vec<(&'static str, &'static str, &'static str, PathBuf)> {
     let visions = super::paths::visions_dir();
     let resources = super::paths::user_resources_dir();
-    let downloads = app
-        .path()
-        .download_dir()
-        .unwrap_or_else(|_| super::paths::user_data_dir());
+    let downloads = super::paths::downloads_dir();
     vec![
         (
             "data",
-            ".watch_dog",
-            "Application data root",
+            "AppLocalData",
+            "Application local-data root",
             super::paths::user_data_dir(),
         ),
         (

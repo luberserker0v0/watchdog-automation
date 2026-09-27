@@ -47,10 +47,10 @@ If writing fails, WatchDog restores the previous in-memory layout and displays t
 
 ## Bundled and custom pipelines
 
-Bundled pipelines under `src-tauri/resources/pipelines/` are read-only at runtime. To customize and share one, copy its complete directory to:
+Bundled pipelines under `src-tauri/resources/pipelines/` are read-only at runtime. To customize and share one, copy its complete directory to the Tauri AppLocalData resource root shown in **Settings → Related Folders**:
 
 ```text
-%USERPROFILE%\.watch_dog\resources\pipelines\
+AppLocalData/resources/pipelines/
 ```
 
 Custom pipelines in that directory may create and update their adjacent layout file.

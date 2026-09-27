@@ -7,6 +7,7 @@ import { ensureNotificationPermission, notifyTask } from "../../notifications/se
 import { useRecorderStore } from "../../recorder/stores/useRecorderStore";
 import ShortcutCaptureInput from "../components/ShortcutCaptureInput";
 import RelatedDetailsSection from "../components/RelatedDetailsSection";
+import UpdateSettingsSection from "../../updater/components/UpdateSettingsSection";
 import "../styles/settings.css";
 
 const FPS_OPTIONS = [1, 5, 10, 15, 30];
@@ -17,7 +18,11 @@ const ENGINE_OPTIONS: { value: CaptureEngine; labelKey: string }[] = [
   { value: "gdi", labelKey: "settings.engineGdi" },
 ];
 
-export default function SettingsView() {
+interface SettingsViewProps {
+  showUpdater?: boolean;
+}
+
+export default function SettingsView({ showUpdater = true }: SettingsViewProps) {
   const { t, i18n } = useTranslation();
   const saveToDisk = usePreferencesStore((s) => s.saveToDisk);
   const setSaveToDisk = usePreferencesStore((s) => s.setSaveToDisk);
@@ -81,6 +86,7 @@ export default function SettingsView() {
         <h2>{t("settings.title")}</h2>
       </div>
       <div className="settings-body">
+        {showUpdater && <UpdateSettingsSection />}
         <div className="settings-section">
           <h3 className="settings-section-title">{t("language.title")}</h3>
           <div className="settings-section-body">
@@ -186,7 +192,7 @@ export default function SettingsView() {
               <div className="settings-item">
                 <label className="settings-item-label">{t("settings.path")}</label>
                 <span className="settings-item-text">
-                  %USERPROFILE%/.watch_dog/visions/
+                  AppCache/visions/
                 </span>
               </div>
             )}
@@ -415,7 +421,7 @@ export default function SettingsView() {
               <div className="settings-item">
                 <label className="settings-item-label">{t("settings.path")}</label>
                 <span className="settings-item-text">
-                  %USERPROFILE%/.watch_dog/visions/debug/
+                  AppCache/visions/debug/
                 </span>
               </div>
             )}

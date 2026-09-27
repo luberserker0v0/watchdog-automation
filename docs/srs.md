@@ -1,11 +1,11 @@
 # Software Requirements Specification — WatchDog
 
-- **Product:** watch-dog (`1.0.0`)
+- **Product:** watch-dog (`1.1.0`)
 - **Format:** Requirements inventory informed by ISO/IEC/IEEE 29148:2011
 - **Language:** English
 - **Scope:** whole product (capture, pipeline engine, node testing, settings, target application)
 - **Status:** reverse-engineered draft; requirements and priorities need product approval
-- **Audit basis:** version 1.0.0 release candidate, based on implementation commit `eeff6eb`; automated checks run through 2026-09-25
+- **Audit basis:** post-1.0 application-directory migration working tree; automated checks run through 2026-09-27
 - **Companions:** SDD (observed design), pipeline format documentation and schemas
 
 This draft was reconstructed from the implementation. A `shall` statement is a
@@ -143,6 +143,8 @@ flowchart LR
   and cleanup, plus optional Action Recorder start/stop confirmation.
 - **Action Recorder:** Windows input observation bound to one selected capture
   target, with global controls, a persistent status bar, and reviewable output.
+- **Updater:** production-only stable update checks against GitHub Releases,
+  explicit idle-state installation, progress, and verified restart.
 
 ### 5.3 Users
 
@@ -195,6 +197,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | STK-010 | As an operator, capture-affecting settings always open as off, so that runs never surprise-write to disk. | E | REQ-SET-002 |
 | STK-011 | As an operator, I receive an optional native notification after a pipeline has fully completed, so that I do not need to watch the application continuously. | D | REQ-NOT-001, REQ-NOT-002 |
 | STK-012 | As a pipeline author, I can capture real input as a safe draft, so that repetitive action coordinates and gestures do not need to be transcribed manually. | D | REQ-RCD-001…REQ-RCD-009 |
+| STK-013 | As an operator, I can see and install a trusted WatchDog update without interrupting active automation. | D | REQ-UPD-001…REQ-UPD-006 |
 
 ---
 
@@ -317,19 +320,32 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-OBS-004 | Log entries shall record per-step outcomes and concise independent Patrol results. The start and recovery entries shall visibly tag Patrol recovery as `HINT ONLY` or `REDIRECT`; hint entries shall state that routing is unchanged, while redirect entries shall report acceptance or rejection. Action results shall use readable transition and state labels; capture identity, attempt ID, confidence, and exact VLM reasoning shall remain available in the Patrol Chat Room. Phase timings shall expand only in detailed mode. | D | review |
 | REQ-OBS-005 | The UI shall prefer live events and poll at low frequency as backup. | E | review |
 | REQ-OBS-006 | A read-only Patrol Chat Room shall show chronological Patrol operations on the right and VLM replies on the left, grouped by sample and filterable by run. Each message shall show a formatted summary with details closed by default; expanded details shall preserve task identity, exact prompt and response text, validation retries, candidate scores, action evidence, capture identity, location handoff or unresolved-location diagnostics, and on-demand task-relevant previews. Session history shall be bounded and clearing it shall also clear cached previews. | E | test |
+| REQ-OBS-007 | Production and Tester startup shall display a splash window for at least 1.5 seconds while keeping the main window hidden. A determinate progress bar shall report real initialization stages for Tauri storage and legacy-data migration, retention cleanup, desktop services, pipeline schemas and resources, the persisted OCR device, and frontend Store hydration/readiness. The main window shall appear only after the minimum display time, backend initialization, and its hydrated first UI render are all satisfied; initialization warnings shall remain non-blocking, and a bounded fallback shall reveal the main window if splash coordination fails. Screen/window enumeration, Patrol run evidence, and VLM connections shall remain lazy because they can become stale or are run-specific. | E | test |
 
 #### 7.1.8 Settings
 
 | ID | Requirement | Pty | Verify |
 |----|-------------|-----|--------|
-| REQ-SET-001 | The system shall persist mode, FPS display, capture engine/area, timing granularity, OCR device, panel visibility, and preview size across window opens. | E | test |
+| REQ-SET-001 | The system shall persist mode, FPS display, capture engine/area, timing granularity, OCR device, panel visibility, preview size, language, and non-secret tool preferences in the Tauri Store across window opens. An upgraded installation shall import existing `watchdog:*` browser-storage values once and delete each legacy value only after the Store save succeeds. | E | test |
 | REQ-SET-002 | Save-to-disk and save-debug-images shall be session-only and always open as off, with an on-screen hint stating so. | E | test |
 | REQ-SET-003 | The OCR device shall switch between CPU and DirectML at runtime with GPU-to-CPU fallback (see REQ-ENV-003). | E | test |
 | REQ-SET-004 | Frame-cadence selection shall be disabled while streaming or under the event-driven engine. | D | test |
 | REQ-SET-005 | Timing granularity shall select off, summary, or detailed execution logging. | E | test |
-| REQ-SET-006 | Settings shall exclusively control engine patrol enablement, cycle seconds (default 20), K hops, state-match threshold, action-effect threshold, redirect threshold, minimum margin, recovery policy (`hint_only` default or `redirection_only`), maximum redirects per run (default 1), OpenAI-compatible chat-completions URL, vision model name, and session-only API key. Each threshold defaults to 0.85; persisted installations missing either new threshold shall copy the prior state-match threshold. Enablement and non-secret options shall persist; the key shall not be persisted in browser storage. | E | test |
+| REQ-SET-006 | Settings shall exclusively control engine patrol enablement, cycle seconds (default 20), K hops, state-match threshold, action-effect threshold, redirect threshold, minimum margin, recovery policy (`hint_only` default or `redirection_only`), maximum redirects per run (default 1), OpenAI-compatible chat-completions URL, vision model name, and session-only API key. Each threshold defaults to 0.85; persisted installations missing either new threshold shall copy the prior state-match threshold. Enablement and non-secret options shall persist; the key shall remain only in memory and shall not enter Store, browser storage, logs, or evidence. | E | test |
 | REQ-SET-007 | Settings shall persist Task Notifier enablement, Action Recorder notification enablement, distinct Start/Stop and Pause/Resume shortcuts, and typed-text capture enablement. Typed-text capture and both notification options shall default off. | E | test |
 | REQ-SET-008 | The GUI shall support English and Traditional Chinese through one shared localization service. Settings shall switch language without restarting, persist the selection across application windows, update the document language, and fall back to English for unavailable translations. | E | test |
+| REQ-SET-009 | Settings shall persist automatic update checking, default it on, and retain a manual check regardless of the automatic setting. Update status, versions, plain-text notes, progress, errors, and actions shall be localized in English and Traditional Chinese. | D | test |
+
+#### 7.1.10 Application updates
+
+| ID | Requirement | Pty | Verify |
+|----|-------------|-----|--------|
+| REQ-UPD-001 | The production application shall check the stable GitHub Releases `latest.json` feed once after startup completion when automatic checks are enabled, and on explicit request. Network and manifest errors shall remain in Settings and AppLog without opening an error banner. | D | test |
+| REQ-UPD-002 | An available update shall produce a persistent workspace banner and a Settings card containing current and offered versions, publication date, plain-text release notes, and download progress. Release HTML shall never be rendered. | D | test |
+| REQ-UPD-003 | Installation shall require explicit operator confirmation and shall be disabled while a pipeline is running or paused or Action Recorder is recording or paused. Once installation starts, new pipeline and recorder work shall be rejected until install failure releases the guard or the application exits. | E | test |
+| REQ-UPD-004 | Before installation exit, the application shall stop a manual capture stream. Failed download or installation shall preserve the available update for retry and release the runtime start guard. | E | test |
+| REQ-UPD-005 | Production shall use the Tauri Updater and Process plugins with passive Windows installation. Tester, Splash, Preview, and Sample Target shall receive no updater or process capability. A portable production build may transition to the normal NSIS installation. | E | test |
+| REQ-UPD-006 | Stable updates shall reject prereleases, downgrades, malformed manifests, and artifacts without a valid Tauri updater signature rooted in the embedded public key. | E | package test |
 
 #### 7.1.9 Task notification and action recording
 
@@ -345,7 +361,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-RCD-005 | Input marked by Windows as injected shall be discarded so WatchDog-generated automation does not enter a recording. | E | test |
 | REQ-RCD-006 | Printable text shall be masked by default. When explicit typed-text capture is enabled, the UI shall warn that recorded text requires review and may contain sensitive data. | E | test |
 | REQ-RCD-007 | The application shall show a persistent recording bar across views with state, target, elapsed time, action count, pause/resume, and stop controls. | E | test |
-| REQ-RCD-008 | The Action Recorder view shall present formatted draft actions, warnings, active relative timing, derived inter-action waits, removal, copy, export, and clear controls. Pause duration shall not enter recorded timing. Copied pipeline actions and exported `pipeline_actions` shall contain explicit Wait actions for positive recorded gaps. A draft shall not modify or execute a pipeline automatically. | E | test |
+| REQ-RCD-008 | The Action Recorder view shall present formatted draft actions, warnings, active relative timing, derived inter-action waits, removal, copy, export, and clear controls. Pause duration shall not enter recorded timing. Copied pipeline actions and exported `pipeline_actions` shall contain explicit Wait actions for positive recorded gaps. Native export shall use the Tauri FS plugin with a Downloads-only `watchdog-action-recording-*.json` scope and shall show write failures. A draft shall not modify or execute a pipeline automatically. | E | test |
 | REQ-RCD-009 | macOS and Linux shall retain the recorder command boundary but return a structured unsupported result until a platform input observer is implemented. | D | review |
 
 ### 7.2 Interface requirements
@@ -361,7 +377,8 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-IF-005 | The system shall consume OCR models (`det.onnx`, `rec.onnx`, `keys.txt`) from the resources models path. | E | review |
 | REQ-IF-006 | The system shall produce annotated debug images per recognition attempt under the visions debug path when enabled. | E | test |
 | REQ-IF-007 | The system shall produce encoded image files for explicit capture / region-capture commands. | D | test |
-| REQ-IF-008 | The system shall persist application logs to the logs directory. | D | review |
+| REQ-IF-008 | The system shall persist application logs to Tauri AppLog. | D | review |
+| REQ-IF-009 | Writable application paths shall resolve through Tauri directories: Store in AppData, user resources in AppLocalData, generated visions in AppCache, logs in AppLog, and recorder exports in Downloads. Bundled resources shall resolve through the Resource directory. | E | test |
 
 #### 7.2.2 IPC surface
 
@@ -373,6 +390,7 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | REQ-IF-013 | The system shall expose desktop commands: `get_desktops`, `get_current_desktop`. | E | test |
 | REQ-IF-014 | The system shall expose the target command `open_target_window`. | E | test |
 | REQ-IF-015 | The system shall expose pipeline-editor commands: `load_pipeline`, source-preserving `save_pipeline(path, mermaid, meta)`, `save_pipeline_layout`, `validate_pipeline`, `list_pipelines`. | E | test |
+| REQ-IF-023 | The system shall expose startup commands `get_startup_progress`, `initialize_app`, and `mark_main_window_ready`, and emit typed `startup-progress` events to the splash window. | E | test |
 | REQ-IF-016 | The system shall expose pipeline-runner commands: `start_pipeline`, `stop_pipeline`, `pause_pipeline`, `get_pipeline_status`, `list_running_pipelines`, `test_action`, `test_recognition`, `set_recognition_device`. | E | test |
 | REQ-IF-017 | The system shall expose node-test commands: `list_node_metas`, `open_window`, `test_node`. | E | test |
 | REQ-IF-018 | The system shall emit `pipeline-status` events carrying revision-ordered run snapshots with an optional appended step, separate `patrol-report` and `patrol-recovery` events, and structured `patrol-chat-event` messages for operations and VLM exchanges. Recovery evidence and events shall optionally carry location node, confidence, source, stability, and uncertainty without breaking existing fields. Backend chat kinds shall use a serialized enum covering triggers, captures, searches, requests, responses, retries, reports, reference operations, action evidence, location handoff, unresolved location, recovery operations, and errors; the frontend union shall cover every enum value. The chat event shall not contain the API key or image base64 payloads. | E | test |
@@ -422,17 +440,20 @@ Stakeholder needs; each traces to the system requirements that satisfy it.
 | ID | Requirement | Pty | Verify |
 |----|-------------|-----|--------|
 | REQ-MNT-001 | New recognizers and actions shall register through the plugin registry without engine changes. | E | review |
-| REQ-MNT-002 | On main-app startup, retain at most 30 dated application log files, including the current open log. Unrelated files in the logs directory shall be left untouched. | E | test |
+| REQ-MNT-002 | The Tauri Log plugin shall write local-time Info-level records to stdout and dated AppLog files, rotate each file at 10 MiB, and retain at most 30 WatchDog-owned active or rotated log files at startup. Unrelated files in AppLog shall be left untouched. | E | test |
 | REQ-MNT-003 | On main-app startup, clear generated contents of the visions directory when seven days have elapsed since the last successful cleanup, or on the first startup without a cleanup marker. Cleanup shall not touch user resources or follow directory links outside the visions root; failures shall be logged without blocking startup. | E | test |
 | REQ-MNT-004 | Production code shall be organized into cohesive responsibility modules with documented dependency direction and narrow facades. Feature implementation details shall default to private or capability-local visibility. Production files should remain near 500 lines; larger executable files require a documented refactoring follow-up, while cohesive static data may be exempt. | D | review |
 
 ### 7.7 Security
 
-Security requirements have not yet been elicited. The application can launch
-processes, write local files, capture screens, and send global input, so the
-current absence of a security section must not be read as a safety finding.
-The path and foreground boundaries in §7.8 are candidate safeguards requiring
-review.
+| ID | Requirement | Pty | Verify |
+|----|-------------|-----|--------|
+| REQ-SEC-001 | Webview filesystem access shall default-deny. Main and Tester may write only timestamped Action Recorder JSON files below Downloads; Splash, Preview, and Sample Target shall receive no FS write permission. | E | test |
+| REQ-SEC-002 | Legacy-data migration shall reject symbolic links, never overwrite destinations, remove a source only after a verified temporary copy is finalized, and retain conflicts or failures for recovery. | E | test |
+| REQ-SEC-003 | Release signing credentials and PFX contents shall enter the build only through protected environment secrets, shall be removed after signing, and shall never be stored in the repository or packaged artifacts. | E | review |
+| REQ-SEC-004 | Store shall hold non-secret preferences only. Store persistence shall not be described or used as secret storage. | E | test |
+| REQ-SEC-005 | Updater private keys and passwords shall enter release jobs only through protected secrets and shall be removed with other temporary signing material. Losing the private key shall be treated as loss of the existing installation trust chain. | E | review |
+| REQ-SEC-006 | Windows releases shall independently pass Tauri updater signature verification for update integrity and Authenticode verification for publisher identity. Neither mechanism shall substitute for the other. | E | package test |
 
 ### 7.8 Design constraints
 
@@ -441,7 +462,7 @@ review.
 | REQ-CON-001 | For a window target, the engine shall attempt to activate the target before each action and send no input unless that window is then verified foreground; activation failure shall report `target_not_foreground`. | E | test |
 | REQ-CON-002 | Action coordinates outside the encoded capture frame shall fail rather than clamp. | E | test |
 | REQ-CON-003 | Graph layout (`.layout.json`) shall never affect execution semantics. | E | review |
-| REQ-CON-004 | Pipeline saves shall be restricted to the canonical `%USERPROFILE%\.watch_dog\resources\pipelines\` root; bundled pipelines and paths escaping the root shall remain read-only. | E | test |
+| REQ-CON-004 | Pipeline saves shall be restricted to the canonical Tauri AppLocalData `resources/pipelines/` root; bundled pipelines and paths escaping the root shall remain read-only. | E | test |
 | REQ-CON-005 | A pipeline shall declare exactly one `Entry`-kind node; zero shall fail with `missing_entry_node`, more than one with `invalid_entry_count`. | E | test |
 | REQ-CON-006 | A node shall declare at most one error edge. | E | test |
 | REQ-CON-007 | A client-area `window_size` declaration shall be verified within ±2px tolerance at startup; mismatch shall abort the start rather than run against wrong geometry. | E | test |
@@ -493,16 +514,20 @@ passed a native acceptance test.
 | REQ-PIPE-028 | State-match, action-effect, and recovery responses use strict local parsing and semantic validation, one same-task format retry, then an inconclusive result. | `runtime/patrol.rs` | Parser tests passed; live malformed-response walkthrough pending |
 | REQ-PIPE-029 | The engine converts qualified Task 2 or Task 1 output into `LocatedState`, anchors deterministic bounded recovery candidates there, and sends Task 3 only the current image and structured metadata. Hint policy may report uncertain location; redirection validates resolved location, confidence, capture identity, node eligibility, run limit, and route uniqueness before starting a new execution epoch. | `runtime/patrol/protocol.rs`; `runtime/patrol/search.rs`; `runtime/patrol/vlm.rs`; `runtime/engine/runner.rs`; `runtime/engine/runner/patrol_worker.rs`; `runtime/engine/routing.rs` | Structured location and candidate unit tests pass; native Task 1 fallback and redirect walkthroughs pending |
 | REQ-OBS-006, REQ-IF-018, REQ-IF-021 | The Patrol Chat Room shows the session trace with formatted, collapsed messages and on-demand images. Its listener collects events while the view is closed; the backend emits exact request and response content without API keys. | `runtime/chat.rs`; `runtime/views/PatrolChatRoom.tsx` | Live VLM/event display passed; image eviction/unavailable preview remains automated only |
+| REQ-OBS-007, REQ-IF-023 | Production and Tester create a visible splash beside a hidden main webview. `startup.rs` reports real preload stages and reveals the main window only after backend and first-render readiness, with a bounded fallback. | `startup.rs`; `main-splash.tsx`; `SplashScreen.tsx`; production and Tester Tauri configs | Startup gate, capability, preference, and native window-transition tests pass |
+| REQ-SET-001, REQ-IF-009, REQ-SEC-004 | Production persistence uses one asynchronous Tauri Store adapter, imports legacy `watchdog:*` browser values after a successful Store save, and keeps session-only values out of persisted state. | `shell/services/persistence.ts`; Zustand stores; `i18n/index.ts` | Adapter migration and browser fallback tests pass; installed upgrade walkthrough pending |
 | REQ-NOT-001…003, REQ-SET-007 | Task Notifier requests permission on explicit enablement, deduplicates by task ID, and sends pipeline completion only after terminal cleanup. Recorder start/stop uses the same service. | `notifications/services/taskNotifier.ts`; `pipeline/runtime/stores/usePipelineStore.ts`; `settings/views/SettingsView.tsx` | Frontend service and settings tests passed; installed-build notification walkthrough pending |
-| REQ-RCD-001…009, REQ-IF-022, REQ-IF-035 | The Rust recorder owns session state and Windows low-level hooks; injected input is excluded, events map to capture-relative action drafts, and the frontend provides hotkeys, status bar, review, copy, export, removal, and clear. Non-Windows start returns unsupported. | `modules/recorder/`; `api/recorder.ts`; `recorder/stores/useRecorderStore.ts`; `recorder/views/ActionRecorderView.tsx` | Rust gesture/coordinate tests and frontend review/settings tests passed; native hook walkthrough pending |
-| REQ-MNT-002, REQ-MNT-003 | Main-app startup bounds dated logs and periodically clears generated visions within the user-data root. Cleanup errors are logged and do not block startup. | `core/maintenance.rs`; `lib.rs` | Implemented; startup filesystem test pending |
+| REQ-RCD-001…009, REQ-IF-022, REQ-IF-035, REQ-SEC-001 | The Rust recorder owns session state and Windows low-level hooks; injected input is excluded, events map to capture-relative action drafts, and the frontend provides hotkeys, status bar, review, copy, scoped Downloads export, removal, and clear. Non-Windows start returns unsupported. | `modules/recorder/`; `recorder/services/exportRecording.ts`; capability files; `recorder/views/ActionRecorderView.tsx` | Rust gesture/coordinate and frontend export/settings tests pass; native hook walkthrough pending |
+| REQ-IF-009, REQ-MNT-002, REQ-MNT-003, REQ-SEC-002 | Startup resolves Tauri application directories, safely migrates the legacy home tree, bounds owned Log-plugin files, and periodically clears generated AppCache visions. | `core/paths.rs`; `core/logger.rs`; `core/maintenance.rs`; `startup.rs` | Migration, conflict, symlink, retention, and cleanup unit tests pass; clean-profile installed walkthrough pending |
+| REQ-SEC-003 | The dedicated Windows workflow imports a secret PFX temporarily, signs every distributed executable and NSIS, verifies Authenticode before packaging, and removes temporary certificate material in `finally`. Ordinary build configs remain unsigned. | `build-signed-windows.ps1`; `release-windows-signed.yml`; `verify-release-config.mjs` | Static release verification passes; trusted-certificate workflow execution pending |
+| REQ-UPD-001…006, REQ-SET-009, REQ-SEC-005…006 | Production checks once after splash completion, presents a localized banner and Settings card, gates installation on idle runtime state, and publishes a Minisign-verified `latest.json` only from a matching `v*` tag. | `modules/updater/`; production capability/config; `build-signed-windows.ps1`; `prepare-github-release.mjs`; release workflow | Frontend and capability tests pass; signed installed/portable update walkthrough pending |
 | REQ-MNT-004 | Backend dependencies follow `core → capture → authoring → plugins → runtime → testing`; frontend integration uses shell and observability contracts. Capture ownership, Patrol services, authoring validation, plugin coordinates/OCR, runtime helpers, testing metadata, pipeline API clients, and feature styles have dedicated modules. | `src/architecture.test.ts`; `modules/capture/services/stream/`; `modules/pipeline/runtime/patrol/`; `modules/pipeline/runtime/engine/runner/`; `src/api/pipeline/` | Architecture test and full compile pass; large coordinator follow-ups are recorded in SDD §8 |
 
-The frontend production build and all 147 frontend tests pass. The Windows
+The frontend production build and all 159 frontend tests pass. The Windows
 build now delay-loads Common Controls so the Rust unit-test harness does not
 resolve an unused Tauri dialog entry point before tests start; the application
 binary still links successfully with Tauri's manifest. The Rust suite reports
-181 passing library tests and one intentionally ignored OCR runtime/model test,
+196 passing library tests and one intentionally ignored OCR runtime/model test,
 plus the passing preview capability integration test.
 These automated checks cover pure routing, configuration, state, and filesystem
 behavior. Live capture, foreground input, OCR, VLM action classification, hint
@@ -518,11 +543,12 @@ require executable-level checks.
 
 | Area | IDs | Section |
 |------|-----|---------|
-| Stakeholder needs | `STK-001`…`012` | §6 |
+| Stakeholder needs | `STK-001`…`013` | §6 |
 | Capture / authoring / execution | `REQ-CAP-001`…`010`; `REQ-AUTHOR-001`…`011`; `REQ-PIPE-001`…`002`, `004`…`026` | §7.1; `REQ-PIPE-003` retired |
 | Recognition / actions / testing | `REQ-REC-001`…`009`; `REQ-ACT-001`…`010`; `REQ-TEST-001`…`007` | §7.1 |
-| Observability / settings / operator tools | `REQ-OBS-001`…`006`; `REQ-SET-001`…`008`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009` | §7.1 |
-| Interfaces | `REQ-IF-001`…`008` (files); `010`…`022` (IPC); `030`…`035` (OS/runtime) | §7.2 |
+| Observability / settings / operator tools | `REQ-OBS-001`…`007`; `REQ-SET-001`…`009`; `REQ-NOT-001`…`003`; `REQ-RCD-001`…`009`; `REQ-UPD-001`…`006` | §7.1 |
+| Interfaces | `REQ-IF-001`…`009` (files); `010`…`023` (IPC); `030`…`035` (OS/runtime) | §7.2 |
+| Security | `REQ-SEC-001`…`006` | §7.7 |
 | Usability / reliability / performance | `REQ-USE-001`…`004`; `REQ-REL-001`…`002`; `REQ-PERF-001`…`004` | §7.3–7.5 |
 | Supportability / constraints | `REQ-MNT-001`…`004`; `REQ-CON-001`…`007` | §7.6, §7.8 |
 | Environment / assumptions | `REQ-ENV-001`…`005`; `ASM-001`…`004` | §5.4–5.5; assumptions are not requirements |
@@ -625,9 +651,9 @@ completes without capture, recognition, or actions at that node.
 
 #### E.6 Startup retention (`REQ-MNT-002`, `REQ-MNT-003`)
 
-- **Given** the main app opens with more than 30 dated logs and vision cleanup is due.
+- **Given** the main app opens with more than 30 WatchDog-owned active or rotated logs and vision cleanup is due.
 - **When** startup maintenance runs.
-- **Then** the 30 newest dated logs, including the current log, remain;
+- **Then** the 30 newest owned logs, including the current log, remain;
   generated visions are cleared within the user-data root. Cleanup failures
   are logged without blocking startup.
 
@@ -723,6 +749,7 @@ real window, capture session, model, or OS refusal.
 | E.10 Patrol recovery | `runtime::patrol::tests::recovery_candidates_start_with_location_then_prioritize_route`; `state_match_result_preserves_selected_confidence`; `runtime::engine::runner::patrol_worker::stability_tests::only_stable_declared_successor_effects_establish_location`; `recovery_response_is_policy_and_candidate_bounded`; routing and frontend recovery-log tests | Unit, live hint, and prior accepted-redirect pass | Native Task 2 handoff, Task 1 fallback, uncertain hint, and accepted/rejected redirect walkthroughs remain pending for this handoff release. |
 | E.11 Completion notification | `taskNotifier.test.ts`; pipeline terminal cleanup gate in `usePipelineStore.ts` | Unit pass | Installed Windows notification identity and delivery walkthrough pending. |
 | E.12 Action recording safety | `recorder::service::tests`; `useRecorderStore.test.ts`; `ActionRecorderView.test.tsx`; Settings tests | Unit and UI pass | Native global hook, injected-event, foreground-loss, and coordinate walkthrough pending. |
+| E.13 Splash startup | `startup::tests::reveal_requires_both_backend_and_interface_readiness`; `splash_configuration`; `SplashScreen.test.tsx`; production frontend build | Unit, configuration, UI, and native transition pass | Forced 30-second fallback smoke test remains pending. |
 
 Verification commands: `npm test` (140 passed), `npm run build`, `cargo check`,
 `cargo test --no-run`, and `cargo test` (180 passed, 1 ignored).

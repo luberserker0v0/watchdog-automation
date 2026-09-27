@@ -9,7 +9,7 @@ const { openRelatedFolder } = vi.hoisted(() => ({
 }));
 vi.mock("../../../api/settings", () => ({
   listRelatedFolders: vi.fn().mockResolvedValue([
-    { key: "logs", name: "logs", purpose: "Application and execution logs", path: "C:\\Users\\tester\\.watch_dog\\logs" },
+    { key: "logs", name: "logs", purpose: "Application and execution logs", path: "C:\\Users\\tester\\AppData\\Local\\com.berserker.watch-dog\\logs" },
   ]),
   openRelatedFolder,
 }));
@@ -60,7 +60,7 @@ it("shows related folder purposes and opens an allowlisted folder", async () => 
   const user = userEvent.setup();
   render(<SettingsView />);
   expect(await screen.findByText("Application and execution logs")).toBeTruthy();
-  expect(screen.getByText("C:\\Users\\tester\\.watch_dog\\logs")).toBeTruthy();
+  expect(screen.getByText("C:\\Users\\tester\\AppData\\Local\\com.berserker.watch-dog\\logs")).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Open logs folder" }));
   expect(openRelatedFolder).toHaveBeenCalledWith("logs");
 });

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { watchdogJsonStorage } from "../services/persistence";
 
 export type CaptureMode = "screen" | "window";
 export type CaptureEngine = "gdi" | "dxgi" | "graphics";
@@ -30,6 +31,7 @@ interface PreferencesState {
   patrolRecoveryPolicy: PatrolRecoveryPolicy;
   patrolMaxRedirects: number;
   taskNotificationsEnabled: boolean;
+  automaticUpdateChecks: boolean;
   recorderNotificationsEnabled: boolean;
   recorderStartStopHotkey: string;
   recorderPauseHotkey: string;
@@ -57,6 +59,7 @@ interface PreferencesState {
   setPatrolRecoveryPolicy: (policy: PatrolRecoveryPolicy) => void;
   setPatrolMaxRedirects: (count: number) => void;
   setTaskNotificationsEnabled: (enabled: boolean) => void;
+  setAutomaticUpdateChecks: (enabled: boolean) => void;
   setRecorderNotificationsEnabled: (enabled: boolean) => void;
   setRecorderStartStopHotkey: (hotkey: string) => void;
   setRecorderPauseHotkey: (hotkey: string) => void;
@@ -97,6 +100,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       patrolRecoveryPolicy: "hint_only",
       patrolMaxRedirects: 1,
       taskNotificationsEnabled: false,
+      automaticUpdateChecks: true,
       recorderNotificationsEnabled: false,
       recorderStartStopHotkey: "CommandOrControl+Alt+F9",
       recorderPauseHotkey: "CommandOrControl+Alt+F10",
@@ -124,6 +128,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       setPatrolRecoveryPolicy: (patrolRecoveryPolicy) => set({ patrolRecoveryPolicy }),
       setPatrolMaxRedirects: (count) => set({ patrolMaxRedirects: Number.isFinite(count) ? Math.min(10, Math.max(1, Math.round(count))) : 1 }),
       setTaskNotificationsEnabled: (taskNotificationsEnabled) => set({ taskNotificationsEnabled }),
+      setAutomaticUpdateChecks: (automaticUpdateChecks) => set({ automaticUpdateChecks }),
       setRecorderNotificationsEnabled: (recorderNotificationsEnabled) => set({ recorderNotificationsEnabled }),
       setRecorderStartStopHotkey: (recorderStartStopHotkey) => set({ recorderStartStopHotkey }),
       setRecorderPauseHotkey: (recorderPauseHotkey) => set({ recorderPauseHotkey }),
@@ -133,9 +138,10 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: "watchdog:settings",
+      storage: watchdogJsonStorage,
       // saveToDisk and saveDebugImages are session-only: they reset to off
       // on every window open, so they are never written to storage.
-      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolActionEffectThreshold, patrolRedirectThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, taskNotificationsEnabled, recorderNotificationsEnabled, recorderStartStopHotkey, recorderPauseHotkey, recorderCaptureText, capturePanelVisible, previewWindowSize }) => ({
+      partialize: ({ mode, showFps, captureEngine, windowCaptureArea, timingGranularity, recognitionDevice, llmEndpoint, llmModel, patrolEnabled, patrolCycleSeconds, patrolKHops, patrolThreshold, patrolActionEffectThreshold, patrolRedirectThreshold, patrolMinMargin, patrolRecoveryPolicy, patrolMaxRedirects, taskNotificationsEnabled, automaticUpdateChecks, recorderNotificationsEnabled, recorderStartStopHotkey, recorderPauseHotkey, recorderCaptureText, capturePanelVisible, previewWindowSize }) => ({
         mode,
         showFps,
         captureEngine,
@@ -154,6 +160,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         patrolRecoveryPolicy,
         patrolMaxRedirects,
         taskNotificationsEnabled,
+        automaticUpdateChecks,
         recorderNotificationsEnabled,
         recorderStartStopHotkey,
         recorderPauseHotkey,
@@ -181,6 +188,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           patrolRecoveryPolicy: stored.patrolRecoveryPolicy === "redirection_only" ? "redirection_only" : "hint_only",
           patrolMaxRedirects: Number.isFinite(stored.patrolMaxRedirects) ? Math.min(10, Math.max(1, Math.round(stored.patrolMaxRedirects!))) : 1,
           taskNotificationsEnabled: stored.taskNotificationsEnabled === true,
+          automaticUpdateChecks: stored.automaticUpdateChecks !== false,
           recorderNotificationsEnabled: stored.recorderNotificationsEnabled === true,
           recorderStartStopHotkey: stored.recorderStartStopHotkey || "CommandOrControl+Alt+F9",
           recorderPauseHotkey: stored.recorderPauseHotkey || "CommandOrControl+Alt+F10",

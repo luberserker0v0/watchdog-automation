@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appLogger } from "../../../observability/services/appLogger";
 import { createPortal } from "react-dom";
 import { usePreferencesStore } from "../../../shell/stores/usePreferencesStore";
 import { useOverlayStore } from "../../stores/useOverlayStore";
@@ -82,7 +83,7 @@ export default function InspectorTab(props: InspectorTabProps) {
       setShowDetails(true);
       appendLog({ source: "debug", label: "視窗詳情", detail: `Loaded ${result.length} windows`, result: "success" });
     } catch (e) {
-      console.error("Failed to get window details:", e);
+      appLogger.error("Failed to get window details:", e);
       appendLog({ source: "debug", label: "視窗詳情", detail: `Error: ${e}`, result: "error" });
     } finally {
       if (mounted.current) setLoading(false);

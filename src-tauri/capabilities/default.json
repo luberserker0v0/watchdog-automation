@@ -9,6 +9,14 @@
     "core:event:default",
     "opener:default",
     "notification:default",
+    "updater:default",
+    "process:allow-restart",
+    "store:default",
+    "log:default",
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$DOWNLOAD/watchdog-action-recording-*.json" }]
+    },
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister"

@@ -244,20 +244,45 @@ src-tauri/target/            Generated Rust executables and bundles
 
 Generated directories such as `dist\`, `node_modules\`, and `src-tauri\target\` should not be edited manually.
 
-User-provided resources and runtime output are stored separately:
+User-provided resources and runtime output use Tauri application directories:
 
 ```text
-%USERPROFILE%\.watch_dog\
-├── resources\
-│   ├── pipelines\       User Mermaid, metadata, and optional graph-layout files
-│   ├── pipeline-nodes\  User node-test metadata
-│   ├── images\          User template-matching images
-│   └── models\          User/custom model files
-├── logs\                Runtime logs (30 newest dated files retained at startup)
-└── visions\             Captures and debug images (cleared at startup when seven days are due)
+AppData/watchdog.settings.json      Tauri Store preferences
+AppLocalData/resources/
+├── pipelines/                     User Mermaid, metadata, and graph-layout files
+├── pipeline-nodes/                User node-test metadata
+├── images/                        User template-matching images
+└── models/                        User/custom model files
+AppLog/                            Runtime logs (30 newest owned files retained)
+AppCache/visions/                  Generated captures and evidence (seven-day cleanup)
+Downloads/watchdog-action-recording-*.json
 ```
 
-Template image resolution checks user `resources\images` first, then falls back to bundled `src-tauri\resources\images`. On startup, pipelines from the legacy `%USERPROFILE%\.watch_dog\pipelines` location move to `%USERPROFILE%\.watch_dog\resources\pipelines` without overwriting an existing pipeline.
+On Windows, Tauri resolves these beneath the appropriate Roaming AppData,
+Local AppData, cache/log, and Downloads known folders for
+`com.berserker.watch-dog`. **Settings → Related Folders** shows the exact paths
+on the current machine.
+
+Template image resolution checks AppLocalData `resources\images` first, then
+falls back to bundled `src-tauri\resources\images`. On the first upgraded
+startup, WatchDog migrates the legacy `%USERPROFILE%\.watch_dog` tree. It
+rejects links, verifies copied sizes, never overwrites an existing destination,
+and retains conflicts or failures in the legacy tree for recovery.
+
+## Application updater
+
+Only the production main window registers Tauri Updater and Process plugins.
+After splash initialization completes it checks the stable GitHub Release feed
+once when automatic checks are enabled. Settings always keeps a manual check.
+Installation waits for idle pipeline and recorder state, then blocks new work,
+stops manual capture, downloads, verifies, and launches passive NSIS.
+
+Ordinary local and verification builds remain unsigned and do not create
+updater artifacts. The signed workflow supplies an Authenticode certificate
+and a separate password-protected Tauri updater key. A matching `vX.Y.Z` tag
+publishes `latest.json`; manual dispatch does not publish. See
+[`docs/updater-signing.md`](updater-signing.md) for key creation, secrets, and
+recovery requirements.
 
 ## Troubleshooting
 

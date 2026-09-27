@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "splash",
+  "description": "Minimal capability for startup preference hydration",
+  "windows": ["splash"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "store:allow-load",
+    "store:allow-get"
+  ]
+}

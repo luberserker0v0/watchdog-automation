@@ -12,4 +12,13 @@ fn detached_preview_capability_matches_the_frontend_window_label() {
         windows.iter().any(|label| label == "capture-preview"),
         "the detached Preview uses the stable `capture-preview` label"
     );
+    assert!(!capability["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|permission| permission.as_str().is_some_and(|permission| {
+            permission.starts_with("store:")
+                || permission.starts_with("fs:")
+                || permission.starts_with("log:")
+        })));
 }

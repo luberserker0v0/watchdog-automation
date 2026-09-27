@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useRecorderStore } from "../stores/useRecorderStore";
 import { recordedDelayBefore, toPipelineActions } from "../utils/recordingTiming";
+import { exportRecording } from "../services/exportRecording";
 import "../styles/recorder.css";
 
 type RecorderIconName = "record" | "stop" | "pause" | "play" | "copy" | "export" | "trash" | "remove";
@@ -46,6 +47,7 @@ export default function ActionRecorderView() {
   const removeAction = useRecorderStore((state) => state.removeAction);
   const [pending, setPending] = useState<"toggle" | "pause" | "clear" | null>(null);
   const [feedback, setFeedback] = useState<"copied" | "exported" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   useEffect(() => {
     if (!feedback) return;
     const timer = window.setTimeout(() => setFeedback(null), 1800);
@@ -60,15 +62,14 @@ export default function ActionRecorderView() {
     await navigator.clipboard.writeText(JSON.stringify(toPipelineActions(actions), null, 2));
     setFeedback("copied");
   };
-  const exportDraft = () => {
-    const blob = new Blob([JSON.stringify({ version: 2, actions, pipeline_actions: toPipelineActions(actions) }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `watchdog-action-recording-${Date.now()}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setFeedback("exported");
+  const exportDraft = async () => {
+    setExportError(null);
+    try {
+      await exportRecording(actions);
+      setFeedback("exported");
+    } catch (error) {
+      setExportError(t("recorder.exportError", { error: error instanceof Error ? error.message : String(error) }));
+    }
   };
   const isActive = status.state !== "idle";
   const isStopping = status.state === "stopping";
@@ -87,12 +88,13 @@ export default function ActionRecorderView() {
           </div>
           <div className="recorder-control-group recorder-draft-controls">
             <button className={`recorder-control quiet ${feedback === "copied" ? "confirmed" : ""}`} disabled={!actions.length} onClick={() => void copy()} title="Copy only the pipeline action array"><RecorderIcon name="copy" /><span>{feedback === "copied" ? t("recorder.copied") : t("recorder.copy")}</span></button>
-            <button className={`recorder-control quiet ${feedback === "exported" ? "confirmed" : ""}`} disabled={!actions.length} onClick={exportDraft} title={t("recorder.exportNote")}><RecorderIcon name="export" /><span>{feedback === "exported" ? t("recorder.exported") : t("recorder.export")}</span></button>
+            <button className={`recorder-control quiet ${feedback === "exported" ? "confirmed" : ""}`} disabled={!actions.length} onClick={() => void exportDraft()} title={t("recorder.exportNote")}><RecorderIcon name="export" /><span>{feedback === "exported" ? t("recorder.exported") : t("recorder.export")}</span></button>
             <button className="recorder-control quiet destructive" disabled={status.state !== "idle" || !actions.length || pending !== null} onClick={() => void run("clear", clear)} title={status.state !== "idle" ? "Stop recording before clearing the draft" : "Clear all recorded actions"}><RecorderIcon name="trash" /><span>{pending === "clear" ? "Clearing…" : "Clear"}</span></button>
           </div>
         </div>
       </header>
       <div className="recorder-export-note">{t("recorder.exportNote")}</div>
+      {exportError && <div className="recorder-alert">{exportError}</div>}
       {(error || hotkeyError) && <div className="recorder-alert">{error || hotkeyError}</div>}
       {!actions.length ? (
         <div className="recorder-empty">{t("recorder.empty")}</div>

@@ -24,7 +24,7 @@ describe("InspectorTab region capture", () => {
   afterEach(cleanup);
 
   it("saves the selected natural-image region from a still capture", async () => {
-    screenApi.saveRegionCapture.mockResolvedValue("C:\\Users\\tester\\.watch_dog\\visions\\region.png");
+    screenApi.saveRegionCapture.mockResolvedValue("C:\\Users\\tester\\AppData\\Local\\com.berserker.watch-dog\\visions\\region.png");
     render(<InspectorTab captureMode="window" selection={{ x: 10, y: 20, w: 30, h: 40 }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "區域截圖" }));

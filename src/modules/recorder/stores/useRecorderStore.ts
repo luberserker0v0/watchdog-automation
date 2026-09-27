@@ -19,6 +19,7 @@ import { useWindowStore } from "../../capture/stores/useWindowStore";
 import { useStreamStore } from "../../capture/stores/useStreamStore";
 import { useLogStore } from "../../observability/stores/useLogStore";
 import { notifyTask } from "../../notifications/services/taskNotifier";
+import { assertRuntimeStartAllowed } from "../../updater/services/runtimeGuard";
 
 const IDLE_STATUS: RecorderStatus = {
   state: "idle", session_id: null, elapsed_ms: 0, event_count: 0,
@@ -111,6 +112,7 @@ export const useRecorderStore = create<RecorderStore>((set, get) => ({
 
   start: async () => {
     try {
+      assertRuntimeStartAllowed();
       const preferences = usePreferencesStore.getState();
       const keys = [hotkeyKeyCode(preferences.recorderStartStopHotkey), hotkeyKeyCode(preferences.recorderPauseHotkey)]
         .filter((value): value is number => value !== null);

@@ -8,6 +8,7 @@ pub use validation::{
 use crate::core::paths;
 use crate::modules::pipeline::authoring::models::graph::PipelineGraph;
 use crate::modules::pipeline::authoring::parser;
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoadResult {
@@ -31,8 +32,19 @@ pub struct PipelineInfo {
     pub source: String,
 }
 
+fn pipeline_catalog_cache() -> &'static Mutex<Option<Vec<PipelineInfo>>> {
+    static CACHE: OnceLock<Mutex<Option<Vec<PipelineInfo>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
 #[tauri::command]
 pub fn list_pipelines() -> Result<Vec<PipelineInfo>, String> {
+    let mut cache = pipeline_catalog_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some(pipelines) = cache.as_ref() {
+        return Ok(pipelines.clone());
+    }
     let mut pipelines = Vec::new();
 
     let built_in = paths::built_in_pipelines_dir();
@@ -44,6 +56,7 @@ pub fn list_pipelines() -> Result<Vec<PipelineInfo>, String> {
     scan_pipelines_dir(&user, "custom", &mut pipelines);
 
     log::info!("Found {} pipeline(s)", pipelines.len());
+    *cache = Some(pipelines.clone());
     Ok(pipelines)
 }
 
@@ -262,12 +275,16 @@ pub fn save_pipeline(
     let meta = meta.ok_or(
         "save_pipeline requires Mermaid and metadata sources; graph-only saves are not supported",
     )?;
-    save_pipeline_sources(
+    let saved = save_pipeline_sources(
         &paths::user_pipelines_dir(),
         std::path::Path::new(&path),
         &mermaid,
         &meta,
-    )
+    )?;
+    *pipeline_catalog_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = None;
+    Ok(saved)
 }
 
 fn save_pipeline_sources(

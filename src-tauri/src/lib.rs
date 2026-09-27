@@ -1,5 +1,6 @@
 pub mod core;
 pub mod modules;
+pub mod startup;
 
 use modules::capture::commands::stream::StreamState;
 use modules::capture::services::stream::StreamService;
@@ -16,25 +17,18 @@ pub fn run() {
 }
 
 pub fn run_tester() {
-    log::info!("[exe] Running as TESTER");
     run_app(tauri::generate_context!(), false)
 }
 
 pub fn run_target() {
-    log::info!("[exe] Running as TARGET");
-    core::paths::ensure_user_dirs();
-    core::logger::init();
-
     // Production opens the combined Target UI. The node tester can request an
     // isolated page by launching this same executable with a window label.
     let target_label = match std::env::args().nth(1).as_deref() {
         Some("login") => "login",
         Some("dashboard") => "dashboard",
         Some("settings") => "settings",
-        _ => "main",
+        _ => "target",
     };
-    log::info!("[exe] Starting target window, label={}", target_label);
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
@@ -77,20 +71,23 @@ pub fn run_target() {
 }
 
 fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
-    core::paths::ensure_user_dirs();
-    core::logger::init();
-    if clean_generated_data {
-        core::maintenance::cleanup_on_startup();
-    }
-    log::info!("Starting watch-dog application");
-
     let stream_service = Arc::new(StreamService::new());
     let stream_service_for_setup = stream_service.clone();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
+        .plugin(core::logger::plugin())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+
+    #[cfg(not(any(feature = "app-tester", feature = "app-target")))]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+
+    builder
         .register_uri_scheme_protocol("watchdog", |_ctx, request| {
             let path = request.uri().path();
             if path == "/frame" {
@@ -114,9 +111,11 @@ fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
             }
         })
         .setup(move |app| {
-            core::paths::init_resource_dir(app.handle());
-
-            modules::capture::repositories::virtual_desktop::get_desktop_manager();
+            core::paths::init(app.handle()).map_err(std::io::Error::other)?;
+            log::info!("Starting watch-dog application");
+            #[cfg(feature = "app-tester")]
+            log::info!("[exe] Running as TESTER");
+            startup::arm_fallback(app.handle().clone());
 
             if let Some(window) = app.get_webview_window("main") {
                 let svc = stream_service_for_setup.clone();
@@ -138,7 +137,11 @@ fn run_app(context: tauri::Context<tauri::Wry>, clean_generated_data: bool) {
         })
         .manage(StreamState(stream_service))
         .manage(modules::recorder::service::RecorderService::default())
+        .manage(startup::StartupState::new(clean_generated_data))
         .invoke_handler(tauri::generate_handler![
+            startup::get_startup_progress,
+            startup::initialize_app,
+            startup::mark_main_window_ready,
             core::folders::list_related_folders,
             core::folders::open_related_folder,
             modules::capture::commands::screen::get_screens,

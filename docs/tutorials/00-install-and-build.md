@@ -159,6 +159,26 @@ npm run package:windows:debug -- -SkipBuild
 Portable packages are release candidates until their Windows acceptance tests
 in `docs\release-readiness.md` pass.
 
+Ordinary local and CI packages are intentionally unsigned. A trusted release
+operator can create signed artifacts with:
+
+```powershell
+$env:WINDOWS_CERTIFICATE_BASE64 = '<base64 PFX from a protected secret>'
+$env:WINDOWS_CERTIFICATE_PASSWORD = '<PFX password>'
+$env:WINDOWS_TIMESTAMP_URL = 'https://<trusted RFC 3161 timestamp service>'
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$env:USERPROFILE\.tauri\watchdog-updater.key" -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = '<updater key password>'
+npm run package:windows:signed
+```
+
+The script imports the certificate temporarily into `Cert:\CurrentUser\My`,
+signs and verifies all distributed executables and the NSIS installer, verifies
+the Tauri update signature with Minisign, packages only verified artifacts,
+then removes certificate and updater-key temporary material in a `finally`
+block. A matching `v*` tag publishes the feed; manual workflow dispatch creates
+a non-publishing signed candidate. Generate and recover the updater key using
+[`docs/updater-signing.md`](../updater-signing.md).
+
 ## 0.8 Build Windows installers
 
 Build the production NSIS installer and its Sample Target companion:

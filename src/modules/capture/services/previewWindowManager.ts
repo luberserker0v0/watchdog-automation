@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { appLogger } from "../../observability/services/appLogger";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { PhysicalSize } from "@tauri-apps/api/window";
 import type { PipelineTarget } from "../../../api/pipeline";
@@ -65,7 +66,7 @@ async function trackWindow(window: WebviewWindow) {
   await Promise.all([
     register(window.once("tauri://destroyed", () => clearTracking(window))),
     register(window.once("tauri://error", (event) => {
-      console.error("Preview window error:", event);
+      appLogger.error("Preview window error:", event);
       clearTracking(window);
     })),
     register(window.onResized((event) => {
@@ -73,7 +74,7 @@ async function trackWindow(window: WebviewWindow) {
       resizeTimer = setTimeout(() => {
         void window.scaleFactor()
           .then((scaleFactor) => usePreferencesStore.getState().setPreviewWindowSize(logicalPreviewSize(event.payload, scaleFactor)))
-          .catch((error) => console.warn("Failed to persist Preview size:", error));
+          .catch((error) => appLogger.warn("Failed to persist Preview size:", error));
       }, RESIZE_DEBOUNCE_MS);
     })),
   ]);

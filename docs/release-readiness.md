@@ -51,6 +51,14 @@ the candidate notes.
 - [ ] Accepted and rejected redirections enforce every engine guard.
 - [ ] No Patrol report appears after terminal pipeline status.
 - [ ] Startup cleanup stays inside the application data root.
+- [ ] A clean-profile startup resolves every writable location through Tauri
+      paths and a legacy-profile startup reports retained migration conflicts.
+- [ ] Store hydration completes before OCR, hotkeys, and main-window readiness.
+- [ ] Recorder export succeeds only for the scoped timestamped Downloads name.
+- [ ] Installed and portable production builds handle no-update, offline,
+      available-update, slow-download, and signature-rejection cases.
+- [ ] Pipeline and recorder active/paused states block update installation;
+      install failure releases the guard and successful passive install restarts.
 
 ## 4. Packaging
 
@@ -68,7 +76,21 @@ the candidate notes.
       selected data-removal policy.
 - [ ] Artifact filenames contain version and architecture.
 - [ ] SHA-256 checksums are generated for distributed artifacts.
-- [ ] Windows code-signing policy is decided and documented.
+- [ ] Ordinary verification builds remain unsigned and require no certificate.
+- [ ] The dedicated signed workflow reads the PFX/password only from GitHub
+      secrets and the timestamp URL from a repository variable.
+- [ ] `Get-AuthenticodeSignature` reports `Valid` for production, Tester,
+      Sample Target, the staged installer companion, and the NSIS installer
+      before archives and checksums are created.
+- [ ] The temporary PFX and imported CurrentUser certificate are removed after
+      both successful and failed signing runs.
+- [ ] The password-protected updater private key has an encrypted, recoverable
+      backup and the matching public key is embedded in production config.
+- [ ] `TAURI_SIGNING_PRIVATE_KEY` and
+      `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are protected GitHub secrets.
+- [ ] Minisign verifies the final Authenticode-signed NSIS against its `.sig`.
+- [ ] The `v*` tag equals every version file and has a matching changelog section.
+- [ ] The GitHub Release contains NSIS, `.sig`, `latest.json`, portable ZIP, and checksums; manifest URL, signature, UTC date, and notes are correct.
 
 ## 5. Version and release candidate
 

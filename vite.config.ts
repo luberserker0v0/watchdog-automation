@@ -44,6 +44,7 @@ export default defineConfig(() => ({
         login: `${import.meta.dirname}/index-login.html`,
         dashboard: `${import.meta.dirname}/index-dashboard.html`,
         settings: `${import.meta.dirname}/index-settings.html`,
+        splash: `${import.meta.dirname}/splash.html`,
       },
     },
   },

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { watchdogJsonStorage } from "../../../shell/services/persistence";
 
 export interface GraphNodePosition {
   x: number;
@@ -66,6 +67,7 @@ export const useGraphLayoutStore = create<GraphLayoutState>()(
     }),
     {
       name: "watchdog:graph-layout",
+      storage: watchdogJsonStorage,
       partialize: (state) => ({ minimapVisible: state.minimapVisible }),
       merge: (persisted, current) => ({
         ...current,

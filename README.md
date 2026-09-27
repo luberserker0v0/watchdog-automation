@@ -53,6 +53,7 @@ and troubleshooting.
 | 9 | [Test and debug pipelines](docs/tutorials/09-testing-and-debugging.md) |
 | 10 | [Add Patrol and recovery](docs/tutorials/10-patrol-and-recovery.md) |
 | 11 | [Record actions and receive notifications](docs/tutorials/11-recorder-and-notifications.md) |
+| 12 | [Check and install application updates](docs/tutorials/12-application-updates.md) |
 
 The [tutorial index](docs/tutorials/README.md) describes the learning path and
 links the related reference documents.
@@ -64,6 +65,7 @@ links the related reference documents.
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Release-readiness checklist](docs/release-readiness.md)
+- [Version 1.1.0 release notes](docs/releases/1.1.0.md)
 - [Version 1.0.0 release notes](docs/releases/1.0.0.md)
 - [Development, builds, resources, and troubleshooting](docs/development.md)
 - [Pipeline Mermaid and execution metadata reference](docs/pipeline-meta.md)

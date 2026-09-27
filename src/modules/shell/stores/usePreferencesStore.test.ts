@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from "vitest";
 import { normalizePreviewWindowSize, usePreferencesStore } from "./usePreferencesStore";
 
 beforeEach(() => {
-  usePreferencesStore.setState({ mode: "screen", saveToDisk: false, showFps: false, captureEngine: "graphics", windowCaptureArea: "frame", patrolEnabled: false, patrolKHops: 1, patrolThreshold: 0.85, patrolActionEffectThreshold: 0.85, patrolRedirectThreshold: 0.85, patrolMinMargin: 0.1, taskNotificationsEnabled: false, recorderNotificationsEnabled: false, recorderStartStopHotkey: "CommandOrControl+Alt+F9", recorderPauseHotkey: "CommandOrControl+Alt+F10", recorderCaptureText: false, capturePanelVisible: true, previewWindowSize: [1200, 800] });
+  usePreferencesStore.setState({ mode: "screen", saveToDisk: false, showFps: false, captureEngine: "graphics", windowCaptureArea: "frame", patrolEnabled: false, patrolKHops: 1, patrolThreshold: 0.85, patrolActionEffectThreshold: 0.85, patrolRedirectThreshold: 0.85, patrolMinMargin: 0.1, taskNotificationsEnabled: false, automaticUpdateChecks: true, recorderNotificationsEnabled: false, recorderStartStopHotkey: "CommandOrControl+Alt+F9", recorderPauseHotkey: "CommandOrControl+Alt+F10", recorderCaptureText: false, capturePanelVisible: true, previewWindowSize: [1200, 800] });
 });
 
 it("persists capture visibility and a normalized logical Preview size", () => {
@@ -99,4 +99,13 @@ it("persists notifier and recorder controls with private text capture disabled b
     recorderPauseHotkey: "Ctrl+Alt+F8",
     recorderCaptureText: false,
   });
+});
+
+it("enables automatic update checks by default and persists an opt-out", async () => {
+  expect(usePreferencesStore.getState().automaticUpdateChecks).toBe(true);
+  usePreferencesStore.getState().setAutomaticUpdateChecks(false);
+  expect(JSON.parse(localStorage.getItem("watchdog:settings")!).state.automaticUpdateChecks).toBe(false);
+  localStorage.setItem("watchdog:settings", JSON.stringify({ state: {}, version: 0 }));
+  await usePreferencesStore.persist.rehydrate();
+  expect(usePreferencesStore.getState().automaticUpdateChecks).toBe(true);
 });

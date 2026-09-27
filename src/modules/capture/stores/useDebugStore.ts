@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { watchdogJsonStorage } from "../../shell/services/persistence";
 import type { PipelineTarget } from "../../../api/pipeline";
 import {
   createNodeEmulatorDraft,
@@ -81,6 +82,7 @@ export const useDebugStore = create<DebugState>()(
     }),
     {
       name: "watchdog:debug",
+      storage: watchdogJsonStorage,
       partialize: (state) => ({
         actionType: state.actionType,
         actionFields: state.actionFields,

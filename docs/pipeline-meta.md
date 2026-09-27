@@ -12,7 +12,7 @@ A pipeline consists of two required execution files and one optional presentatio
 | `<name>.meta.json` | JSON — defines **properties** (recognition, actions, timing, etc.) |
 | `<name>.layout.json` | JSON — optional shareable graph node positions; never affects execution |
 
-The files reside together under `src-tauri/resources/pipelines/` (project-bundled) or `%USERPROFILE%\.watch_dog\resources\pipelines\` (user-created).
+The files reside together under `src-tauri/resources/pipelines/` (project-bundled) or Tauri AppLocalData `resources/pipelines/` (user-created). The Related Folders section in Settings shows the resolved platform path.
 
 The engine merges Mermaid topology with `.meta.json` execution settings. Every Mermaid node must have a matching metadata entry. Keeping layout in a separate file prevents UI-only coordinates from cluttering or changing automation metadata.
 
@@ -124,8 +124,8 @@ Patrol scores the current full capture frame against the expected node and its
 K-hop neighbors, using node descriptions and any saved references. An
 inconclusive local tier expands to 2K hops, including shared-parent siblings.
 Each tier is limited to 16 candidates. After successful visits, a background
-worker saves a clean, unannotated frame under
-`%USERPROFILE%/.watch_dog/visions/patrol/<pipeline-hash>/<run-id>/`.
+worker saves a clean, unannotated frame under Tauri AppCache
+`visions/patrol/<pipeline-hash>/<run-id>/`.
 References are used only within the run that captured them, so a later run
 cannot reuse stale screenshots. A new run uses descriptions until its own
 references are available. Reference save failures are logged without failing

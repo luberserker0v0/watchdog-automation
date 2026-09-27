@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import { appLogger } from "./modules/observability/services/appLogger";
 import { setRecognitionDevice } from "./api/pipeline";
+import { markMainWindowReady } from "./api/startup";
 import { useUiStore } from "./modules/shell/stores/useUiStore";
 import { usePreferencesStore } from "./modules/shell/stores/usePreferencesStore";
 import Sidebar from "./modules/shell/components/Sidebar";
@@ -16,9 +18,12 @@ import ActionRecorderView from "./modules/recorder/views/ActionRecorderView";
 import RecordingStatusBar from "./modules/recorder/components/RecordingStatusBar";
 import RecorderCoordinator from "./modules/recorder/components/RecorderCoordinator";
 import RuntimeIntegrationCoordinator from "./modules/shell/components/RuntimeIntegrationCoordinator";
+import UpdaterCoordinator from "./modules/updater/components/UpdaterCoordinator";
+import UpdateBanner from "./modules/updater/components/UpdateBanner";
 import { useCaptureController } from "./modules/capture/hooks/useCaptureController";
 import "./modules/shell/styles/sidebar.css";
 import "./App.css";
+import "./modules/updater/styles/updater.css";
 
 interface AppModeProps {
   showNodeTest: boolean;
@@ -53,7 +58,7 @@ function Workspace({ showNodeTest }: AppModeProps) {
   );
 }
 
-function MainContent({ showNodeTest }: AppModeProps) {
+function MainContent({ showNodeTest, showUpdater }: AppModeProps & { showUpdater: boolean }) {
   const activeView = useUiStore((s) => s.activeView);
 
   return (
@@ -62,7 +67,7 @@ function MainContent({ showNodeTest }: AppModeProps) {
       {showNodeTest && activeView === "nodeTest" && <SplitLayout showNodeTest={showNodeTest} />}
       {activeView === "patrolChat" && <Workspace showNodeTest={showNodeTest} />}
       {activeView === "actionRecorder" && <Workspace showNodeTest={showNodeTest} />}
-      {activeView === "settings" && <SettingsView />}
+      {activeView === "settings" && <SettingsView showUpdater={showUpdater} />}
     </div>
   );
 }
@@ -77,6 +82,8 @@ function App({ mode = "production" }: AppProps) {
   const isPreview = window.location.hash === "#preview";
   const showNodeTest = mode === "tester";
   const recognitionDevice = usePreferencesStore((state) => state.recognitionDevice);
+  const setActiveView = useUiStore((state) => state.setActiveView);
+  const showUpdater = mode === "production";
   useCaptureController(!isPreview);
 
   useEffect(() => {
@@ -84,13 +91,17 @@ function App({ mode = "production" }: AppProps) {
   }, [isPreview]);
 
   useEffect(() => {
+    if (!isPreview) void markMainWindowReady().catch(() => undefined);
+  }, [isPreview]);
+
+  useEffect(() => {
     if (isPreview) return;
     void setRecognitionDevice(recognitionDevice)
       .then((activeDevice) => {
-        console.info(`[ocr] active recognition device: ${activeDevice}`);
+        appLogger.info(`[ocr] active recognition device: ${activeDevice}`);
       })
       .catch((error) => {
-        console.error(`[ocr] failed to configure recognition device: ${error}`);
+        appLogger.error("[ocr] failed to configure recognition device:", error);
       });
   }, [isPreview, recognitionDevice]);
 
@@ -102,11 +113,13 @@ function App({ mode = "production" }: AppProps) {
     <div className="app-layout">
       <Sidebar showNodeTest={showNodeTest} />
       <div className="app-main">
+        {showUpdater && <UpdateBanner onOpenSettings={() => setActiveView("settings")} />}
         <RecordingStatusBar />
-        <MainContent showNodeTest={showNodeTest} />
+        <MainContent showNodeTest={showNodeTest} showUpdater={showUpdater} />
       </div>
       <RecorderCoordinator />
       <RuntimeIntegrationCoordinator />
+      {showUpdater && <UpdaterCoordinator />}
     </div>
   );
 }

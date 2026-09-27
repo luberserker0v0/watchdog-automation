@@ -1,33 +1,22 @@
 use chrono::Local;
-use std::fs;
-use std::fs::OpenOptions;
+use tauri::Runtime;
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
-pub fn init() {
-    let log_dir = crate::core::paths::logs_dir();
-    fs::create_dir_all(&log_dir).ok();
+const MAX_LOG_FILE_SIZE: u128 = 10 * 1024 * 1024;
 
-    let log_path = log_dir.join(format!("{}.log", Local::now().format("%Y-%m-%d")));
-
-    let file = match OpenOptions::new().create(true).append(true).open(&log_path) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Failed to open log file {}: {}", log_path.display(), e);
-            return;
-        }
-    };
-
-    fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "[{}] [{}] {}",
-                Local::now().format("%Y-%m-%d %H:%M:%S"),
-                record.level(),
-                message
-            ))
-        })
+pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    let dated_name = Local::now().format("%Y-%m-%d").to_string();
+    tauri_plugin_log::Builder::new()
+        .clear_targets()
+        .targets([
+            Target::new(TargetKind::Stdout),
+            Target::new(TargetKind::LogDir {
+                file_name: Some(dated_name),
+            }),
+        ])
         .level(log::LevelFilter::Info)
-        .chain(std::io::stdout())
-        .chain(file)
-        .apply()
-        .ok();
+        .max_file_size(MAX_LOG_FILE_SIZE)
+        .rotation_strategy(RotationStrategy::KeepAll)
+        .timezone_strategy(TimezoneStrategy::UseLocal)
+        .build()
 }

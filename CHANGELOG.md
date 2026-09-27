@@ -7,6 +7,30 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-27
+
+### Added
+
+- Production and Tester splash startup with a determinate loading bar for
+  maintenance, desktop services, schemas, pipeline resources, OCR, and main UI
+  readiness.
+- Tauri Store, FS, and Log plugin integration with scoped Recorder exports and
+  application-directory storage.
+- A signing-ready Windows workflow that verifies Authenticode signatures before
+  packaging release artifacts.
+- Production update checks, a localized update banner and Settings card, and
+  guarded passive installation through the official Tauri Updater.
+
+### Changed
+
+- User resources, generated evidence, logs, settings, and exports now resolve
+  through Tauri application directories. Startup safely migrates the legacy
+  `%USERPROFILE%\.watch_dog` tree without overwriting conflicts.
+- Frontend application logs now use the Tauri Log plugin while the Execution Log
+  remains a separate product-facing timeline.
+- Version tags now publish the signed NSIS updater, Tauri signature,
+  `latest.json`, portable ZIP, and checksums to GitHub Releases.
+
 ## [1.0.0] - 2026-09-25
 
 ### Added
@@ -60,5 +84,6 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   text, allowed the three-task failure handoff a 90-second active budget, and
   stopped labeling inconclusive recovery as a rejected redirect.
 
-[Unreleased]: https://github.com/luberserker0v0/watchdog-automation/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/luberserker0v0/watchdog-automation/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/luberserker0v0/watchdog-automation/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/luberserker0v0/watchdog-automation/releases/tag/v1.0.0

@@ -1,3 +1,4 @@
+import { appLogger } from "../../observability/services/appLogger";
 import { usePreferencesStore } from "../../shell/stores/usePreferencesStore";
 import { useUiStore } from "../../shell/stores/useUiStore";
 import { useStreamStore } from "../stores/useStreamStore";
@@ -19,7 +20,7 @@ export default function ExpandButton({ label }: ExpandButtonProps) {
     try {
       await openOrFocusPreview();
     } catch (error) {
-      console.error("Preview window creation failed:", error);
+      appLogger.error("Preview window creation failed:", error);
       setPreviewOpen(false);
     }
   };

@@ -1,8 +1,8 @@
 # Software Design Description — WatchDog
 
-- **Product:** watch-dog (`1.0.0`)
+- **Product:** watch-dog (`1.1.0`)
 - **Status:** observed implementation design; source-inspected, not system-certified
-- **Audit basis:** version 1.0.0 release candidate, based on implementation commit `eeff6eb`; automated checks run through 2026-09-25
+- **Audit basis:** version 1.1.0 release candidate; automated checks run through 2026-09-27
 - **Requirements source:** `docs/srs.md` (candidate `REQ-*` and inferred `STK-*` IDs)
 - **File contracts:** `docs/pipeline-meta.md`, `docs/pipeline-layout.md`, `schemas/`
 
@@ -32,7 +32,9 @@ executable. The production frontend does not expose Node Tester, and the
 installer does not include `watch-dog-tester.exe`.
 
 `src-tauri/src/lib.rs` registers commands, the frame protocol, and shared
-state. `src/App.tsx` and `src/main-target.tsx` compose the frontend windows.
+state. `src-tauri/src/startup.rs` coordinates cross-capability preload work at
+this composition boundary. `src/App.tsx`, `src/main-splash.tsx`, and
+`src/main-target.tsx` compose the frontend windows.
 These roots wire capabilities together; they do not own feature behavior.
 
 ## 2. Components and dependency rules
@@ -67,28 +69,49 @@ of importing pipeline state into capture or testing composition.
 | PIPE | `src/modules/pipeline/runtime/`; backend `modules/pipeline/runtime/` | Plan, run lifecycle, status, step evidence, runtime UI | Authoring, capture, plugins |
 | TEST | `src/modules/testing/`; backend `modules/testing/` | Node tests, emulator, batch workflow | Capture, authoring, plugins, runtime |
 | OBS | `src/modules/observability/`; backend runtime evidence | Shared execution log, events, snapshots, progress, debug images | Run and capture state |
-| SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts`; `src/i18n/` | Persisted preferences, session flags, and English/Traditional Chinese localization | Browser storage, stream status, i18next |
+| SET | `src/modules/settings/`; `src/modules/shell/stores/usePreferencesStore.ts`; `src/modules/shell/services/persistence.ts`; `src/i18n/` | Store-backed preferences, session flags, legacy migration, and English/Traditional Chinese localization | Tauri Store, stream status, i18next |
 | NOT | `src/modules/notifications/`; Tauri notification plugin | Permission-aware, task-ID-deduplicated native notifications | Terminal pipeline status, recorder state, persisted opt-in |
 | RCD | `src/modules/recorder/`; backend `modules/recorder/` | Recorder state machine, Windows input hooks, review drafts, global controls | Capture selection and bounds, foreground state, settings |
+| UPD | `src/modules/updater/`; Tauri updater/process plugins; signed release scripts | Update check state, banner, Settings controls, runtime install guard, signed feed | Startup completion, pipeline/recorder state, GitHub Releases |
 
 `src/modules/sample_target/` contains the sample target UI;
 `src/main-target.tsx` mounts it. Shell layout, shared utilities, and the sample
 target support SRS capabilities without receiving
 new requirement prefixes.
 
-### 2.1 Main-app startup maintenance
+### 2.1 Splash startup and maintenance
 
-`lib.rs::run_app` creates user directories and initializes the logger before
-calling `core/maintenance.rs` and setting up Tauri. The tester and sample
-target startup paths do not call maintenance.
+Production and Tester configuration create a visible `splash` webview and a
+hidden `main` webview together. The main webview loads frontend bundles and
+persisted stores while `startup.rs` reports determinate stages to the splash.
+It resolves Tauri application paths, migrates the legacy home-directory tree,
+runs production retention cleanup, initializes
+virtual desktop services, compiles the bundled metadata and layout schemas,
+scans pipeline resources, and initializes the persisted OCR device. The main
+frontend signals after its first render. Only when both sides are ready does
+the backend complete a minimum 1.5-second splash display, show and focus
+`main`, then close `splash`. Fast startup therefore leaves the completed
+progress state readable for the remaining minimum time. A 30-second fallback
+reveals the main window if coordination fails. Initialization errors are logged
+and shown as non-blocking warnings.
+
+Screen and window enumeration remain in the capture UI because those lists can
+become stale. Patrol references and VLM connections remain lazy and run-scoped.
+The sample target does not use the splash path.
 
 | Data | Rule | Failure behavior |
 |------|------|------------------|
-| Dated application logs | Retain the 30 newest, including the current log. | Log the error; continue startup. |
-| Generated visions | On first startup without a marker, or at least seven days after successful cleanup, remove generated contents and recreate the debug directory. | Log the error; continue startup. Update the marker only after success. |
+| AppLog files | The Tauri Log plugin writes dated 10 MiB rotating files; retain the 30 newest owned files, including the current log. | Log the error; continue startup. |
+| AppCache visions | On first startup without a marker, or at least seven days after successful cleanup, remove generated contents and recreate the debug directory. | Log the error; continue startup. Update the marker only after success. |
 
-Cleanup is confined to canonical user-data logs and visions directories and
+Cleanup is confined to canonical AppLog and AppCache visions directories and
 does not follow symbolic links.
+
+`core::paths` is initialized from Tauri's `PathResolver`. AppLocalData owns
+editable resources, AppCache owns generated evidence, AppLog owns logs,
+Downloads owns recorder exports, and Resource owns bundled read-only files.
+Legacy migration copies through destination-local temporary files, verifies
+byte counts, never overwrites, and removes sources only after finalization.
 
 ## 3. Component design
 
@@ -294,13 +317,40 @@ IDs. Backend kinds are a serialized enum mirrored by the frontend event union. I
 
 #### 3.5.4 Settings persistence
 
-Preferences persist in `watchdog:settings`. Save-to-disk and
+Preferences retain their `watchdog:*` keys in
+`$APPDATA/watchdog.settings.json` through the Tauri Store plugin. Production
+uses an asynchronous Zustand storage adapter; browser preview and tests use a
+localStorage fallback. Missing Store keys import matching legacy browser values
+and remove them only after a successful Store save. Save-to-disk and
 save-debug-images are session-only and rehydrate as off. The VLM endpoint and
 model name persist; the API key remains in memory for the app session, is
 passed to `start_pipeline` only when a run starts, and is omitted from stored
 preferences and logs.
 Legacy preferences that lack the action-effect or redirect threshold copy the
 stored state-match threshold; all three default to 0.85 on a new installation.
+`automaticUpdateChecks` defaults on and is persisted with the same adapter.
+
+### 3.7 Production updater (UPD)
+
+`UpdaterCoordinator` waits until backend startup reports complete, then asks
+`updateService` to perform one automatic check when enabled. `checkForUpdates`
+is single-flight and keeps the Tauri `Update` resource private. Its Zustand
+store exposes only typed metadata, phase, byte progress, last-check time, and a
+sanitized error. An available version mounts `UpdateBanner` above the workspace;
+`UpdateSettingsSection` provides the manual check and explicit confirmation.
+
+Installation composes pipeline, recorder, and capture facades at the shell
+boundary. Running or paused automation blocks install. The installation guard
+then rejects new pipeline and recorder starts, including recorder shortcuts.
+A manual stream is stopped before download. Failure releases the guard and
+returns to the available phase for retry. Windows passive NSIS install exits
+and restarts; another supported desktop platform uses the Process plugin.
+
+Only the production `main` capability grants `updater:default` and
+`process:allow-restart`. Production configuration explicitly selects default,
+splash, and preview capabilities; Tester selects tester, splash, and preview.
+Sample Target selects none. The update endpoint is the public stable GitHub
+Release `latest.json`; prerelease selection and downgrade are not enabled.
 
 ### 3.6 Task notification and action recording (NOT, RCD)
 
@@ -310,6 +360,13 @@ contains delivery failures. Pipeline completion uses `pipeline:<run_id>` only
 after status is terminal and cleanup is complete, so live-event and polling
 paths converge on one notification. Recorder start and stop use session IDs and
 an independent opt-in.
+
+Native Recorder export is the only frontend filesystem write. The FS plugin
+accepts `watchdog-action-recording-*.json` below Downloads and returns the
+resulting filename to the view. Pipeline, schema, capture, Patrol evidence, and
+migration I/O remain Rust-side `std::fs` operations. Main and Tester receive
+Store, Log, and this narrow FS permission; Splash receives Store load/read
+only; Preview and Sample Target receive none of these plugin permissions.
 
 The recorder backend owns one `RecorderService` in Tauri managed state. Its
 platform-neutral commands expose status, start, pause, resume, stop, and clear.
@@ -361,6 +418,7 @@ Linux retain the command model and report unsupported at start.
 | `ValidationError` | AUTHOR | Type and message distinguish authoring failures |
 | `RecorderStatus`, `RecordingSession`, `RecordedActionDraft` | RCD | One session at a time; actions use capture-relative coordinates; offsets count active recording time; copied/exported pipeline actions express positive gaps as Wait actions; drafts remain observational until copied or exported |
 | Native task notification | NOT | A stable event ID produces at most one delivery after permission; failure cannot alter pipeline or recorder state |
+| Update state and private resource | UPD | UI state is serializable; the Tauri update handle stays private, one check/install runs at a time, and the install guard spans download through exit or failure |
 
 The Tauri command list in `src-tauri/src/lib.rs` implements SRS
 `REQ-IF-010`–`017` and `REQ-IF-022`; `src/api/` is its frontend wrapper. Events include
@@ -413,7 +471,14 @@ executable-level verification.
 - Capture owns target and frame-bound types because it produces frames and
   resolves their physical coordinates. Authoring re-exports target types for
   compatibility with existing graph and IPC consumers.
-- Core owns the user-data root name and never imports a feature module.
+- Core owns the initialized Tauri path contract and never imports a feature module.
+- Store is persistent preference storage, not a secret vault. The Patrol API
+  key remains memory-only, and Windows release identity uses Authenticode with
+  a trusted certificate rather than Stronghold.
+- Tauri updater signatures establish artifact integrity and Authenticode
+  establishes Windows publisher identity. Release publishing requires both.
+  The updater public key is embedded; its password-protected private key exists
+  only outside the repository and in protected release secrets.
 - Runtime constructs the plugin registry; isolated tests reuse the same
   registrations and plugin behavior.
 - The SRS maps capabilities; this document records code placement.

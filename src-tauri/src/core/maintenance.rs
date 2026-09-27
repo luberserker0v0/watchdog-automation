@@ -7,17 +7,21 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const MAX_LOG_FILES: usize = 30;
 const VISION_CLEANUP_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+#[cfg(test)]
 const VISION_CLEANUP_MARKER: &str = ".visions-last-cleanup";
 
 pub fn cleanup_on_startup() {
-    let base = crate::core::paths::user_data_dir();
     let now = SystemTime::now();
-    match retain_recent_logs(&base, now) {
+    match retain_recent_logs(&crate::core::paths::logs_dir(), now) {
         Ok(removed) if removed > 0 => log::info!("[maintenance] removed {removed} old log files"),
         Ok(_) => {}
         Err(error) => log::warn!("[maintenance] log retention failed: {error}"),
     }
-    match clean_visions_if_due(&base, now) {
+    match clean_visions_if_due(
+        &crate::core::paths::visions_dir(),
+        &crate::core::paths::vision_cleanup_marker(),
+        now,
+    ) {
         Ok(Some(removed)) => {
             log::info!("[maintenance] cleared {removed} vision entries; next check in 7 days")
         }
@@ -26,11 +30,8 @@ pub fn cleanup_on_startup() {
     }
 }
 
-fn owned_directory(base: &Path, name: &str) -> Result<(PathBuf, PathBuf), String> {
-    let base = base
-        .canonicalize()
-        .map_err(|error| format!("Cannot resolve {}: {error}", base.display()))?;
-    let directory = base.join(name);
+fn owned_directory(directory: &Path) -> Result<(PathBuf, PathBuf), String> {
+    let directory = directory.to_path_buf();
     let metadata = fs::symlink_metadata(&directory)
         .map_err(|error| format!("Cannot inspect {}: {error}", directory.display()))?;
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
@@ -42,22 +43,16 @@ fn owned_directory(base: &Path, name: &str) -> Result<(PathBuf, PathBuf), String
     let resolved = directory
         .canonicalize()
         .map_err(|error| format!("Cannot resolve {}: {error}", directory.display()))?;
-    if resolved != directory {
-        return Err(format!(
-            "Directory escapes its user-data location: {}",
-            directory.display()
-        ));
-    }
     Ok((directory, resolved))
 }
 
-fn retain_recent_logs(base: &Path, now: SystemTime) -> Result<usize, String> {
-    let (directory, resolved) = owned_directory(base, "logs")?;
+fn retain_recent_logs(directory: &Path, now: SystemTime) -> Result<usize, String> {
+    let (directory, resolved) = owned_directory(directory)?;
     let current_name = format!(
         "{}.log",
         chrono::DateTime::<Local>::from(now).format("%Y-%m-%d")
     );
-    let mut files = Vec::<(NaiveDate, PathBuf)>::new();
+    let mut files = Vec::<(NaiveDate, SystemTime, PathBuf)>::new();
     for entry in fs::read_dir(&directory)
         .map_err(|error| format!("Cannot list {}: {error}", directory.display()))?
     {
@@ -72,22 +67,33 @@ fn retain_recent_logs(base: &Path, now: SystemTime) -> Result<usize, String> {
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let Some(stem) = name.strip_suffix(".log") else {
+        let Some(date_prefix) = name.get(..10) else {
             continue;
         };
-        let Ok(date) = NaiveDate::parse_from_str(stem, "%Y-%m-%d") else {
+        let Ok(date) = NaiveDate::parse_from_str(date_prefix, "%Y-%m-%d") else {
             continue;
         };
-        files.push((date, path));
+        let suffix = &name[10..];
+        if suffix != ".log"
+            && !(suffix.starts_with('_')
+                && (suffix.ends_with(".log") || suffix.ends_with(".log.bak")))
+        {
+            continue;
+        }
+        let modified = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .unwrap_or(UNIX_EPOCH);
+        files.push((date, modified, path));
     }
-    files.sort_by(|left, right| right.0.cmp(&left.0));
-    let active_exists = files.iter().any(|(_, path)| {
+    files.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
+    let active_exists = files.iter().any(|(_, _, path)| {
         path.file_name()
             .is_some_and(|name| name == current_name.as_str())
     });
     let mut other_slots = MAX_LOG_FILES - usize::from(active_exists);
     let mut removed = 0;
-    for (_, path) in files {
+    for (_, _, path) in files {
         if path
             .file_name()
             .is_some_and(|name| name == current_name.as_str())
@@ -114,9 +120,13 @@ fn retain_recent_logs(base: &Path, now: SystemTime) -> Result<usize, String> {
     Ok(removed)
 }
 
-fn clean_visions_if_due(base: &Path, now: SystemTime) -> Result<Option<usize>, String> {
-    let (directory, resolved) = owned_directory(base, "visions")?;
-    let marker = base.join(VISION_CLEANUP_MARKER);
+fn clean_visions_if_due(
+    directory: &Path,
+    marker: &Path,
+    now: SystemTime,
+) -> Result<Option<usize>, String> {
+    let (directory, resolved) = owned_directory(directory)?;
+    let marker = marker.to_path_buf();
     if let Ok(metadata) = fs::symlink_metadata(&marker) {
         if !metadata.is_file() || metadata.file_type().is_symlink() {
             return Err(format!(
@@ -228,10 +238,28 @@ mod tests {
             fs::write(temp.path().join("logs").join(name), "old").unwrap();
         }
         fs::write(temp.path().join("logs").join("notes.txt"), "keep").unwrap();
-        let removed = retain_recent_logs(temp.path(), now).unwrap();
+        let removed = retain_recent_logs(&temp.path().join("logs"), now).unwrap();
         assert_eq!(removed, 6);
         assert!(temp.path().join("logs").join(current).exists());
         assert!(temp.path().join("logs").join("notes.txt").exists());
+    }
+
+    #[test]
+    fn rotated_plugin_logs_count_toward_retention() {
+        let temp = tempfile::tempdir().unwrap();
+        let logs = temp.path().join("logs");
+        fs::create_dir(&logs).unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(1_780_000_000);
+        for index in 0..35 {
+            fs::write(
+                logs.join(format!("2026-05-01_12-00-{index:02}.log")),
+                "rotated",
+            )
+            .unwrap();
+        }
+        fs::write(logs.join("unrelated.log"), "keep").unwrap();
+        assert_eq!(retain_recent_logs(&logs, now).unwrap(), 5);
+        assert!(logs.join("unrelated.log").exists());
     }
 
     #[test]
@@ -240,17 +268,31 @@ mod tests {
         fs::create_dir(temp.path().join("visions")).unwrap();
         fs::write(temp.path().join("visions").join("capture.jpg"), "image").unwrap();
         let now = UNIX_EPOCH + Duration::from_secs(1_780_000_000);
-        assert_eq!(clean_visions_if_due(temp.path(), now).unwrap(), Some(1));
+        let marker = temp.path().join(VISION_CLEANUP_MARKER);
+        assert_eq!(
+            clean_visions_if_due(&temp.path().join("visions"), &marker, now).unwrap(),
+            Some(1)
+        );
         assert!(!temp.path().join("visions").join("capture.jpg").exists());
         assert!(temp.path().join("visions").join("debug").is_dir());
         fs::write(temp.path().join("visions").join("new.jpg"), "image").unwrap();
         assert_eq!(
-            clean_visions_if_due(temp.path(), now + Duration::from_secs(6 * 24 * 60 * 60)).unwrap(),
+            clean_visions_if_due(
+                &temp.path().join("visions"),
+                &marker,
+                now + Duration::from_secs(6 * 24 * 60 * 60)
+            )
+            .unwrap(),
             None
         );
         assert!(temp.path().join("visions").join("new.jpg").exists());
         assert_eq!(
-            clean_visions_if_due(temp.path(), now + VISION_CLEANUP_INTERVAL).unwrap(),
+            clean_visions_if_due(
+                &temp.path().join("visions"),
+                &marker,
+                now + VISION_CLEANUP_INTERVAL
+            )
+            .unwrap(),
             Some(2)
         );
         assert!(!temp.path().join("visions").join("new.jpg").exists());
@@ -278,7 +320,7 @@ mod tests {
         std::os::unix::fs::symlink(&outside, &link).unwrap();
 
         let now = UNIX_EPOCH + Duration::from_secs(1_780_000_000);
-        clean_visions_if_due(temp.path(), now).unwrap();
+        clean_visions_if_due(&visions, &temp.path().join(VISION_CLEANUP_MARKER), now).unwrap();
         assert_eq!(fs::read_to_string(outside).unwrap(), "keep");
         assert!(link.exists());
     }

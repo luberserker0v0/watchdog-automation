@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { appLogger } from "../../../observability/services/appLogger";
 import { useGraphLayoutStore } from "../../authoring/stores/useGraphLayoutStore";
 import type { ParamDef, PipelineGraph, PipelineStartError, StepResult } from "../../../../api/pipeline";
 import {
@@ -15,6 +16,7 @@ import { notifyTask } from "../../../notifications/services/taskNotifier";
 import { useStreamStore } from "../../../capture/stores/useStreamStore";
 import { PipelineBatchController, type PipelineStatusEvent, type PatrolRecoveryEvent, type PatrolReportEvent } from "../services/PipelineBatchController";
 import { ensurePatrolChatListener } from "./usePatrolChatStore";
+import { assertRuntimeStartAllowed } from "../../../updater/services/runtimeGuard";
 
 export type PipelineExecutionStatus = "idle" | "running" | "paused" | "stopping" | "stopped" | "completed" | "failed" | "needs_resize";
 
@@ -306,6 +308,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
   startExecution: async () => {
     if (get().isExecuting) return;
+    assertRuntimeStartAllowed();
     await ensurePatrolChatListener();
     const hasStatusEvents = await batchController.start(
       (event) => get().applyStatusEvent(event),
@@ -542,7 +545,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           return;
         }
         const errorMessage = startError.code === "generic" ? startError.message : startError.diagnostic;
-        console.error(`Pipeline ${entry.name} failed:`, errorMessage);
+        appLogger.error(`Pipeline ${entry.name} failed:`, errorMessage);
         useLogStore.getState().appendLog({
           source: "pipeline",
           label: entry.name,
@@ -585,7 +588,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       })),
     }));
     await Promise.all(running.map((entry) => stopPipeline(entry.runId!).catch((error) => {
-      console.error("Failed to stop pipeline:", error);
+      appLogger.error("Failed to stop pipeline:", error);
     })));
   },
 
@@ -614,7 +617,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
           childrenTimeoutMs: status.children_timeout_ms ?? null,
         })));
       } catch (error) {
-        console.error("Failed to toggle pipeline pause:", error);
+        appLogger.error("Failed to toggle pipeline pause:", error);
       }
     }
   },
