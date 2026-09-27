@@ -20,6 +20,19 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows-release
+          cache-on-failure: true
+      - name: Restore native runtime cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/.cache/native-runtime
+          key: watchdog-native-runtime-${{ runner.os }}-${{ hashFiles('scripts/install-onnxruntime.ps1') }}
+          restore-keys: |
+            watchdog-native-runtime-${{ runner.os }}-
       - name: Install dependencies
         run: npm ci
       - name: Install updater signature verifier

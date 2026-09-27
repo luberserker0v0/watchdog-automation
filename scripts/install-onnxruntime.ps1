@@ -8,18 +8,19 @@ $runtimeVersion = "1.24.4"
 $directMlVersion = "1.15.4"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $targetRoot = Join-Path $projectRoot "src-tauri\target"
-$cacheRoot = Join-Path $targetRoot "onnxruntime-directml-$runtimeVersion"
-$archivePath = Join-Path $targetRoot "Microsoft.ML.OnnxRuntime.DirectML-$runtimeVersion.zip"
+$downloadCacheRoot = Join-Path $projectRoot "src-tauri\.cache\native-runtime"
+$cacheRoot = Join-Path $downloadCacheRoot "onnxruntime-directml-$runtimeVersion"
+$archivePath = Join-Path $downloadCacheRoot "Microsoft.ML.OnnxRuntime.DirectML-$runtimeVersion.zip"
 $nativeRoot = Join-Path $cacheRoot "runtimes\win-x64\native"
 $runtimePath = Join-Path $nativeRoot "onnxruntime.dll"
-$directMlCacheRoot = Join-Path $targetRoot "directml-$directMlVersion"
-$directMlArchivePath = Join-Path $targetRoot "Microsoft.AI.DirectML-$directMlVersion.zip"
+$directMlCacheRoot = Join-Path $downloadCacheRoot "directml-$directMlVersion"
+$directMlArchivePath = Join-Path $downloadCacheRoot "Microsoft.AI.DirectML-$directMlVersion.zip"
 $directMlPath = Join-Path $directMlCacheRoot "bin\x64-win\DirectML.dll"
 $destinationDirectory = Join-Path $targetRoot $Profile
 $bundleDirectory = Join-Path $projectRoot "src-tauri\native\windows-x64"
 
 if (-not (Test-Path -LiteralPath $runtimePath)) {
-    New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $downloadCacheRoot -Force | Out-Null
     $packageVersion = $runtimeVersion.ToLowerInvariant()
     $downloadUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/$packageVersion/microsoft.ml.onnxruntime.directml.$packageVersion.nupkg"
     Write-Host "Downloading ONNX Runtime DirectML $runtimeVersion..."
@@ -29,7 +30,7 @@ if (-not (Test-Path -LiteralPath $runtimePath)) {
 }
 
 if (-not (Test-Path -LiteralPath $directMlPath)) {
-    New-Item -ItemType Directory -Path $targetRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $downloadCacheRoot -Force | Out-Null
     $packageVersion = $directMlVersion.ToLowerInvariant()
     $downloadUrl = "https://api.nuget.org/v3-flatcontainer/microsoft.ai.directml/$packageVersion/microsoft.ai.directml.$packageVersion.nupkg"
     Write-Host "Downloading DirectML $directMlVersion..."

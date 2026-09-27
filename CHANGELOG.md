@@ -7,6 +7,12 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Windows release CI now caches Rust build dependencies and native runtime
+  downloads, preserves useful Rust output after late failures, and avoids a
+  redundant production compilation before NSIS bundling.
+
 ## [1.1.0] - 2026-09-27
 
 ### Added

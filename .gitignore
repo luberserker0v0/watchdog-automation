@@ -8,6 +8,7 @@
 
 # Rust / Tauri build output
 /src-tauri/target/
+/src-tauri/.cache/
 /src-tauri/native/windows-x64/*.dll
 /src-tauri/companions/windows-x64/*.exe
 /artifacts/

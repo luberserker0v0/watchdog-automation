@@ -141,6 +141,13 @@ for (const required of [
   if (!signingScript.includes(required)) errors.push(`Signed build script is missing '${required}'`);
 }
 if (!signingScript.includes("Authenticode is optional")) errors.push("Signed build must permit updater-only signing when Authenticode is not configured");
+if (signingScript.includes("npm run build:all-targets")) errors.push("Signed build must not compile production before its bundling build");
+for (const command of ["npm run build:tester", "npm run build:target"]) {
+  if (!signingScript.includes(command)) errors.push(`Signed build is missing '${command}'`);
+}
+if (!signingWorkflow.includes("Swatinem/rust-cache@v2")) errors.push("Signed workflow must cache Rust dependencies and build output");
+if (!signingWorkflow.includes("cache-on-failure: true")) errors.push("Signed workflow must preserve the Rust cache after late release failures");
+if (!signingWorkflow.includes("src-tauri/.cache/native-runtime")) errors.push("Signed workflow must cache downloaded native runtimes");
 if (!signingWorkflow.includes('tags:') || !signingWorkflow.includes('"v*"')) errors.push("Signed workflow must publish from v* tags");
 if (!signingWorkflow.includes("gh release create")) errors.push("Signed workflow must publish GitHub Release assets");
 if (!signingWorkflow.includes("secrets.TAURI_SIGNING_PRIVATE_KEY")) errors.push("Signed workflow must read the updater private key secret");

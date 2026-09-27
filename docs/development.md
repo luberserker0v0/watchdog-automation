@@ -285,6 +285,12 @@ publishes `latest.json`; manual dispatch does not publish. See
 [`docs/updater-signing.md`](updater-signing.md) for key creation, secrets, and
 recovery requirements.
 
+The Windows release workflow caches Cargo dependencies/build output and the
+downloaded ONNX Runtime packages. Its release script builds Tester and Sample
+Target first, then lets the NSIS command build production once. A manual
+workflow dispatch from `main` can warm the default-branch cache before creating
+a release tag; GitHub restricts cache reuse across unrelated tag refs.
+
 ## Troubleshooting
 
 ### `EBUSY: resource busy or locked` while copying an executable

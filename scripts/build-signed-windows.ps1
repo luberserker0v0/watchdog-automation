@@ -80,10 +80,11 @@ try {
         Write-Host "Authenticode certificate not configured; building Tauri-signed updater artifacts without Windows publisher signing."
     }
 
-    Invoke-Checked { npm run build:all-targets } "Building Windows executables"
+    Invoke-Checked { npm run build:tester } "Building the Tester executable"
+    Invoke-Checked { npm run build:target } "Building the Sample Target executable"
 
     if ($useAuthenticode) {
-        foreach ($name in @("watch-dog.exe", "watch-dog-tester.exe", "watch-dog-target.exe")) {
+        foreach ($name in @("watch-dog-tester.exe", "watch-dog-target.exe")) {
             $path = Join-Path $targetRoot $name
             Invoke-Checked {
                 & $signTool sign /sha1 $signingThumbprint /fd SHA256 /tr $env:WINDOWS_TIMESTAMP_URL /td SHA256 $path
@@ -108,7 +109,7 @@ try {
     $overlay | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $overlayPath -Encoding utf8
     Invoke-Checked {
         npx tauri build --bundles nsis --config $overlayPath
-    } "Building the signed NSIS installer"
+    } "Building the production executable and NSIS installer"
 
     $packageJson = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
     $installer = Join-Path $targetRoot "bundle\nsis\watch-dog_$($packageJson.version)_x64-setup.exe"
