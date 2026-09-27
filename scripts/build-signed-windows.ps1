@@ -113,6 +113,7 @@ try {
     $packageJson = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
     $installer = Join-Path $targetRoot "bundle\nsis\watch-dog_$($packageJson.version)_x64-setup.exe"
     $updaterSignature = "$installer.sig"
+    $decodedUpdaterSignature = Join-Path $temporaryRoot "updater.minisig"
     $distributedExecutables = @(
         (Join-Path $targetRoot "watch-dog.exe"),
         (Join-Path $targetRoot "watch-dog-tester.exe"),
@@ -127,6 +128,18 @@ try {
     if (-not (Test-Path -LiteralPath $updaterSignature -PathType Leaf) -or (Get-Item -LiteralPath $updaterSignature).Length -eq 0) {
         throw "Tauri updater signature is missing or empty: $updaterSignature"
     }
+
+    try {
+        $signatureWrapper = (Get-Content -LiteralPath $updaterSignature -Raw).Trim()
+        $signatureDocument = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($signatureWrapper))
+    }
+    catch {
+        throw "Tauri updater signature is not a valid base64 wrapper: $($_.Exception.Message)"
+    }
+    if (-not $signatureDocument.StartsWith("untrusted comment: ")) {
+        throw "Decoded Tauri updater signature is not a Minisign signature document."
+    }
+    [System.IO.File]::WriteAllText($decodedUpdaterSignature, $signatureDocument, [System.Text.UTF8Encoding]::new($false))
 
     $minisign = Get-Command minisign.exe -ErrorAction SilentlyContinue
     if (-not $minisign) { throw "minisign.exe is required to verify the generated updater signature." }
@@ -143,7 +156,7 @@ try {
     }
     $publicKeyLine = @($minisignPublicDocument -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })[-1].Trim()
     Invoke-Checked {
-        & $minisign.Source -Vm $installer -P $publicKeyLine -x $updaterSignature
+        & $minisign.Source -Vm $installer -P $publicKeyLine -x $decodedUpdaterSignature
     } "Verifying the Tauri updater signature"
 
     Invoke-Checked {

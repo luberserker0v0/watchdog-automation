@@ -130,6 +130,7 @@ for (const required of [
   "TAURI_SIGNING_PRIVATE_KEY",
   "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
   "createUpdaterArtifacts",
+  "FromBase64String($signatureWrapper)",
   "minisign",
   "Get-AuthenticodeSignature",
   "finally",
