@@ -7,12 +7,6 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-### Changed
-
-- Windows release CI now caches Rust build dependencies and native runtime
-  downloads, preserves useful Rust output after late failures, and avoids a
-  redundant production compilation before NSIS bundling.
-
 ## [1.1.0] - 2026-09-27
 
 ### Added
@@ -36,6 +30,10 @@ and releases will use [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   remains a separate product-facing timeline.
 - Version tags now publish the signed NSIS updater, Tauri signature,
   `latest.json`, portable ZIP, and checksums to GitHub Releases.
+- Windows release CI caches Rust build dependencies and native runtime
+  downloads, preserves useful Rust output after late failures, and avoids a
+  redundant production compilation before NSIS bundling. Tagged publishing does
+  not duplicate release files in Actions artifact storage.
 
 ## [1.0.0] - 2026-09-25
 

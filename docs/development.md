@@ -289,7 +289,10 @@ The Windows release workflow caches Cargo dependencies/build output and the
 downloaded ONNX Runtime packages. Its release script builds Tester and Sample
 Target first, then lets the NSIS command build production once. A manual
 workflow dispatch from `main` can warm the default-branch cache before creating
-a release tag; GitHub restricts cache reuse across unrelated tag refs.
+a release tag; GitHub restricts cache reuse across unrelated tag refs. Tagged
+runs publish directly to GitHub Releases and do not duplicate their files in
+Actions artifact storage. Manual candidate runs retain the temporary artifact
+upload so their output can be downloaded without publishing a release.
 
 ## Troubleshooting
 

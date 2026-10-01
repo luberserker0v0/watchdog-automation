@@ -148,6 +148,7 @@ for (const command of ["npm run build:tester", "npm run build:target"]) {
 if (!signingWorkflow.includes("Swatinem/rust-cache@v2")) errors.push("Signed workflow must cache Rust dependencies and build output");
 if (!signingWorkflow.includes("cache-on-failure: true")) errors.push("Signed workflow must preserve the Rust cache after late release failures");
 if (!signingWorkflow.includes("src-tauri/.cache/native-runtime")) errors.push("Signed workflow must cache downloaded native runtimes");
+if (!signingWorkflow.includes("if: github.event_name == 'workflow_dispatch'")) errors.push("Tag publishing must not consume Actions artifact storage");
 if (!signingWorkflow.includes('tags:') || !signingWorkflow.includes('"v*"')) errors.push("Signed workflow must publish from v* tags");
 if (!signingWorkflow.includes("gh release create")) errors.push("Signed workflow must publish GitHub Release assets");
 if (!signingWorkflow.includes("secrets.TAURI_SIGNING_PRIVATE_KEY")) errors.push("Signed workflow must read the updater private key secret");
